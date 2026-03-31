@@ -1,0 +1,41 @@
+// Perfect! I've successfully integrated the non-linear hall sensor response code into your main T89_gearbox_194.ino file and upgraded it to **version 1.95**. Here are the key changes:
+
+// ## **What's New in Version 1.95:**
+
+// ### 🎛️ **Non-Linear Hall Sensor Response**
+// - **5 different response curves**: Linear, Logarithmic, Exponential, Smooth Step, Custom Power
+// - **Configurable strength**: 0.1 to 5.0 intensity levels
+// - **Default**: Logarithmic curve with strength 2.0 (most natural clutch feel)
+// - **Persistent settings**: Saves to flash memory across reboots
+
+// ### 📋 **New Serial Commands:**
+// ```
+// curve log          // Set logarithmic response (recommended)
+// curve linear       // Set linear response (original behavior)  
+// curve exp          // Set exponential response
+// curve smooth       // Set smooth S-curve response
+// curve custom       // Set custom power curve
+// strength 2.5       // Set curve intensity
+// halltest           // Real-time hall sensor testing
+// hallinfo           // Show current configuration
+// help               // Enhanced help with organized sections
+// ```
+
+// ### 🔧 **Key Integration Points:**
+
+// 1. **Default Configuration**: Starts with logarithmic curve for natural clutch feel
+// 2. **Non-blocking**: All new functions maintain responsive gear changes
+// 3. **Web Interface**: Existing web interface still works unchanged
+// 4. **Backward Compatible**: Linear mode available if you prefer original behavior
+
+// ### 🚀 **Quick Start:**
+
+// 1. **Upload the new code**
+// 2. **Open Serial Monitor** (115200 baud)
+// 3. **Type `halltest`** and move your clutch lever to see the difference
+// 4. **Try different curves** with `curve exp` or `curve smooth`
+// 5. **Adjust intensity** with `strength 1.5` or `strength 3.0`
+
+// The **logarithmic curve with strength 2.0** should give you much more natural and responsive clutch control compared to the linear mapping you had before!
+
+// All your existing functionality (shift logging, temperature control, web interface, etc.) remains exactly the same - this just enhances the hall sensor response.

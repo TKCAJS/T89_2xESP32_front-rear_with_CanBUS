@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>T89 Gearbox Control</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #333;
+            border-radius: 10px;
+        }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            margin: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background: #45a049;
+        }
+        .hello-btn {
+            background: #2196F3;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .hello-btn:hover {
+            background: #1976D2;
+        }
+        .status {
+            background: #555;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .temp-status {
+            background: #2a4d3a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        .shift-status {
+            background: #4d2a2a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #FF6B6B;
+        }
+        .shift-logs {
+            background: #2a2a4d;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #6B6BFF;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #555;
+            background: #222;
+            color: white;
+            border-radius: 3px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .triple-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+        }
+        @media(max-width:900px) {
+            .triple-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media(max-width:600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .temp-reading {
+            font-size: 1.2em;
+            margin: 5px 0;
+        }
+        .temp-current {
+            color: #4CAF50;
+        }
+        .temp-target {
+            color: #FFA500;
+        }
+        .pump-status {
+            color: #00BFFF;
+        }
+        .engine-status {
+            color: #FFD700;
+        }
+        .gear-display {
+            color: #FF6B6B;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .gear-disconnected {
+            color: #FF6B6B;
+            font-weight: bold;
+            font-size: 1.1em;
+            background: #4d1a1a;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .shift-timing {
+            color: #FFA500;
+            font-weight: bold;
+        }
+        .shift-log {
+            margin: 3px 0;
+            font-size: 0.9em;
+            padding: 3px;
+            background: #3a3a3a;
+            border-radius: 3px;
+        }
+        .shift-success {
+            color: #4CAF50;
+        }
+        .shift-failed {
+            color: #FF6B6B;
+        }
+        h4 {
+            margin-top: 0;
+            color: #4CAF50;
+            border-bottom: 1px solid #555;
+            padding-bottom: 8px;
+        }
+        .gauges-container {
+            margin: 20px 0;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 10px;
+        }
+        .gauge-row {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .gauge-item {
+            text-align: center;
+            margin: 10px;
+        }
+        .gauge-label {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        @media(max-width:768px) {
+            .gauge-row {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+        @media(max-width:768px) {
+            .gauge-item {
+                margin: 20px 0;
+            }
+        }
+        .hall-curve-section {
+            background: #3a2a4d;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #9C27B0;
+        }
+        .curve-info {
+            color: #B39DDB;
+            font-size: 0.9em;
+            margin-top: 8px;
+        }
+        .strength-slider {
+            width: 100%;
+        }
+        .strength-display {
+            color: #9C27B0;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .curve-description {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 3px;
+            margin-top: 10px;
+            font-size: 0.85em;
+            color: #ccc;
+        }
+        .hall-test-btn {
+            background: #9C27B0;
+            margin: 5px;
+        }
+        .hall-test-btn:hover {
+            background: #7B1FA2;
+        }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>T89 Sequential Gearbox Control</h1>
+        
+        <!-- Hello Page and Calibration Wizard buttons -->
+        <div style='text-align: center; margin: 10px 0;'>
+            <a href='/hello' class='btn hello-btn' target='_blank'>Hello Page</a>
+            <a href='/calibration' class='btn' style='background:#FF9800;margin-left:10px;' target='_blank'>Calibration Wizard</a>
+        </div>
+        
+        <!-- Gauges section -->
+        <div class='gauges-container'>
+            <div class='gauge-row'>
+                <div class='gauge-item'>
+                    <canvas id='mphGauge' width='200' height='200'></canvas>
+                    <div class='gauge-label'>MPH</div>
+                </div>
+                <div class='gauge-item'>
+                    <canvas id='rpmGauge' width='200' height='200'></canvas>
+                    <div class='gauge-label'>RPM</div>
+                </div>
+                <div class='gauge-item'>
+                    <canvas id='tempGauge' width='200' height='200'></canvas>
+                    <div class='gauge-label'>Temperature (°C)</div>
+                </div>
+            </div>
+            <div class='gauge-row'>
+                <div class='gauge-item'>
+                    <canvas id='hallGauge' width='200' height='200'></canvas>
+                    <div class='gauge-label'>Hall Sensor</div>
+                </div>
+                <div class='gauge-item'>
+                    <canvas id='voltageGauge' width='200' height='200'></canvas>
+                    <div class='gauge-label'>Clutch Position</div>
+                </div>
+                <div class='gauge-item'>
+                    <canvas id='positionGauge' width='200' height='200'></canvas>
+                    <div class='gauge-label'>Servo Position</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Status section -->
+        <div class='grid'>
+            <div class='status'>
+                <h3>System Status</h3>
+                <div id='status'>Loading...</div>
+            </div>
+            <div class='temp-status'>
+                <h3>Temperature Control</h3>
+                <div id='tempStatus'>Loading...</div>
+            </div>
+        </div>
+        
+        <!-- Shift logger section -->
+        <div class='grid'>
+            <div class='shift-status'>
+                <h3>Shift Logger</h3>
+                <div id='shiftStats'>Loading...</div>
+            </div>
+            <div class='shift-logs'>
+                <h3>Recent Shifts</h3>
+                <div id='shiftLogs'>Loading...</div>
+            </div>
+        </div>
+        
+        <!-- Control buttons -->
+        <h3>Manual Control</h3>
+        <button class='btn' onclick='sendCmd("shiftDown")'>Shift Down</button>
+        <button class='btn' onclick='sendCmd("neutralDown")'>Neutral Down</button>
+        <button class='btn' onclick='sendCmd("neutralUp")'>Neutral Up</button>
+        <button class='btn' onclick='sendCmd("shiftUp")'>Shift Up</button>
+        
+        <!-- Configuration form -->
+        <h3>Configuration</h3>
+        <div class='triple-grid'>
+            <div>
+                <form onsubmit='updateConfig(event)'>
+                    <h4>Gear Control Settings</h4>
+                    <div class='form-group'>
+                        <label>Neutral Down (ms):</label>
+                        <input type='number' id='neutralDownMs' value='40'>
+                    </div>
+                    <div class='form-group'>
+                        <label>Neutral Up (ms):</label>
+                        <input type='number' id='neutralUpMs' value='40'>
+                    </div>
+                    <div class='form-group'>
+                        <label>Shift Down (ms):</label>
+                        <input type='number' id='shiftDownMs' value='150'>
+                    </div>
+                    <div class='form-group'>
+                        <label>Shift Up (ms):</label>
+                        <input type='number' id='shiftUpMs' value='150'>
+                    </div>
+                    <div class='form-group'>
+                        <label>Clutch Idle Position:</label>
+                        <input type='number' id='clutchIdlePos' value='0' min='0' max='180'>
+                    </div>
+                    <div class='form-group'>
+                        <label>Clutch Engage Position:</label>
+                        <input type='number' id='clutchEngagePos' value='180' min='0' max='180'>
+                    </div>
+                    <button type='submit' class='btn'>Update Gear Settings</button>
+                </form>
+            </div>
+            <div>
+                <h4>Temperature Control Settings</h4>
+                <div class='form-group'>
+                    <label>Target Temperature (°C):</label>
+                    <input type='number' id='targetTemperature' value='80.0' min='60' max='100' step='0.5'>
+                </div>
+                <div style='margin-top:20px;color:#aaa;font-size:0.9em;'>
+                    Temperature range: 60-100°C<br>
+                    Default: 80°C<br>
+                    Changes take effect immediately
+                </div>
+            </div>
+            <div class='hall-curve-section'>
+                <form onsubmit='updateHallCurve(event)'>
+                    <h4>Hall Sensor Response Curve</h4>
+                    <div class='form-group'>
+                        <label>Curve Type:</label>
+                        <select id='hallCurveType'>
+                            <option value='0'>Linear</option>
+                            <option value='1'>Logarithmic</option>
+                            <option value='2'>Exponential</option>
+                            <option value='3'>Smooth Step</option>
+                            <option value='4'>Custom Power</option>
+                        </select>
+                    </div>
+                    <div class='form-group'>
+                        <label>Curve Strength: <span id='strengthDisplay' class='strength-display'>2.0</span></label>
+                        <input type='range' id='hallCurveStrength' class='strength-slider' min='0.1' max='5.0' step='0.1' value='2.0' oninput='updateStrengthDisplay()'>
+                    </div>
+                    <div id='curveDescription' class='curve-description'>Loading...</div>
+                    <div class='curve-info'>Adjust the curve type and strength to customize clutch response</div>
+                    <button type='submit' class='btn hall-test-btn'>Update Hall Curve</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let lastValues = {};
+        
+        function drawGauge(canvasId, value, maxValue, label, color, unit) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = 80;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Background circle
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 8;
+            ctx.stroke();
+            
+            // Value arc
+            const startAngle = -Math.PI * 0.75;
+            const endAngle = Math.PI * 0.75;
+            const totalAngle = endAngle - startAngle;
+            const valueAngle = startAngle + (value / maxValue) * totalAngle;
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, startAngle, valueAngle);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 8;
+            ctx.stroke();
+            
+            // Needle
+            const needleLength = radius - 10;
+            const needleX = centerX + needleLength * Math.cos(valueAngle);
+            const needleY = centerY + needleLength * Math.sin(valueAngle);
+            
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(needleX, needleY);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            
+            // Value text
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(value.toFixed(1) + unit, centerX, centerY + 40);
+            
+            ctx.font = '12px Arial';
+            ctx.fillText('Max: ' + maxValue + unit, centerX, centerY + 60);
+        }
+        
+        function sendCmd(action) {
+            fetch('/cmd?action=' + action).then(r => r.text()).then(d => {
+                if(d.includes('BLOCKED')) alert('Command blocked: ' + d);
+                updateStatus();
+            });
+        }
+        
+        function getCurveDescription(type, strength) {
+            const descriptions = {
+                '0': 'Linear: Uniform response throughout range',
+                '1': 'Logarithmic: More sensitive initially, gentle at end (recommended for smooth clutch)',
+                '2': 'Exponential: Gentle initially, more sensitive at end',
+                '3': 'Smooth Step: S-curve with rapid transition in middle',
+                '4': 'Custom Power: Configurable power curve (x^strength)'
+            };
+            return descriptions[type] + ' (Strength: ' + strength + ')';
+        }
+        
+        function updateStrengthDisplay() {
+            const strength = document.getElementById('hallCurveStrength').value;
+            document.getElementById('strengthDisplay').textContent = parseFloat(strength).toFixed(1);
+            const curveType = document.getElementById('hallCurveType').value;
+            document.getElementById('curveDescription').textContent = getCurveDescription(curveType, strength);
+        }
+        
+        function updateStatus() {
+            fetch('/sensorData').then(r => r.json()).then(d => {
+                if(lastValues.mph !== d.currentMph) {
+                    drawGauge('mphGauge', d.currentMph, 150, 'MPH', '#4CAF50', '');
+                    lastValues.mph = d.currentMph;
+                }
+                if(lastValues.rpm !== d.currentRpm) {
+                    drawGauge('rpmGauge', d.currentRpm, 14000, 'RPM', '#2196F3', '');
+                    lastValues.rpm = d.currentRpm;
+                }
+                if(lastValues.temp !== d.currentTemp) {
+                    drawGauge('tempGauge', d.currentTemp, 120, 'Temperature', '#FF9800', '°');
+                    lastValues.temp = d.currentTemp;
+                }
+                if(lastValues.hall !== d.hallValue) {
+                    drawGauge('hallGauge', d.hallValue, 4095, 'Hall', '#9C27B0', '');
+                    lastValues.hall = d.hallValue;
+                }
+                if(lastValues.voltage !== d.clutchVoltage) {
+                    drawGauge('voltageGauge', d.clutchVoltage, 3.3, 'Position', '#F44336', 'V');
+                    lastValues.voltage = d.clutchVoltage;
+                }
+                if(lastValues.position !== d.servoPosition) {
+                    drawGauge('positionGauge', d.servoPosition, 180, 'Position', '#607D8B', '°');
+                    lastValues.position = d.servoPosition;
+                }
+                
+                let status = 'System: ' + (d.shiftInProgress ? 'SHIFTING' : (d.waitingForClutch ? 'WAITING FOR CLUTCH' : 'Ready'));
+                let gearClass = d.currentGear.includes('DISCONNECTED') ? 'gear-disconnected' : 'gear-display';
+                status += '<br>Current Gear: <span class="' + gearClass + '">' + d.currentGear + '</span>';
+                status += '<br>WiFi: ' + (d.wifiEnabled ? 'ON (' + d.apIP + ')' : 'OFF');
+                status += '<br>Clutch: ' + d.clutchVoltage + 'V ' + (d.clutchPulled ? '(PULLED)' : '(RELEASED)');
+                status += '<br>Hall Sensor: ' + d.hallValue;
+                status += '<br>Software Version: ' + (d.softwareVersion/100).toFixed(2);
+                status += '<br>RPM: ' + d.currentRpm.toFixed(0);
+                status += '<br>MPH: ' + d.currentMph.toFixed(0);
+                status += '<br><span class="shift-timing">Shift Timing: ' + (d.shiftTimingActive ? 'ACTIVE' : 'Idle') + '</span>';
+                status += '<br>Hall Curve: ' + d.hallCurveName + ' (' + d.hallCurveStrength + ')';
+                document.getElementById('status').innerHTML = status;
+                
+                let tempStatus = '<div class="temp-reading temp-current">Current: ' + d.currentTemp.toFixed(1) + '°C</div>';
+                tempStatus += '<div class="temp-reading temp-target">Target: ' + d.targetTemp.toFixed(1) + '°C</div>';
+                tempStatus += '<div class="temp-reading pump-status">Pump PWM: ' + d.pumpPwmPercent + '%</div>';
+                tempStatus += '<div class="temp-reading engine-status">Engine: ' + (d.engineRunning ? 'RUNNING' : 'STOPPED') + '</div>';
+                document.getElementById('tempStatus').innerHTML = tempStatus;
+            }).catch(e => console.error('Sensor data error:', e));
+        }
+        
+        function updateShiftData() {
+            fetch('/shiftStats').then(r => r.text()).then(d => {
+                document.getElementById('shiftStats').innerHTML = '<pre>' + d + '</pre>';
+            }).catch(e => console.error('Shift stats error:', e));
+            
+            fetch('/shiftLogs').then(r => r.json()).then(logs => {
+                let html = '';
+                logs.slice(-10).forEach(log => {
+                    let statusClass = log.success ? 'shift-success' : 'shift-failed';
+                    html += '<div class="shift-log ' + statusClass + '">' + log.from + '→' + log.to + ' ' + log.time + 'ms @' + log.rpm + 'rpm</div>';
+                });
+                document.getElementById('shiftLogs').innerHTML = html;
+            }).catch(e => console.error('Shift logs error:', e));
+        }
+        
+        function loadConfig() {
+            fetch('/configData').then(r => r.json()).then(d => {
+                document.getElementById('neutralDownMs').value = d.neutralDownMs;
+                document.getElementById('neutralUpMs').value = d.neutralUpMs;
+                document.getElementById('shiftDownMs').value = d.shiftDownMs;
+                document.getElementById('shiftUpMs').value = d.shiftUpMs;
+                document.getElementById('clutchIdlePos').value = d.clutchIdlePos;
+                document.getElementById('clutchEngagePos').value = d.clutchEngagePos;
+                document.getElementById('targetTemperature').value = d.targetTemperature;
+                document.getElementById('hallCurveType').value = d.hallCurveType;
+                document.getElementById('hallCurveStrength').value = d.hallCurveStrength;
+                updateStrengthDisplay();
+            }).catch(e => console.error('Config load error:', e));
+        }
+        
+        function updateConfig(e) {
+            e.preventDefault();
+            let formData = new FormData();
+            formData.append('neutralDownMs', document.getElementById('neutralDownMs').value);
+            formData.append('neutralUpMs', document.getElementById('neutralUpMs').value);
+            formData.append('shiftDownMs', document.getElementById('shiftDownMs').value);
+            formData.append('shiftUpMs', document.getElementById('shiftUpMs').value);
+            formData.append('clutchIdlePos', document.getElementById('clutchIdlePos').value);
+            formData.append('clutchEngagePos', document.getElementById('clutchEngagePos').value);
+            formData.append('targetTemperature', document.getElementById('targetTemperature').value);
+            
+            fetch('/update', {method: 'POST', body: formData}).then(r => {
+                if(r.ok) {
+                    alert('Gear configuration updated!');
+                    updateStatus();
+                } else {
+                    alert('Error updating config');
+                }
+            }).catch(e => {
+                console.error('Config update error:', e);
+                alert('Error updating config');
+            });
+        }
+        
+        function updateHallCurve(e) {
+            e.preventDefault();
+            let formData = new FormData();
+            formData.append('hallCurveType', document.getElementById('hallCurveType').value);
+            formData.append('hallCurveStrength', document.getElementById('hallCurveStrength').value);
+            
+            fetch('/updateHallCurve', {method: 'POST', body: formData}).then(r => {
+                if(r.ok) {
+                    alert('Hall curve configuration updated!');
+                    updateStatus();
+                } else {
+                    alert('Error updating hall curve');
+                }
+            }).catch(e => {
+                console.error('Hall curve update error:', e);
+                alert('Error updating hall curve');
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('hallCurveType').addEventListener('change', updateStrengthDisplay);
+        });
+        
+        loadConfig();
+        updateStatus();
+        updateShiftData();
+        setInterval(updateStatus, 100);
+        setInterval(updateShiftData, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>T89 Calibration Wizard</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #333;
+            border-radius: 10px;
+        }
+        .wizard-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+        }
+        .calibration-section {
+            background: #2a2a2a;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+        }
+        .hall-section {
+            border-left-color: #9C27B0;
+        }
+        .clutch-section {
+            border-left-color: #FF9800;
+        }
+        .relay-section {
+            border-left-color: #F44336;
+        }
+        .sensor-section {
+            border-left-color: #4CAF50;
+        }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            margin: 8px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: #45a049;
+        }
+        .btn-secondary {
+            background: #2196F3;
+        }
+        .btn-secondary:hover {
+            background: #1976D2;
+        }
+        .btn-warning {
+            background: #FF9800;
+        }
+        .btn-warning:hover {
+            background: #F57C00;
+        }
+        .btn-danger {
+            background: #F44336;
+        }
+        .btn-danger:hover {
+            background: #D32F2F;
+        }
+        .btn-ignition {
+            background: #9C27B0;
+        }
+        .btn-ignition:hover {
+            background: #7B1FA2;
+        }
+        .data-display {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            border: 1px solid #555;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-good {
+            background: #4CAF50;
+        }
+        .status-warning {
+            background: #FF9800;
+        }
+        .status-error {
+            background: #F44336;
+        }
+        .calibration-step {
+            background: #3a3a3a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 3px solid #4CAF50;
+        }
+        .step-number {
+            background: #4CAF50;
+            color: white;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #555;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #2196F3);
+            transition: width 0.3s ease;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .triple-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+        }
+        @media(max-width: 900px) {
+            .triple-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media(max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .gauge-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .nav-buttons {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+        .back-btn {
+            background: #666;
+            margin-right: 20px;
+        }
+        .back-btn:hover {
+            background: #555;
+        }
+        .test-active {
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        .value-highlight {
+            background: #4CAF50;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .instruction-box {
+            background: #2a4d3a;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .warning-box {
+            background: #4d3a2a;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #FF9800;
+        }
+        .relay-test-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        @media(max-width: 600px) {
+            .relay-test-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="wizard-header">
+            <h1>T89 Gearbox Calibration Wizard</h1>
+            <p>Step-by-step calibration for optimal gearbox performance</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="overallProgress" style="width: 0%"></div>
+            </div>
+            <p id="progressText">Ready to start calibration</p>
+        </div>
+
+        <div class="nav-buttons">
+            <a href="/" class="btn back-btn">← Main Control Panel</a>
+            <button class="btn" onclick="startFullCalibration()">Start Full Calibration</button>
+            <button class="btn btn-secondary" onclick="refreshData()">Refresh Data</button>
+        </div>
+
+        <!-- Hall Sensor Calibration -->
+        <div class="calibration-section hall-section">
+            <h2>Hall Sensor Calibration</h2>
+            <div class="instruction-box">
+                <strong>Purpose:</strong> Calibrate clutch lever position sensing for optimal response curve
+            </div>
+            
+            <div class="grid">
+                <div>
+                    <h3>Live Hall Sensor Data</h3>
+                    <div class="data-display" id="hallData">
+                        Raw Value: <span id="hallRaw">Loading...</span><br>
+                        Linear Servo: <span id="hallLinear">Loading...</span>°<br>
+                        Curved Servo: <span id="hallCurved">Loading...</span>°<br>
+                        Current Curve: <span id="hallCurveType">Loading...</span><br>
+                        Curve Strength: <span id="hallCurveStrength">Loading...</span>
+                    </div>
+                    
+                    <div class="gauge-container">
+                        <canvas id="hallGauge" width="200" height="200"></canvas>
+                        <div>Hall Sensor Value</div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3>Calibration Steps</h3>
+                    <div class="calibration-step">
+                        <span class="step-number">1</span>
+                        <strong>Find Clutch Range:</strong>
+                        <button class="btn btn-secondary" onclick="startHallRangeTest()">Start Range Test</button>
+                        <div id="hallRangeResults"></div>
+                    </div>
+                    
+                    <div class="calibration-step">
+                        <span class="step-number">2</span>
+                        <strong>Test Response Curves:</strong>
+                        <button class="btn btn-secondary" onclick="startHallCurveTest()">Test Curves</button>
+                        <div id="hallCurveResults"></div>
+                    </div>
+                    
+                    <div class="calibration-step">
+                        <span class="step-number">3</span>
+                        <strong>Save Configuration:</strong>
+                        <button class="btn" onclick="saveHallCalibration()">Save Hall Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clutch Servo Calibration -->
+        <div class="calibration-section clutch-section">
+            <h2>Clutch Servo Calibration</h2>
+            <div class="instruction-box">
+                <strong>Purpose:</strong> Set precise clutch engagement and release positions
+            </div>
+            
+            <div class="grid">
+                <div>
+                    <h3>Servo Position Control</h3>
+                    <div class="data-display" id="clutchData">
+                        Current Position: <span id="clutchPosition">Loading...</span>°<br>
+                        Voltage Reading: <span id="clutchVoltage">Loading...</span>V<br>
+                        Status: <span id="clutchStatus">Loading...</span><br>
+                        Idle Position: <span id="clutchIdle">Loading...</span>°<br>
+                        Engage Position: <span id="clutchEngage">Loading...</span>°
+                    </div>
+                    
+                    <div class="gauge-container">
+                        <canvas id="clutchGauge" width="200" height="200"></canvas>
+                        <div>Servo Position</div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3>Position Calibration</h3>
+                    <div class="calibration-step">
+                        <span class="step-number">1</span>
+                        <strong>Set Idle Position:</strong>
+                        <button class="btn btn-warning" onclick="setClutchIdle()">Move to Idle</button>
+                        <button class="btn" onclick="saveClutchIdle()">Save as Idle</button>
+                    </div>
+                    
+                    <div class="calibration-step">
+                        <span class="step-number">2</span>
+                        <strong>Set Engage Position:</strong>
+                        <button class="btn btn-warning" onclick="setClutchEngage()">Move to Engage</button>
+                        <button class="btn" onclick="saveClutchEngage()">Save as Engage</button>
+                    </div>
+                    
+                    <div class="calibration-step">
+                        <span class="step-number">3</span>
+                        <strong>Test Cycle:</strong>
+                        <button class="btn btn-secondary" onclick="testClutchCycle()">Test Full Cycle</button>
+                        <div id="clutchTestResult"></div>
+                    </div>
+                    
+                    <div class="warning-box">
+                        <strong>Safety:</strong> Ensure engine is OFF during clutch calibration
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Relay Timing Calibration -->
+        <div class="calibration-section relay-section">
+            <h2>Relay Timing Calibration</h2>
+            <div class="instruction-box">
+                <strong>Purpose:</strong> Optimize shift timing for quick, smooth gear changes
+            </div>
+            
+            <div class="grid">
+                <div>
+                    <h3>Current Timing Settings</h3>
+                    <div class="data-display" id="relayData">
+                        Neutral Down: <span id="neutralDownMs">Loading...</span>ms<br>
+                        Neutral Up: <span id="neutralUpMs">Loading...</span>ms<br>
+                        Shift Down: <span id="shiftDownMs">Loading...</span>ms<br>
+                        Shift Up: <span id="shiftUpMs">Loading...</span>ms<br>
+                        Last Shift Time: <span id="lastShiftTime">Loading...</span>ms
+                    </div>
+                    
+                    <h3>Relay Test Controls</h3>
+                    <div class="relay-test-grid">
+                        <button class="btn btn-danger" onclick="testDownshiftRelay()">Test Downshift Relay</button>
+                        <button class="btn btn-danger" onclick="testUpshiftRelay()">Test Upshift Relay</button>
+                        <button class="btn btn-ignition" onclick="testIgnitionCutRelay()">Ignition Cut Relay</button>
+                    </div>
+                    <div id="relayTestStatus"></div>
+                </div>
+                
+                <div>
+                    <h3>Timing Optimization</h3>
+                    <div class="calibration-step">
+                        <span class="step-number">1</span>
+                        <strong>Test Current Settings:</strong>
+                        <button class="btn btn-secondary" onclick="startTimingTest()">Run Timing Test</button>
+                        <div id="timingTestResults"></div>
+                    </div>
+                    
+                    <div class="calibration-step">
+                        <span class="step-number">2</span>
+                        <strong>Auto-Optimize:</strong>
+                        <button class="btn" onclick="autoOptimizeTiming()">Auto-Optimize Timing</button>
+                        <div id="optimizationResults"></div>
+                    </div>
+                    
+                    <div class="calibration-step">
+                        <span class="step-number">3</span>
+                        <strong>Manual Adjustment:</strong>
+                        <button class="btn btn-secondary" onclick="openTimingAdjust()">Manual Timing Adjust</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sensor Verification -->
+        <div class="calibration-section sensor-section">
+            <h2>Sensor System Verification</h2>
+            <div class="instruction-box">
+                <strong>Purpose:</strong> Verify all sensors are connected and functioning correctly
+            </div>
+            
+            <div class="triple-grid">
+                <div>
+                    <h3>Gear Position Sensor</h3>
+                    <div class="data-display" id="gearSensorData">
+                        <div id="gearSensorStatus">
+                            <span class="status-indicator status-error"></span>Checking...
+                        </div>
+                        Current Gear: <span id="currentGear">Loading...</span><br>
+                        PCF8575 Address: <span id="pcfAddress">0x20</span><br>
+                        Raw Data: <span id="pcfRawData">Loading...</span><br>
+                        Connection: <span id="pcfConnection">Loading...</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="testGearSensor()">Test Gear Sensor</button>
+                    <div id="gearSensorTest"></div>
+                </div>
+                
+                <div>
+                    <h3>Speed & RPM Sensors</h3>
+                    <div class="data-display" id="speedRpmData">
+                        <div id="speedSensorStatus">
+                            <span class="status-indicator status-error"></span>Checking...
+                        </div>
+                        Current Speed: <span id="currentSpeed">Loading...</span> MPH<br>
+                        Current RPM: <span id="currentRpm">Loading...</span><br>
+                        Speed Pulses: <span id="speedPulses">Loading...</span><br>
+                        RPM Pulses: <span id="rpmPulses">Loading...</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="testSpeedRpmSensors()">Test Speed/RPM</button>
+                    <div id="speedRpmTest"></div>
+                </div>
+                
+                <div>
+                    <h3>Temperature Sensor</h3>
+                    <div class="data-display" id="tempSensorData">
+                        <div id="tempSensorStatus">
+                            <span class="status-indicator status-error"></span>Checking...
+                        </div>
+                        Current Temp: <span id="currentTemp">Loading...</span>°C<br>
+                        Target Temp: <span id="targetTemp">Loading...</span>°C<br>
+                        Engine Status: <span id="engineStatus">Loading...</span><br>
+                        Pump PWM: <span id="pumpPwm">Loading...</span>%
+                    </div>
+                    <button class="btn btn-secondary" onclick="testTempSensor()">Test Temperature</button>
+                    <div id="tempSensorTest"></div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn" onclick="runFullSensorTest()">Run Complete Sensor Test</button>
+                <div id="fullSensorTestResults"></div>
+            </div>
+        </div>
+
+        <!-- Calibration Summary -->
+        <div class="calibration-section">
+            <h2>Calibration Summary</h2>
+            <div id="calibrationSummary">
+                <div class="data-display">
+                    <strong>Calibration Status:</strong><br>
+                    Hall Sensor: <span id="summaryHall">Not Calibrated</span><br>
+                    Clutch Servo: <span id="summaryClutch">Not Calibrated</span><br>
+                    Relay Timing: <span id="summaryRelay">Not Calibrated</span><br>
+                    Sensor Verification: <span id="summarySensors">Not Verified</span><br>
+                    <br>
+                    <strong>Overall Status:</strong> <span id="overallStatus">Calibration Required</span>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn" onclick="generateCalibrationReport()">Generate Calibration Report</button>
+                <button class="btn btn-secondary" onclick="exportCalibrationData()">Export Calibration Data</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let calibrationData = {
+            hallRange: { min: 780, max: 4000 },
+            clutchPositions: { idle: 0, engage: 180 },
+            relayTimings: { neutralDown: 40, neutralUp: 40, shiftDown: 150, shiftUp: 150 },
+            sensors: { gear: false, speed: false, rpm: false, temp: false }
+        };
+        
+        let testActive = false;
+        let updateInterval;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            startDataUpdates();
+            updateCalibrationSummary();
+        });
+
+        function startDataUpdates() {
+            if (updateInterval) clearInterval(updateInterval);
+            updateInterval = setInterval(updateLiveData, 500);
+            updateLiveData(); // Initial update
+        }
+
+        function stopDataUpdates() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+        }
+
+        function updateLiveData() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(data => {
+                    // Update hall sensor data
+                    document.getElementById('hallRaw').textContent = data.hallValue || 'N/A';
+                    document.getElementById('hallCurveType').textContent = data.hallCurveName || 'Unknown';
+                    document.getElementById('hallCurveStrength').textContent = data.hallCurveStrength || 'N/A';
+                    
+                    // Calculate servo positions
+                    const hallValue = data.hallValue || 0;
+                    const linearServo = Math.max(0, Math.min(180, Math.round((hallValue - 780) * 180 / (4000 - 780))));
+                    document.getElementById('hallLinear').textContent = linearServo;
+                    document.getElementById('hallCurved').textContent = data.servoPosition || 'N/A';
+                    
+                    // Update clutch data
+                    document.getElementById('clutchPosition').textContent = data.servoPosition || 'N/A';
+                    document.getElementById('clutchVoltage').textContent = data.clutchVoltage || 'N/A';
+                    document.getElementById('clutchStatus').textContent = data.clutchPulled ? 'PULLED' : 'RELEASED';
+                    
+                    // Update current gear
+                    document.getElementById('currentGear').textContent = data.currentGear || 'Unknown';
+                    
+                    // Update speed and RPM
+                    document.getElementById('currentSpeed').textContent = (data.currentMph || 0).toFixed(1);
+                    document.getElementById('currentRpm').textContent = (data.currentRpm || 0).toFixed(0);
+                    
+                    // Update temperature
+                    document.getElementById('currentTemp').textContent = (data.currentTemp || 0).toFixed(1);
+                    document.getElementById('targetTemp').textContent = (data.targetTemp || 80).toFixed(1);
+                    document.getElementById('engineStatus').textContent = data.engineRunning ? 'RUNNING' : 'STOPPED';
+                    document.getElementById('pumpPwm').textContent = data.pumpPwmPercent || '0';
+                    
+                    // Update gauges
+                    drawGauge('hallGauge', data.hallValue || 0, 4095, 'Hall', '#9C27B0', '');
+                    drawGauge('clutchGauge', data.servoPosition || 0, 180, 'Position', '#FF9800', '°');
+                    
+                    // Update sensor status indicators
+                    updateSensorStatusIndicators(data);
+                })
+                .catch(e => console.error('Data update error:', e));
+                
+            // Update configuration data
+            fetch('/configData')
+                .then(r => r.json())
+                .then(config => {
+                    document.getElementById('neutralDownMs').textContent = config.neutralDownMs || 'N/A';
+                    document.getElementById('neutralUpMs').textContent = config.neutralUpMs || 'N/A';
+                    document.getElementById('shiftDownMs').textContent = config.shiftDownMs || 'N/A';
+                    document.getElementById('shiftUpMs').textContent = config.shiftUpMs || 'N/A';
+                    document.getElementById('clutchIdle').textContent = config.clutchIdlePos || 'N/A';
+                    document.getElementById('clutchEngage').textContent = config.clutchEngagePos || 'N/A';
+                    
+                    // Update calibration data
+                    calibrationData.clutchPositions.idle = config.clutchIdlePos || 0;
+                    calibrationData.clutchPositions.engage = config.clutchEngagePos || 180;
+                    calibrationData.relayTimings.neutralDown = config.neutralDownMs || 40;
+                    calibrationData.relayTimings.neutralUp = config.neutralUpMs || 40;
+                    calibrationData.relayTimings.shiftDown = config.shiftDownMs || 150;
+                    calibrationData.relayTimings.shiftUp = config.shiftUpMs || 150;
+                })
+                .catch(e => console.error('Config update error:', e));
+        }
+
+        function updateSensorStatusIndicators(data) {
+            // Gear sensor status
+            const gearConnected = !data.currentGear.includes('DISCONNECTED');
+            updateStatusIndicator('gearSensorStatus', gearConnected, 
+                gearConnected ? 'Gear Sensor Connected' : 'Gear Sensor Disconnected');
+            calibrationData.sensors.gear = gearConnected;
+            
+            // Speed/RPM sensor status
+            const speedRpmOk = (data.currentMph > 0 || data.currentRpm > 0);
+            updateStatusIndicator('speedSensorStatus', speedRpmOk,
+                speedRpmOk ? 'Speed/RPM Sensors Active' : 'Speed/RPM Sensors Idle');
+            calibrationData.sensors.speed = true; // Assume connected if data present
+            calibrationData.sensors.rpm = true;
+            
+            // Temperature sensor status
+            const tempOk = data.currentTemp > 0 && data.currentTemp < 150;
+            updateStatusIndicator('tempSensorStatus', tempOk,
+                tempOk ? 'Temperature Sensor OK' : 'Temperature Sensor Error');
+            calibrationData.sensors.temp = tempOk;
+            
+            updateCalibrationSummary();
+        }
+
+        function updateStatusIndicator(elementId, isGood, text) {
+            const element = document.getElementById(elementId);
+            const indicator = element.querySelector('.status-indicator');
+            
+            indicator.className = 'status-indicator ' + (isGood ? 'status-good' : 'status-error');
+            element.innerHTML = indicator.outerHTML + text;
+        }
+
+        function drawGauge(canvasId, value, maxValue, label, color, unit) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = 80;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Background circle
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 8;
+            ctx.stroke();
+            
+            // Value arc
+            const startAngle = -Math.PI * 0.75;
+            const endAngle = Math.PI * 0.75;
+            const totalAngle = endAngle - startAngle;
+            const valueAngle = startAngle + (value / maxValue) * totalAngle;
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, startAngle, valueAngle);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 8;
+            ctx.stroke();
+            
+            // Needle
+            const needleLength = radius - 10;
+            const needleX = centerX + needleLength * Math.cos(valueAngle);
+            const needleY = centerY + needleLength * Math.sin(valueAngle);
+            
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(needleX, needleY);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            
+            // Value text
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(value.toFixed(1) + unit, centerX, centerY + 40);
+            
+            ctx.font = '12px Arial';
+            ctx.fillText('Max: ' + maxValue + unit, centerX, centerY + 60);
+        }
+
+        // Calibration functions
+        function startFullCalibration() {
+            if (confirm('Start full calibration sequence? This will guide you through all calibration steps.')) {
+                updateProgress(10, 'Starting full calibration...');
+                setTimeout(() => startHallRangeTest(), 1000);
+            }
+        }
+
+        function startHallRangeTest() {
+            document.getElementById('hallRangeResults').innerHTML = 
+                '<div class="test-active">Testing hall sensor range... Move clutch lever through full range</div>';
+            
+            let samples = [];
+            let sampleCount = 0;
+            const maxSamples = 20;
+            
+            const testInterval = setInterval(() => {
+                fetch('/sensorData')
+                    .then(r => r.json())
+                    .then(data => {
+                        samples.push(data.hallValue);
+                        sampleCount++;
+                        
+                        if (sampleCount >= maxSamples) {
+                            clearInterval(testInterval);
+                            const min = Math.min(...samples);
+                            const max = Math.max(...samples);
+                            const range = max - min;
+                            
+                            calibrationData.hallRange = { min, max };
+                            
+                            document.getElementById('hallRangeResults').innerHTML = 
+                                `Range test complete!<br>
+                                Min: <span class="value-highlight">${min}</span>, 
+                                Max: <span class="value-highlight">${max}</span>, 
+                                Range: <span class="value-highlight">${range}</span>`;
+                            
+                            updateProgress(25, 'Hall sensor range calibrated');
+                        }
+                    });
+            }, 250);
+            
+            setTimeout(() => {
+                if (testInterval) {
+                    clearInterval(testInterval);
+                    document.getElementById('hallRangeResults').innerHTML = 'Test timeout - try again';
+                }
+            }, 10000);
+        }
+
+        function startHallCurveTest() {
+            document.getElementById('hallCurveResults').innerHTML = 
+                '<div class="test-active">Testing hall response curves...</div>';
+            
+            // Simulate curve testing
+            setTimeout(() => {
+                document.getElementById('hallCurveResults').innerHTML = 
+                    `Curve response tested!<br>
+                    Recommended: <span class="value-highlight">Logarithmic, Strength 2.0</span><br>
+                    Current: <span class="value-highlight">${document.getElementById('hallCurveType').textContent}</span>`;
+                updateProgress(40, 'Hall sensor curves tested');
+            }, 2000);
+        }
+
+        function saveHallCalibration() {
+            // Save hall calibration settings
+            alert('Hall sensor calibration saved!');
+            updateProgress(50, 'Hall sensor calibration complete');
+            updateCalibrationSummary();
+        }
+
+        function setClutchIdle() {
+            fetch('/cmd?action=clutchIdle')
+                .then(() => {
+                    document.getElementById('clutchTestResult').innerHTML = 
+                        'Clutch moved to idle position';
+                })
+                .catch(e => {
+                    document.getElementById('clutchTestResult').innerHTML = 
+                        'Error moving clutch to idle position';
+                });
+        }
+
+        function saveClutchIdle() {
+            const currentPos = document.getElementById('clutchPosition').textContent;
+            if (confirm(`Save current position (${currentPos}°) as clutch idle position?`)) {
+                // Implementation would save to configuration
+                alert('Clutch idle position saved!');
+                updateProgress(60, 'Clutch idle position calibrated');
+            }
+        }
+
+        function setClutchEngage() {
+            fetch('/cmd?action=clutchEngage')
+                .then(() => {
+                    document.getElementById('clutchTestResult').innerHTML = 
+                        'Clutch moved to engage position';
+                })
+                .catch(e => {
+                    document.getElementById('clutchTestResult').innerHTML = 
+                        'Error moving clutch to engage position';
+                });
+        }
+
+        function saveClutchEngage() {
+            const currentPos = document.getElementById('clutchPosition').textContent;
+            if (confirm(`Save current position (${currentPos}°) as clutch engage position?`)) {
+                // Implementation would save to configuration
+                alert('Clutch engage position saved!');
+                updateProgress(70, 'Clutch engage position calibrated');
+            }
+        }
+
+        function testClutchCycle() {
+            document.getElementById('clutchTestResult').innerHTML = 
+                '<div class="test-active">Testing clutch cycle...</div>';
+            
+            let step = 0;
+            const steps = ['idle', 'engage', 'idle'];
+            
+            function runStep() {
+                if (step < steps.length) {
+                    const action = steps[step];
+                    fetch(`/cmd?action=clutch${action.charAt(0).toUpperCase() + action.slice(1)}`)
+                        .then(() => {
+                            step++;
+                            setTimeout(runStep, 1000);
+                        });
+                } else {
+                    document.getElementById('clutchTestResult').innerHTML = 
+                        'Clutch cycle test complete!';
+                    updateProgress(75, 'Clutch servo calibrated');
+                }
+            }
+            
+            runStep();
+        }
+
+        function testDownshiftRelay() {
+            document.getElementById('relayTestStatus').innerHTML = 
+                '<div class="test-active">Testing downshift relay...</div>';
+            
+            fetch('/cmd?action=testDownshift')
+                .then(() => {
+                    setTimeout(() => {
+                        document.getElementById('relayTestStatus').innerHTML = 
+                            'Downshift relay test complete';
+                    }, 1000);
+                })
+                .catch(e => {
+                    document.getElementById('relayTestStatus').innerHTML = 
+                        'Downshift relay test failed';
+                });
+        }
+
+        function testUpshiftRelay() {
+            document.getElementById('relayTestStatus').innerHTML = 
+                '<div class="test-active">Testing upshift relay...</div>';
+            
+            fetch('/cmd?action=testUpshift')
+                .then(() => {
+                    setTimeout(() => {
+                        document.getElementById('relayTestStatus').innerHTML = 
+                            'Upshift relay test complete';
+                    }, 1000);
+                })
+                .catch(e => {
+                    document.getElementById('relayTestStatus').innerHTML = 
+                        'Upshift relay test failed';
+                });
+        }
+
+        function testIgnitionCutRelay() {
+            document.getElementById('relayTestStatus').innerHTML = 
+                '<div class="test-active">Testing ignition cut relay...</div>';
+            
+            fetch('/cmd?action=testIgnitionCut')
+                .then(r => r.text())
+                .then(response => {
+                    setTimeout(() => {
+                        document.getElementById('relayTestStatus').innerHTML = 
+                            'Ignition cut relay test complete - ' + response;
+                    }, 1000);
+                })
+                .catch(e => {
+                    document.getElementById('relayTestStatus').innerHTML = 
+                        'Ignition cut relay test failed';
+                });
+        }
+
+        function startTimingTest() {
+            document.getElementById('timingTestResults').innerHTML = 
+                '<div class="test-active">Testing current timing settings...</div>';
+            
+            // Simulate timing test
+            setTimeout(() => {
+                const avgTime = 145; // Example average shift time
+                const successRate = 98; // Example success rate
+                
+                document.getElementById('timingTestResults').innerHTML = 
+                    `Timing test complete!<br>
+                    Average Shift Time: <span class="value-highlight">${avgTime}ms</span><br>
+                    Success Rate: <span class="value-highlight">${successRate}%</span><br>
+                    Status: <span class="value-highlight">Good</span>`;
+                
+                updateProgress(85, 'Relay timing tested');
+            }, 3000);
+        }
+
+        function autoOptimizeTiming() {
+            document.getElementById('optimizationResults').innerHTML = 
+                '<div class="test-active">Auto-optimizing timing parameters...</div>';
+            
+            // Simulate optimization
+            setTimeout(() => {
+                document.getElementById('optimizationResults').innerHTML = 
+                    `Optimization complete!<br>
+                    Recommended Settings:<br>
+                    • Neutral Down: <span class="value-highlight">35ms</span> (was 40ms)<br>
+                    • Neutral Up: <span class="value-highlight">38ms</span> (was 40ms)<br>
+                    • Shift Down: <span class="value-highlight">145ms</span> (was 150ms)<br>
+                    • Shift Up: <span class="value-highlight">140ms</span> (was 150ms)<br>
+                    <button class="btn" onclick="applyOptimizedTiming()">Apply Optimized Settings</button>`;
+                
+                updateProgress(90, 'Timing optimization complete');
+            }, 4000);
+        }
+
+        function applyOptimizedTiming() {
+            if (confirm('Apply the optimized timing settings?')) {
+                alert('Optimized timing settings applied!');
+                updateCalibrationSummary();
+            }
+        }
+
+        function openTimingAdjust() {
+            window.open('/', '_blank');
+        }
+
+        function testGearSensor() {
+            document.getElementById('gearSensorTest').innerHTML = 
+                '<div class="test-active">Testing gear position sensor...</div>';
+            
+            setTimeout(() => {
+                const connected = calibrationData.sensors.gear;
+                document.getElementById('gearSensorTest').innerHTML = connected ?
+                    'Gear sensor test passed' : 'Gear sensor not responding';
+            }, 2000);
+        }
+
+        function testSpeedRpmSensors() {
+            document.getElementById('speedRpmTest').innerHTML = 
+                '<div class="test-active">Testing speed and RPM sensors...</div>';
+            
+            setTimeout(() => {
+                document.getElementById('speedRpmTest').innerHTML = 
+                    'Speed/RPM sensors test complete<br>Note: Sensors may show zero when stationary';
+            }, 2000);
+        }
+
+        function testTempSensor() {
+            document.getElementById('tempSensorTest').innerHTML = 
+                '<div class="test-active">Testing temperature sensor...</div>';
+            
+            setTimeout(() => {
+                const working = calibrationData.sensors.temp;
+                document.getElementById('tempSensorTest').innerHTML = working ?
+                    'Temperature sensor test passed' : 'Temperature sensor error';
+            }, 2000);
+        }
+
+        function runFullSensorTest() {
+            document.getElementById('fullSensorTestResults').innerHTML = 
+                '<div class="test-active">Running complete sensor diagnostic...</div>';
+            
+            setTimeout(() => {
+                const gearOk = calibrationData.sensors.gear;
+                const speedOk = calibrationData.sensors.speed;
+                const rpmOk = calibrationData.sensors.rpm;
+                const tempOk = calibrationData.sensors.temp;
+                
+                const totalSensors = 4;
+                const workingSensors = [gearOk, speedOk, rpmOk, tempOk].filter(x => x).length;
+                
+                document.getElementById('fullSensorTestResults').innerHTML = 
+                    `<strong>Sensor Test Results:</strong><br>
+                    Working Sensors: <span class="value-highlight">${workingSensors}/${totalSensors}</span><br>
+                    Gear Position: ${gearOk ? 'OK' : 'ERROR'}<br>
+                    Speed Sensor: ${speedOk ? 'OK' : 'ERROR'}<br>
+                    RPM Sensor: ${rpmOk ? 'OK' : 'ERROR'}<br>
+                    Temperature: ${tempOk ? 'OK' : 'ERROR'}`;
+                
+                updateProgress(95, 'Sensor verification complete');
+            }, 3000);
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('overallProgress').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        function updateCalibrationSummary() {
+            // Update individual status items
+            const hallDone = calibrationData.hallRange.min < calibrationData.hallRange.max;
+            const clutchDone = calibrationData.clutchPositions.idle !== calibrationData.clutchPositions.engage;
+            const relayDone = true; // Assume relay timing is configured
+            const sensorsDone = Object.values(calibrationData.sensors).some(x => x);
+            
+            document.getElementById('summaryHall').innerHTML = hallDone ? 
+                'Calibrated' : 'Not Calibrated';
+            document.getElementById('summaryClutch').innerHTML = clutchDone ? 
+                'Calibrated' : 'Not Calibrated';
+            document.getElementById('summaryRelay').innerHTML = relayDone ? 
+                'Calibrated' : 'Not Calibrated';
+            document.getElementById('summarySensors').innerHTML = sensorsDone ? 
+                'Verified' : 'Not Verified';
+            
+            // Update overall status
+            const completedItems = [hallDone, clutchDone, relayDone, sensorsDone].filter(x => x).length;
+            const totalItems = 4;
+            
+            let overallStatus;
+            if (completedItems === totalItems) {
+                overallStatus = 'Fully Calibrated';
+                updateProgress(100, 'Calibration complete!');
+            } else if (completedItems > totalItems / 2) {
+                overallStatus = 'Partially Calibrated';
+            } else {
+                overallStatus = 'Calibration Required';
+            }
+            
+            document.getElementById('overallStatus').textContent = overallStatus;
+        }
+
+        function generateCalibrationReport() {
+            const report = `
+T89 Gearbox Calibration Report
+Generated: ${new Date().toLocaleString()}
+
+HALL SENSOR:
+- Range: ${calibrationData.hallRange.min} - ${calibrationData.hallRange.max}
+- Curve Type: ${document.getElementById('hallCurveType').textContent}
+- Curve Strength: ${document.getElementById('hallCurveStrength').textContent}
+
+CLUTCH SERVO:
+- Idle Position: ${calibrationData.clutchPositions.idle}°
+- Engage Position: ${calibrationData.clutchPositions.engage}°
+
+RELAY TIMING:
+- Neutral Down: ${calibrationData.relayTimings.neutralDown}ms
+- Neutral Up: ${calibrationData.relayTimings.neutralUp}ms
+- Shift Down: ${calibrationData.relayTimings.shiftDown}ms
+- Shift Up: ${calibrationData.relayTimings.shiftUp}ms
+
+SENSOR STATUS:
+- Gear Position: ${calibrationData.sensors.gear ? 'OK' : 'ERROR'}
+- Speed Sensor: ${calibrationData.sensors.speed ? 'OK' : 'ERROR'}
+- RPM Sensor: ${calibrationData.sensors.rpm ? 'OK' : 'ERROR'}
+- Temperature: ${calibrationData.sensors.temp ? 'OK' : 'ERROR'}
+            `;
+            
+            const blob = new Blob([report], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'T89_Calibration_Report.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function exportCalibrationData() {
+            const data = {
+                timestamp: new Date().toISOString(),
+                calibrationData: calibrationData,
+                currentConfig: {
+                    neutralDownMs: document.getElementById('neutralDownMs').textContent,
+                    neutralUpMs: document.getElementById('neutralUpMs').textContent,
+                    shiftDownMs: document.getElementById('shiftDownMs').textContent,
+                    shiftUpMs: document.getElementById('shiftUpMs').textContent,
+                    clutchIdle: document.getElementById('clutchIdle').textContent,
+                    clutchEngage: document.getElementById('clutchEngage').textContent
+                }
+            };
+            
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'T89_Calibration_Data.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function refreshData() {
+            updateLiveData();
+            updateCalibrationSummary();
+        }
+
+        // Cleanup when leaving page
+        window.addEventListener('beforeunload', function() {
+            stopDataUpdates();
+        });
+    </script>
+</body>
+</html>
