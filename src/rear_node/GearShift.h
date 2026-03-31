@@ -24,10 +24,6 @@
 #define PIN_RELAY_DOWNSHIFT 47
 #define PIN_RELAY_IGN_CUT   48
 
-#define SHIFT_MS_MIN        30
-#define SHIFT_MS_MAX        200
-#define IGN_CUT_MS_MIN      10
-#define IGN_CUT_MS_MAX      100
 #define SHIFT_SETTLE_MS     100     // wait after relays release before reading gear
 
 // Actual gear after shift is read from main.cpp
@@ -76,8 +72,8 @@ void gearShiftRequest(uint8_t dir, uint16_t shift_ms, uint16_t ign_cut_ms, uint8
     }
 
     s_shiftDir  = dir;
-    s_shiftMs   = constrain(shift_ms,   SHIFT_MS_MIN,   SHIFT_MS_MAX);
-    s_ignCutMs  = constrain(ign_cut_ms, IGN_CUT_MS_MIN, IGN_CUT_MS_MAX);
+    s_shiftMs   = shift_ms;
+    s_ignCutMs  = ign_cut_ms;
 
     if (dir == SHIFT_UP) {
         s_expectedGear = (current_gear < GEAR_6) ? current_gear + 1 : GEAR_6;
@@ -88,9 +84,20 @@ void gearShiftRequest(uint8_t dir, uint16_t shift_ms, uint16_t ign_cut_ms, uint8
     Serial.printf("[SHIFT] %s  shift=%ums  ign_cut=%ums  expect_gear=%u\n",
         (dir == SHIFT_UP) ? "UP" : "DOWN", s_shiftMs, s_ignCutMs, s_expectedGear);
 
-    digitalWrite(PIN_RELAY_IGN_CUT, HIGH);
-    s_shiftStateTs = millis();
-    s_shiftState   = SHIFT_IGN_CUT;
+    if (s_ignCutMs > 0) {
+        digitalWrite(PIN_RELAY_IGN_CUT, HIGH);
+        s_shiftStateTs = millis();
+        s_shiftState   = SHIFT_IGN_CUT;
+    } else {
+        // No ignition cut — go straight to actuating
+        if (s_shiftDir == SHIFT_UP) {
+            digitalWrite(PIN_RELAY_UPSHIFT, HIGH);
+        } else {
+            digitalWrite(PIN_RELAY_DOWNSHIFT, HIGH);
+        }
+        s_shiftStateTs = millis();
+        s_shiftState   = SHIFT_ACTUATING;
+    }
 }
 
 bool gearShiftBusy() {
