@@ -1,14 +1,14 @@
 // GearboxStateMachine.cpp v19 - Fixed racing downshift sequence with immediate relay activation
 
 #include "GearboxStateMachine.h"
+#include "MainCan.h"
 #include "ShiftLogger.h"
 #include "RPM.h"
 
-// External pin definitions and functions
+// External functions implemented in T89_gearbox_206.cpp
 extern void displayShiftLetter(char letter);
-
-#define RELAY_ON HIGH
-#define RELAY_OFF LOW
+extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs);
+extern void canSendShiftDown(uint16_t shiftMs);
 
 // Global state machine instance for condition functions
 GearboxStateMachine* g_stateMachine = nullptr;
@@ -294,7 +294,7 @@ void GearboxStateMachine::enterIdleState() {
     releaseClutch();
     
     // Ensure relays are off
-    deactivateRelay();
+    deactivateShift();
     
     Serial.println("Entered idle state for gear: " + getCurrentGearName());
 }
@@ -321,54 +321,54 @@ void GearboxStateMachine::enterShiftingState() {
                     toGear = 1;
                 }
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateRelay(pinDownshiftRelay, (fromGear == 0) ? shiftDownMs : neutralDownMs);
+                activateShift(false, (fromGear == 0) ? shiftDownMs : neutralDownMs);
                 displayShiftLetter('D');
                 break;
-                
+
             case NEUTRAL_UP_SHIFTING:
-                // Triggered by Neutral Up button - always use UPSHIFT relay
+                // Triggered by Neutral Up button - upshift CAN, no ignition cut for neutral moves
                 if (fromGear == 1) {
                     // 1st → N (half-shift)
                     shiftType = 2; // neutral
                     toGear = 0;
                 } else if (fromGear == 0) {
                     // N → 2nd (full shift)
-                    shiftType = 0; // upshift  
+                    shiftType = 0; // upshift
                     toGear = 2;
                 }
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateRelay(pinUpshiftRelay, (fromGear == 0) ? shiftUpMs : neutralUpMs);
+                activateShift(true, (fromGear == 0) ? shiftUpMs : neutralUpMs, 0);
                 displayShiftLetter('U');
                 break;
-                
+
             case UPSHIFTING:
-                // Triggered by Shift Up button - always use UPSHIFT relay
+                // Triggered by Shift Up button - upshift with ignition cut
                 shiftType = 0; // upshift
                 toGear = fromGear + 1;
                 shiftLogger->startIgnitionCut();
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateRelay(pinUpshiftRelay, shiftUpMs);
+                activateShift(true, shiftUpMs, IGN_CUT_DEFAULT_MS);
                 displayShiftLetter('U');
                 break;
-                
+
             case DOWNSHIFT_CLUTCH_ENGAGING:
                 // Triggered by Shift Down button - engage clutch, wait for pull detection
-                shiftType = 1; // downshift  
+                shiftType = 1; // downshift
                 toGear = fromGear - 1;
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
                 engageClutch();  // CRITICAL: Engage the clutch servo
                 displayShiftLetter('D');
                 break;
-                
+
             case DOWNSHIFT_CLUTCH_ENGAGED:
                 // Legacy state - should not be used in racing sequence
                 Serial.println("WARNING: DOWNSHIFT_CLUTCH_ENGAGED state entered - this should not happen in racing sequence");
                 break;
-                
+
             case DOWNSHIFT_SHIFTING:
-                // Triggered when clutch is pulled - activate relay immediately
-                Serial.println("RACING DOWNSHIFT: Clutch pulled detected - firing relay immediately!");
-                activateRelay(pinDownshiftRelay, shiftDownMs);
+                // Triggered when clutch is pulled - send CAN command immediately
+                Serial.println("RACING DOWNSHIFT: Clutch pulled detected - sending CAN shift command!");
+                activateShift(false, shiftDownMs);
                 break;
                 
             default:
@@ -386,7 +386,7 @@ void GearboxStateMachine::enterErrorState() {
     Serial.println("Entered error state: " + getStateName(currentState));
     
     // Ensure safe state
-    deactivateRelay();
+    deactivateShift();
     releaseClutch();
 }
 
@@ -449,28 +449,31 @@ void GearboxStateMachine::exitShiftingState() {
     Serial.println("Exiting shift state: " + getStateName(currentState));
 }
 
-void GearboxStateMachine::activateRelay(int pin, int duration) {
-    digitalWrite(pin, RELAY_ON);
-    relayActive = true;
-    relayStartTime = millis();
-    relayDuration = duration;
-    activeRelayPin = pin;
-    
-    Serial.println("Relay activated on pin " + String(pin) + " for " + String(duration) + "ms");
+void GearboxStateMachine::activateShift(bool isUpshift, int duration, uint16_t ignCutMs) {
+    if (isUpshift) {
+        canSendShiftUp((uint16_t)duration, ignCutMs);
+    } else {
+        canSendShiftDown((uint16_t)duration);
+    }
+    relayActive     = true;
+    relayStartTime  = millis();
+    relayDuration   = duration;
+    activeShiftIsUp = isUpshift;
+
+    Serial.println(String(isUpshift ? "Upshift" : "Downshift") + " CAN sent, duration=" + String(duration) + "ms");
 }
 
-void GearboxStateMachine::deactivateRelay() {
+void GearboxStateMachine::deactivateShift() {
     if (relayActive) {
-        digitalWrite(activeRelayPin, RELAY_OFF);
         relayActive = false;
-        Serial.println("Relay deactivated on pin " + String(activeRelayPin));
+        Serial.println(String(activeShiftIsUp ? "Upshift" : "Downshift") + " timing complete");
     }
 }
 
 void GearboxStateMachine::updateRelayControl() {
     if (relayActive) {
         if (millis() - relayStartTime >= relayDuration) {
-            deactivateRelay();
+            deactivateShift();
             processEvent(EVENT_RELAY_FINISHED);
         }
     }

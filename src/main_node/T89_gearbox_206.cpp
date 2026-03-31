@@ -21,15 +21,8 @@
 #define PIN_SHIFT_UP        13   // Switch 4 - Shift Up
 #define PIN_HALL_SENSOR     5    // Hall sensor analog input
 #define PIN_CLUTCH_SERVO    6    // Servo output
-#define PIN_DOWNSHIFT_RELAY 7    // Downshift relay
-#define PIN_UPSHIFT_RELAY   8    // Upshift relay
 #define PIN_WIFI_SWITCH     9    // WiFi toggle switch input (momentary)
 #define PIN_CLUTCH_POSITION 15   // Analog voltage input for clutch position monitoring
-
-// Relay configuration
-#define RELAY_ACTIVE_LOW false
-#define RELAY_ON (RELAY_ACTIVE_LOW ? LOW : HIGH)
-#define RELAY_OFF (RELAY_ACTIVE_LOW ? HIGH : LOW)
 
 // Clutch position threshold
 #define CLUTCH_THRESHOLD_VOLTAGE 1.8
@@ -55,6 +48,7 @@
 #include "WebInterface.h"           // WebInterface needs HallResponseTypes
 #include "SerialCommands.h"         // NEW: Serial command processing (MUST be last)
 #include "ManualMode.h"             // NEW: Manual mode control
+#include "MainCan.h"                // CAN bus interface to rear node
 
 // Global variables for Speed and RPM sensors
 volatile unsigned long g_speedPulseCount = 0;
@@ -94,7 +88,8 @@ bool manualModeActive = false;  // NEW: Manual mode status for matrix
 Speed speedSensor(PIN_MPH_INPUT);
 RPM rpmSensor(PIN_RPM_INPUT, 12.0, 0.3);
 ShiftLogger shiftLogger;
-GearboxStateMachine gearbox(PIN_DOWNSHIFT_RELAY, PIN_UPSHIFT_RELAY, PIN_HALL_SENSOR);
+GearboxStateMachine gearbox(PIN_HALL_SENSOR);
+MainCan mainCan;
 
 // Create web server and interface
 WebServer server(80);
@@ -107,9 +102,8 @@ GearSensorControl gearSensor(PCF8575_ADDRESS, PCF8575_INTERRUPT_PIN);
 SerialCommands serialCommands;
 
 // NEW: Manual mode controller
-ManualMode manualMode(PIN_NEUTRAL_DOWN, PIN_NEUTRAL_UP, 
-                     PIN_SHIFT_DOWN, PIN_SHIFT_UP,
-                     PIN_DOWNSHIFT_RELAY, PIN_UPSHIFT_RELAY);
+ManualMode manualMode(PIN_NEUTRAL_DOWN, PIN_NEUTRAL_UP,
+                     PIN_SHIFT_DOWN, PIN_SHIFT_UP);
 
 // Configuration variables
 int neutralDownMs = 40;
@@ -177,6 +171,10 @@ void checkServoPosition();
 void setupWeb();
 void updateCompatibilityVariables();
 
+// CAN send helpers — called by GearboxStateMachine and ManualMode via extern
+void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs) { mainCan.sendShiftUp(shiftMs, ignCutMs); }
+void canSendShiftDown(uint16_t shiftMs)                  { mainCan.sendShiftDown(shiftMs); }
+
 // Legacy functions for WebInterface compatibility
 bool isShiftAllowed() { return gearbox.canAcceptShiftCommand(); }
 bool canDownshift() { return gearbox.canAcceptShiftCommand() && clutchPulled; }
@@ -184,7 +182,7 @@ void setShiftInProgress(bool inProgress) { /* Now handled by state machine */ }
 void startDownshiftWithClutchCheck(int durationMs) { 
     gearbox.processEvent(EVENT_NEUTRAL_DOWN_PRESSED); 
 }
-void startRelayActivation(int pin, int durationMs) { /* Now handled by state machine */ }
+
 void engageClutch() { clutchServo.write(clutchEngagePos); }
 void releaseClutch() { clutchServo.write(clutchIdlePos); }
 void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter); }
@@ -376,6 +374,9 @@ void setup() {
     
     setupPins();
     
+    // Initialize CAN bus
+    mainCan.begin();
+
     // Initialize modular components
     Serial.println("Initializing modular components...");
 
@@ -478,6 +479,9 @@ void loop() {
         updateSensorConnectionStatus();
     }
     
+    // Poll CAN for incoming messages (ACK, gear pos)
+    mainCan.poll();
+
     // Always update these systems (independent of mode)
     // Update manual mode status for matrix display
     manualModeActive = manualMode.isManualModeEnabled();
@@ -519,21 +523,12 @@ void setupPins() {
     pinMode(PIN_HALL_SENSOR, INPUT);
     pinMode(PIN_CLUTCH_POSITION, INPUT);
 
-    // Configure output pins
-    pinMode(PIN_DOWNSHIFT_RELAY, OUTPUT);
-    pinMode(PIN_UPSHIFT_RELAY, OUTPUT);
-    digitalWrite(PIN_DOWNSHIFT_RELAY, RELAY_OFF);
-    digitalWrite(PIN_UPSHIFT_RELAY, RELAY_OFF);
-
     clutchServo.attach(PIN_CLUTCH_SERVO);
 
     // Initialize I2C
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
-    Serial.println("Relay Configuration:");
-    Serial.println("  Type: " + String(RELAY_ACTIVE_LOW ? "Active-LOW" : "Active-HIGH"));
-    Serial.println("  ON state: " + String(RELAY_ON ? "HIGH" : "LOW"));
-    Serial.println("  OFF state: " + String(RELAY_OFF ? "HIGH" : "LOW"));
+    Serial.println("CAN TX: GPIO" + String(CAN_TX_PIN) + "  RX: GPIO" + String(CAN_RX_PIN));
 }
 
 void setupWiFiAP() {

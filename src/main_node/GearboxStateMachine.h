@@ -104,15 +104,13 @@ private:
     SimpleServo* clutchServo;
     
     // Pin definitions
-    int pinDownshiftRelay;
-    int pinUpshiftRelay;
     int pinHallSensor;
-    
-    // Relay control
+
+    // Shift timing (mirrors old relay timing — fires EVENT_RELAY_FINISHED when done)
     bool relayActive;
     unsigned long relayStartTime;
     int relayDuration;
-    int activeRelayPin;
+    bool activeShiftIsUp;
     
     // Clutch interlock
     bool clutchInterlockEnabled;
@@ -131,14 +129,14 @@ private:
     static const int getTransitionCount();
 
 public:
-    GearboxStateMachine(int downRelayPin, int upRelayPin, int hallPin)
+    GearboxStateMachine(int hallPin)
         : currentState(IDLE_NEUTRAL), previousState(IDLE_NEUTRAL),
           stateStartTime(0), lastStateChange(0),
           neutralDownMs(40), neutralUpMs(40), shiftDownMs(150), shiftUpMs(150),
           clutchIdlePos(0), clutchEngagePos(180),
           shiftLogger(nullptr), speedSensor(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
-          pinDownshiftRelay(downRelayPin), pinUpshiftRelay(upRelayPin), pinHallSensor(hallPin),
-          relayActive(false), relayStartTime(0), relayDuration(0), activeRelayPin(-1),
+          pinHallSensor(hallPin),
+          relayActive(false), relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
           clutchInterlockEnabled(true), clutchPulled(false),
           currentGear(0) {}
     
@@ -203,9 +201,9 @@ private:
     
     void exitShiftingState();
     
-    // Hardware control
-    void activateRelay(int pin, int duration);
-    void deactivateRelay();
+    // Shift control (sends CAN command + tracks completion timing)
+    void activateShift(bool isUpshift, int duration, uint16_t ignCutMs = 0);
+    void deactivateShift();
     void engageClutch();
     void releaseClutch();
     void updateRelayControl();

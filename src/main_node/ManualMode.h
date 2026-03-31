@@ -4,9 +4,13 @@
 #include <Arduino.h>
 #include "SimpleServo.h"
 #include "HallSensorControl.h"
+#include "MainCan.h"
 
-// Manual mode relay timing
-#define MANUAL_RELAY_DURATION_MS 100
+// Manual mode shift pulse duration sent to rear node
+#define MANUAL_SHIFT_DURATION_MS 100
+
+extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs);
+extern void canSendShiftDown(uint16_t shiftMs);
 
 class ManualMode {
 private:
@@ -19,9 +23,7 @@ private:
     int pinNeutralUp;
     int pinShiftDown;
     int pinShiftUp;
-    int pinDownshiftRelay;
-    int pinUpshiftRelay;
-    
+
     // State variables
     bool manualModeEnabled;
     bool lastNeutralDownState;
@@ -29,10 +31,10 @@ private:
     bool lastShiftDownState;
     bool lastShiftUpState;
     
-    // Relay control
+    // Shift timing (for status display only)
     bool relayActive;
     unsigned long relayStartTime;
-    int activeRelayPin;
+    bool activeShiftIsUp;
     int relayDuration;
     
     // Toggle detection
@@ -44,14 +46,12 @@ private:
     static const unsigned long STATUS_INTERVAL = 5000; // Update every 5 seconds
     
 public:
-    ManualMode(int nDownPin, int nUpPin, int sDownPin, int sUpPin, 
-               int downRelayPin, int upRelayPin) 
+    ManualMode(int nDownPin, int nUpPin, int sDownPin, int sUpPin)
         : hallSensor(nullptr), clutchServo(nullptr),
           pinNeutralDown(nDownPin), pinNeutralUp(nUpPin),
           pinShiftDown(sDownPin), pinShiftUp(sUpPin),
-          pinDownshiftRelay(downRelayPin), pinUpshiftRelay(upRelayPin),
           manualModeEnabled(false), relayActive(false), relayStartTime(0),
-          activeRelayPin(-1), relayDuration(0), lastToggleCheck(0),
+          activeShiftIsUp(false), relayDuration(0), lastToggleCheck(0),
           lastStatusUpdate(0) {
         
         // Initialize button states
@@ -115,9 +115,9 @@ public:
     void printStatus() {
         Serial.println("=== MANUAL MODE STATUS ===");
         Serial.println("Mode: " + String(manualModeEnabled ? "MANUAL" : "AUTOMATIC"));
-        Serial.println("Relay Active: " + String(relayActive ? "YES" : "NO"));
+        Serial.println("Shift Active: " + String(relayActive ? "YES" : "NO"));
         if (relayActive) {
-            Serial.println("Active Relay Pin: " + String(activeRelayPin));
+            Serial.println("Direction: " + String(activeShiftIsUp ? "UP" : "DOWN"));
             Serial.println("Time Remaining: " + String(relayDuration - (millis() - relayStartTime)) + "ms");
         }
         Serial.println("===========================");
@@ -182,19 +182,27 @@ private:
         bool shiftDownState = (digitalRead(pinShiftDown) == LOW);
         bool shiftUpState = (digitalRead(pinShiftUp) == LOW);
         
-        // Shift Down button - fire downshift relay
+        // Shift Down button
         if (shiftDownState && !lastShiftDownState) {
-            if (!relayActive) { // Don't interrupt active relay
-                activateRelay(pinDownshiftRelay, MANUAL_RELAY_DURATION_MS);
-                Serial.println("MANUAL: Downshift relay fired");
+            if (!relayActive) {
+                canSendShiftDown(MANUAL_SHIFT_DURATION_MS);
+                relayActive     = true;
+                relayStartTime  = millis();
+                activeShiftIsUp = false;
+                relayDuration   = MANUAL_SHIFT_DURATION_MS;
+                Serial.println("MANUAL: Downshift CAN sent");
             }
         }
-        
-        // Shift Up button - fire upshift relay
+
+        // Shift Up button
         if (shiftUpState && !lastShiftUpState) {
-            if (!relayActive) { // Don't interrupt active relay
-                activateRelay(pinUpshiftRelay, MANUAL_RELAY_DURATION_MS);
-                Serial.println("MANUAL: Upshift relay fired");
+            if (!relayActive) {
+                canSendShiftUp(MANUAL_SHIFT_DURATION_MS, 0);
+                relayActive     = true;
+                relayStartTime  = millis();
+                activeShiftIsUp = true;
+                relayDuration   = MANUAL_SHIFT_DURATION_MS;
+                Serial.println("MANUAL: Upshift CAN sent");
             }
         }
         
@@ -203,29 +211,9 @@ private:
         lastShiftUpState = shiftUpState;
     }
     
-    void activateRelay(int pin, int duration) {
-        digitalWrite(pin, HIGH); // Activate relay
-        relayActive = true;
-        relayStartTime = millis();
-        activeRelayPin = pin;
-        relayDuration = duration;
-        
-        Serial.println("Manual relay activated on pin " + String(pin) + " for " + String(duration) + "ms");
-    }
-    
-    void deactivateRelay() {
-        if (relayActive) {
-            digitalWrite(activeRelayPin, LOW); // Deactivate relay
-            Serial.println("Manual relay deactivated on pin " + String(activeRelayPin));
-            relayActive = false;
-        }
-    }
-    
     void updateRelayControl() {
-        if (relayActive) {
-            if (millis() - relayStartTime >= relayDuration) {
-                deactivateRelay();
-            }
+        if (relayActive && millis() - relayStartTime >= relayDuration) {
+            relayActive = false;
         }
     }
     
@@ -239,9 +227,9 @@ private:
                 int servoPos = map(hallValue, 780, 4000, 0, 180);
                 servoPos = constrain(servoPos, 0, 180);
                 
-                Serial.println("MANUAL MODE: Hall=" + String(hallValue) + 
+                Serial.println("MANUAL MODE: Hall=" + String(hallValue) +
                               ", Servo=" + String(servoPos) + "°, " +
-                              "Relay=" + String(relayActive ? "ACTIVE" : "IDLE"));
+                              "Shift=" + String(relayActive ? "ACTIVE" : "IDLE"));
             }
         }
     }

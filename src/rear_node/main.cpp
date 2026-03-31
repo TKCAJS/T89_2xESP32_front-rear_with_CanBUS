@@ -26,6 +26,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <Adafruit_NeoPixel.h>
 #include "esp_task_wdt.h"
 #include "can_ids.h"
 #include "RearDisplay.h"
@@ -43,6 +44,17 @@
 #define PIN_GEAR_4          10
 #define PIN_GEAR_5          11
 #define PIN_GEAR_6          12
+
+// =============================================================================
+// NEOPIXEL
+// =============================================================================
+
+#define PIN_NEOPIXEL        48
+#define FLASH_DURATION_MS   70
+#define FLASH_GAP_MS        150
+#define HEARTBEAT_CYCLE_MS  1000
+
+static Adafruit_NeoPixel g_pixel(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 // =============================================================================
 // TIMING
@@ -170,6 +182,19 @@ void taskGearShift() {
     }
 }
 
+void taskHeartbeat(uint32_t now) {
+    uint32_t t = now % HEARTBEAT_CYCLE_MS;
+    bool flash = (t < FLASH_DURATION_MS) ||
+                 (t > FLASH_DURATION_MS + FLASH_GAP_MS &&
+                  t < FLASH_DURATION_MS * 2 + FLASH_GAP_MS);
+    if (flash) {
+        g_pixel.setPixelColor(0, g_pixel.Color(255, 0, 0));
+    } else {
+        g_pixel.setPixelColor(0, g_pixel.Color(80, 0, 80));  // purple
+    }
+    g_pixel.show();
+}
+
 void taskDisplay(uint32_t now) {
     g_display.setCanHealth(g_canHealth);
     g_display.setNodeStatus(g_nodeStatus);
@@ -209,6 +234,10 @@ void setup() {
         Serial.println("[REAR NODE] WARNING: CAN init failed");
     }
 
+    g_pixel.begin();
+    g_pixel.setBrightness(64);
+    g_pixel.show();
+
     g_display.begin();
     g_display.setCanHealth(g_canHealth);
     g_display.setGear(g_currentGear);
@@ -227,4 +256,5 @@ void loop() {
     taskCanHealth(now);
     taskCanTx(now);
     taskDisplay(now);
+    taskHeartbeat(now);
 }

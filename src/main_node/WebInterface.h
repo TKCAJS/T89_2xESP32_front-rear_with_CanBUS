@@ -5,6 +5,7 @@
 #include <LittleFS.h>
 #include "HallResponseTypes.h"
 #include "SimpleServo.h"
+#include "MainCan.h"
 
 class WebInterface {
 private:
@@ -144,16 +145,13 @@ extern ShiftLogger shiftLogger;
 extern HallResponseCurve hallCurveType;
 extern float hallCurveStrength;
 
-// Relay control constants
-#define RELAY_ON HIGH
-#define RELAY_OFF LOW
-
 // Function declarations for callbacks
 extern bool isShiftAllowed();
 extern bool canDownshift();
 extern void setShiftInProgress(bool inProgress);
 extern void startDownshiftWithClutchCheck(int durationMs);
-extern void startRelayActivation(int pin, int durationMs);
+extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs);
+extern void canSendShiftDown(uint16_t shiftMs);
 extern void engageClutch();
 extern void displayShiftLetter(char letter);
 extern void saveConfig();
@@ -250,22 +248,16 @@ void WebInterface::handleCommand() {
             server->send(423, "text/plain", "BLOCKED: Shift in progress");
             return;
         }
-        // Test downshift relay for 100ms
-        digitalWrite(PIN_DOWNSHIFT_RELAY, RELAY_ON);
-        delay(100);
-        digitalWrite(PIN_DOWNSHIFT_RELAY, RELAY_OFF);
-        server->send(200, "text/plain", "Downshift relay tested");
+        canSendShiftDown(100);
+        server->send(200, "text/plain", "Downshift CAN command sent (100ms)");
         return;
     } else if (action == "testUpshift") {
         if (!isShiftAllowed()) {
             server->send(423, "text/plain", "BLOCKED: Shift in progress");
             return;
         }
-        // Test upshift relay for 100ms
-        digitalWrite(PIN_UPSHIFT_RELAY, RELAY_ON);
-        delay(100);
-        digitalWrite(PIN_UPSHIFT_RELAY, RELAY_OFF);
-        server->send(200, "text/plain", "Upshift relay tested");
+        canSendShiftUp(100, 0);
+        server->send(200, "text/plain", "Upshift CAN command sent (100ms)");
         return;
     } else if (action == "testIgnitionCut") {
         // Test ignition cut relay - use the shift logger's method for proper timing
@@ -292,7 +284,7 @@ void WebInterface::handleCommand() {
     } else if (action == "neutralUp") {
         setShiftInProgress(true);
         shiftLogger.startShiftTiming(currentGear, 0, rpmSensor.getRpm(), 2);
-        startRelayActivation(PIN_UPSHIFT_RELAY, neutralUpMs);
+        canSendShiftUp(neutralUpMs, 0);
         displayShiftLetter('U');
     } else if (action == "shiftDown") {
         setShiftInProgress(true);
@@ -306,7 +298,7 @@ void WebInterface::handleCommand() {
         setShiftInProgress(true);
         shiftLogger.startIgnitionCut();
         shiftLogger.startShiftTiming(currentGear, currentGear + 1, rpmSensor.getRpm(), 0);
-        startRelayActivation(PIN_UPSHIFT_RELAY, shiftUpMs);
+        canSendShiftUp(shiftUpMs, IGN_CUT_DEFAULT_MS);
         displayShiftLetter('U');
     }
     
