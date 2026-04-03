@@ -13,9 +13,28 @@ class MainCan {
 private:
     bool    initialized;
     uint8_t txSeq;
+    uint8_t _gear;
+    bool    _gearValid;
 
 public:
-    MainCan() : initialized(false), txSeq(0) {}
+    MainCan() : initialized(false), txSeq(0), _gear(GEAR_UNKNOWN), _gearValid(false) {}
+
+    uint8_t getGear() const { return _gear; }
+    bool    isGearValid() const { return _gearValid; }
+
+    String getGearName() const {
+        if (!_gearValid) return "?";
+        switch (_gear) {
+            case GEAR_NEUTRAL: return "N";
+            case GEAR_1:       return "1";
+            case GEAR_2:       return "2";
+            case GEAR_3:       return "3";
+            case GEAR_4:       return "4";
+            case GEAR_5:       return "5";
+            case GEAR_6:       return "6";
+            default:           return "?";
+        }
+    }
 
     bool begin() {
         twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
@@ -80,10 +99,19 @@ public:
         if (!initialized) return;
         twai_message_t msg;
         while (twai_receive(&msg, 0) == ESP_OK) {
+            if (!msg.extd) continue;
             uint8_t msgType = CAN_ID_MSGTYPE(msg.identifier);
-            if (msgType == MSGTYPE_REAR_ACK_COMPLETE) {
-                Serial.printf("CAN ACK_COMPLETE: dir=%d expected=%d actual=%d ok=%d\n",
-                    msg.data[2], msg.data[3], msg.data[4], msg.data[5]);
+            switch (msgType) {
+                case MSGTYPE_REAR_GEAR_POS:
+                    _gear      = msg.data[2];
+                    _gearValid = (_gear <= GEAR_6 || _gear == GEAR_NEUTRAL);
+                    break;
+                case MSGTYPE_REAR_ACK_COMPLETE:
+                    Serial.printf("CAN ACK_COMPLETE: dir=%d expected=%d actual=%d ok=%d\n",
+                        msg.data[2], msg.data[3], msg.data[4], msg.data[5]);
+                    break;
+                default:
+                    break;
             }
         }
     }

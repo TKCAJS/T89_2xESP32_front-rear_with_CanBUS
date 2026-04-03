@@ -28,19 +28,19 @@ private:
     
     // External references needed
     bool* wifiEnabled;
-    bool* pcf8575Connected;
-    bool* manualModeEnabled;  // NEW: Manual mode reference
-    
+    bool* canGearValid;
+    bool* manualModeEnabled;
+
 public:
-    MatrixDisplay() : matrix(nullptr), showShiftNotification(false), 
+    MatrixDisplay() : matrix(nullptr), showShiftNotification(false),
                      shiftNotificationChar(' '), shiftNotificationStart(0),
                      lastRainbowUpdate(0), rainbowOffset(0),
-                     wifiEnabled(nullptr), pcf8575Connected(nullptr),
+                     wifiEnabled(nullptr), canGearValid(nullptr),
                      manualModeEnabled(nullptr) {}
-    
-    void begin(bool* wifiEnabledPtr, bool* pcf8575ConnectedPtr, bool* manualModePtr = nullptr) {
+
+    void begin(bool* wifiEnabledPtr, bool* canGearValidPtr, bool* manualModePtr = nullptr) {
         wifiEnabled = wifiEnabledPtr;
-        pcf8575Connected = pcf8575ConnectedPtr;
+        canGearValid = canGearValidPtr;
         manualModeEnabled = manualModePtr;
         
         // Initialize Dotstar Matrix with corrected wiring pattern
@@ -84,7 +84,7 @@ public:
                 matrix->fillScreen(0); // Clear screen (black)
                 
                 // Handle gear sensor disconnected state
-                if (!(*pcf8575Connected)) {
+                if (!(*canGearValid)) {
                     matrix->setTextColor(matrix->Color(255, 0, 0)); // Red text for error
                     matrix->setCursor(0, 0);
                     matrix->print("?");
@@ -153,7 +153,7 @@ public:
                 
                 // Get current gear name and display it
                 // Handle gear sensor disconnected state
-                if (!(*pcf8575Connected)) {
+                if (!(*canGearValid)) {
                     matrix->setTextColor(matrix->Color(255, 0, 0)); // Red text for error
                     matrix->setCursor(2, 0);  // Adjusted for non-tachometer area
                     matrix->print("?");

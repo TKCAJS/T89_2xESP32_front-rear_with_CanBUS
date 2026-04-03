@@ -26,8 +26,9 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <Adafruit_NeoPixel.h>
+#include "esp_system.h"
 #include "esp_task_wdt.h"
+#include <Adafruit_NeoPixel.h>
 #include "can_ids.h"
 #include "RearDisplay.h"
 #include "RearCan.h"
@@ -157,17 +158,34 @@ void taskGearPoll(uint32_t now) {
     }
 }
 
+#define CAN_RECOVERY_TIMEOUT_MS  500
+
+static uint32_t s_canLostAt = 0;
+
 void taskCanHealth(uint32_t now) {
-    if (!(g_canReady || g_canHealth != CAN_HEALTH_FAULT)) return;
     if (g_lastCanHealth == 0) g_lastCanHealth = now;
     if (now - g_lastCanHealth < 500 || now < 2000) return;
     g_lastCanHealth = now;
+
     canHealthPoll();
+
+    if (!g_canReady) {
+        if (s_canLostAt == 0) s_canLostAt = now;
+        if (now - s_canLostAt > CAN_RECOVERY_TIMEOUT_MS) {
+            Serial.println("[CAN] Recovery timeout — restarting");
+            delay(100);
+            esp_restart();
+        }
+    } else {
+        s_canLostAt = 0;
+    }
 }
 
 void taskCanTx(uint32_t now) {
-    if (!g_canReady) return;
+    // Always poll RX — we can receive even when not ready to TX
     canReceivePoll();
+
+    if (!g_canReady) return;
     if (now - g_lastGearPosTx  >= CAN_GEAR_POS_INTERVAL)  { sendGearPos(g_currentGear);            g_lastGearPosTx  = now; }
     if (now - g_lastGearRawTx  >= CAN_GEAR_RAW_INTERVAL)  { sendGearRaw(g_rawPins, g_currentGear); g_lastGearRawTx  = now; }
     if (now - g_lastStatusTx   >= CAN_STATUS_INTERVAL)    { sendStatus(g_currentGear, g_rawPins);  g_lastStatusTx   = now; }
@@ -218,6 +236,7 @@ void setup() {
         .trigger_panic  = false
     };
     esp_task_wdt_reconfigure(&wdt_config);
+    esp_task_wdt_add(NULL);  // subscribe this task to the watchdog
 
     Serial.println("[REAR NODE] Booting...");
 

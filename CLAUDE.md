@@ -4,8 +4,10 @@ Two ESP32-S3 nodes communicating over CAN bus (500 Kbps, 29-bit extended frames,
 Shared CAN ID definitions live in `lib/can_ids/can_ids.h` — include this in all nodes, never use raw CAN_ID() calls in firmware.
 
 ## Build status
-- **Rear node** — wired, verified. Gear positions detecting correctly.
-- **Main node + CAN bus wiring** — next.
+- **Rear node** — wired, verified. Gear positions detecting correctly. Shift relays (up/down/ign cut) working.
+- **Main node** — wired, CAN working. Gear position received from rear node. Shift commands sending correctly.
+- **CAN bus** — end-to-end working between both nodes.
+- **Next** — remove PCF8575/old gear sensor code from main node. Tune shift durations.
 
 ---
 

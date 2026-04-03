@@ -7,26 +7,21 @@
 class HallSensorControl;
 class GearboxStateMachine;
 class ShiftLogger;
-class GearSensorControl;
 
 class SerialCommands {
 private:
     HallSensorControl* hallSensor;
     GearboxStateMachine* gearbox;
     ShiftLogger* shiftLogger;
-    GearSensorControl* gearSensor;
-    
+
 public:
-    SerialCommands() : hallSensor(nullptr), gearbox(nullptr), 
-                      shiftLogger(nullptr), gearSensor(nullptr) {}
-    
-    void begin(HallSensorControl* hall, GearboxStateMachine* stateMachine, 
-               ShiftLogger* logger, GearSensorControl* sensor) {
+    SerialCommands() : hallSensor(nullptr), gearbox(nullptr), shiftLogger(nullptr) {}
+
+    void begin(HallSensorControl* hall, GearboxStateMachine* stateMachine, ShiftLogger* logger) {
         hallSensor = hall;
         gearbox = stateMachine;
         shiftLogger = logger;
-        gearSensor = sensor;
-        
+
         Serial.println("Serial command interface ready");
         Serial.println("Type 'help' for available commands");
     }

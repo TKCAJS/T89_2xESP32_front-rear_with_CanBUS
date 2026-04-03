@@ -78,6 +78,13 @@ void canReceivePoll() {
     twai_message_t msg;
     while (twai_receive(&msg, 0) == ESP_OK) {
         if (!msg.extd) continue;
+        // Any received message proves the bus is live — recover from NO_BUS
+        if (!g_canReady && g_canHealth == CAN_HEALTH_NO_BUS) {
+            g_canReady    = true;
+            g_canHealth   = CAN_HEALTH_OK;
+            g_nodeStatus &= ~NODE_STATUS_CAN_ERR;
+            Serial.println("[CAN] Bus recovered — received message");
+        }
 
         if (msg.identifier == CAN_REAR_CMD_SHIFT_UP || msg.identifier == CAN_REAR_CMD_SHIFT_DN) {
             // Payload (bytes 2-7):
@@ -101,10 +108,29 @@ void canReceivePoll() {
 //   physical layer is broken (no transceiver, TX not reflected back on RX).
 //   tx_error_counter climbs from ACK errors even with a transceiver if no
 //   other nodes are present, but bus_error_count stays low in that case.
+static uint32_t s_prevBusErrCount = 0;
+
+void canRestart() {
+    Serial.println("[CAN] Restarting driver...");
+    twai_stop();
+    twai_driver_uninstall();
+    delay(100);
+    if (canInit()) {
+        g_canReady    = true;
+        g_canHealth   = CAN_HEALTH_NO_BUS;
+        g_nodeStatus &= ~NODE_STATUS_CAN_ERR;
+        s_prevBusErrCount = 0;
+        Serial.println("[CAN] Driver restart OK");
+    } else {
+        g_canReady  = false;
+        g_canHealth = CAN_HEALTH_FAULT;
+        Serial.println("[CAN] Driver restart failed");
+    }
+}
+
 void canHealthPoll() {
     twai_status_info_t info;
-    static uint8_t   s_cleanPolls      = 0;
-    static uint32_t  s_prevBusErrCount = 0;
+    static uint8_t s_cleanPolls = 0;
 
     if (twai_get_status_info(&info) != ESP_OK) {
         g_canHealth = CAN_HEALTH_FAULT;
@@ -114,24 +140,12 @@ void canHealthPoll() {
 
     switch (info.state) {
         case TWAI_STATE_BUS_OFF:
-            g_canHealth   = CAN_HEALTH_BUS_OFF;
+        case TWAI_STATE_RECOVERING:
+        case TWAI_STATE_STOPPED:
             g_canReady    = false;
             g_nodeStatus |= NODE_STATUS_CAN_ERR;
-            twai_initiate_recovery();
-            Serial.println("[CAN] BUS_OFF — initiating recovery");
-            break;
-
-        case TWAI_STATE_RECOVERING:
-            g_canHealth = CAN_HEALTH_BUS_OFF;
-            g_canReady  = false;
-            break;
-
-        case TWAI_STATE_STOPPED:
-            g_canHealth = CAN_HEALTH_FAULT;
-            g_canReady  = false;
-            twai_start();
-            Serial.println("[CAN] Restarted after recovery");
-            break;
+            canRestart();
+            return;
 
         case TWAI_STATE_RUNNING: {
             uint32_t busErrDelta  = info.bus_error_count - s_prevBusErrCount;

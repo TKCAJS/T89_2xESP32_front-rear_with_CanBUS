@@ -197,7 +197,7 @@ private:
         // Shift Up button
         if (shiftUpState && !lastShiftUpState) {
             if (!relayActive) {
-                canSendShiftUp(MANUAL_SHIFT_DURATION_MS, 0);
+                canSendShiftUp(MANUAL_SHIFT_DURATION_MS, IGN_CUT_DEFAULT_MS);
                 relayActive     = true;
                 relayStartTime  = millis();
                 activeShiftIsUp = true;

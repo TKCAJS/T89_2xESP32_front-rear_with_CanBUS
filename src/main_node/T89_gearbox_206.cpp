@@ -33,7 +33,6 @@
 #include <WebServer.h>
 #include <Preferences.h>
 #include <Adafruit_NeoPixel.h>
-#include <Wire.h>
 
 // Project includes - MODULAR COMPONENTS (Order matters for dependencies)
 #include "Speed.h"
@@ -43,7 +42,6 @@
 #include "SimpleServo.h"
 #include "HallResponseTypes.h"      // NEW: Shared enum definitions
 #include "HallSensorControl.h"      // NEW: Hall sensor control
-#include "GearSensorControl.h"      // NEW: Gear sensor control  
 #include "MatrixDisplay.h"          // NEW: Matrix display functions
 #include "WebInterface.h"           // WebInterface needs HallResponseTypes
 #include "SerialCommands.h"         // NEW: Serial command processing (MUST be last)
@@ -74,13 +72,7 @@ void IRAM_ATTR rpmISR() {
 #define PIN_RPM_INPUT      14
 #define PIN_MPH_INPUT      16
 
-// I2C configuration
-#define I2C_SDA_PIN 21
-#define I2C_SCL_PIN 45
-#define PCF8575_ADDRESS 0x20
-#define PCF8575_INTERRUPT_PIN 3
-
-// Global state for matrix display
+// Global state for matrix display (true when CAN gear is valid)
 bool pcf8575Connected = false;
 bool manualModeActive = false;  // NEW: Manual mode status for matrix
 
@@ -98,7 +90,6 @@ WebInterface webInterface(&server);
 // NEW: Modular components - MOVED AFTER INCLUDES
 MatrixDisplay matrixDisplay;
 HallSensorControl hallSensor(PIN_HALL_SENSOR);
-GearSensorControl gearSensor(PCF8575_ADDRESS, PCF8575_INTERRUPT_PIN);
 SerialCommands serialCommands;
 
 // NEW: Manual mode controller
@@ -186,7 +177,7 @@ void startDownshiftWithClutchCheck(int durationMs) {
 void engageClutch() { clutchServo.write(clutchEngagePos); }
 void releaseClutch() { clutchServo.write(clutchIdlePos); }
 void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter); }
-String getGearStatusForWeb() { return gearSensor.getStatusForWeb(); }
+String getGearStatusForWeb() { return mainCan.getGearName(); }
 String getHallCurveTypeName() { return hallSensor.getCurveTypeName(); }
 void saveHallCurveConfig() { /* Handled by HallSensorControl */ }
 
@@ -267,14 +258,6 @@ void SerialCommands::processCommands() {
         else if (command.equalsIgnoreCase("manual off")) {
             manualMode.setManualMode(false);
         }
-        // Gear sensor diagnostic command
-        else if (command.equalsIgnoreCase("gearsensor") || command.equalsIgnoreCase("gear")) {
-            if (gearSensor) {
-                gearSensor->printStatus();
-            } else {
-                Serial.println("Gear sensor not initialized");
-            }
-        }
         // Shift logger commands
         else if (command.equalsIgnoreCase("dump") || command.equalsIgnoreCase("logs")) {
             if (shiftLogger) {
@@ -338,24 +321,11 @@ void SerialCommands::printHelp() {
     Serial.println("  tachotest  - Run tachometer test sweep animation");
     Serial.println("  tachoinfo  - Show RPM thresholds for bar graph");
     Serial.println("  rpminfo    - Show current RPM range information");
-    Serial.println("=== GEAR SENSOR ===");
-    Serial.println("  gearsensor - Show gear sensor diagnostic information");
     Serial.println("=== GENERAL ===");
     Serial.println("  help       - Show this help");
     Serial.println("NOTE: Hall sensor curves can now be configured via web interface!");
 }
 
-// Gear change callback for sensor
-void onGearChanged(int newGear, int oldGear) {
-    currentGear = newGear;
-    gearbox.setCurrentGear(newGear);
-    shiftLogger.onGearChanged(newGear, oldGear);
-}
-
-// Update pcf8575Connected status
-void updateSensorConnectionStatus() {
-    pcf8575Connected = gearSensor.isConnected();
-}
 
 void setup() {
     Serial.begin(115200);
@@ -389,16 +359,12 @@ void setup() {
 
     gearbox.begin(&shiftLogger, &speedSensor, &rpmSensor, &clutchServo);
 
-    gearSensor.begin(onGearChanged);
-    currentGear = gearSensor.getCurrentGear();
-    gearbox.setCurrentGear(currentGear);
-
     hallSensor.begin(&clutchServo);
     hallSensor.setConfiguration(clutchIdlePos, clutchEngagePos);
 
     matrixDisplay.begin(&wifiEnabled, &pcf8575Connected, &manualModeActive);
 
-    serialCommands.begin(&hallSensor, &gearbox, &shiftLogger, &gearSensor);
+    serialCommands.begin(&hallSensor, &gearbox, &shiftLogger);
 
     manualMode.begin(&hallSensor, &clutchServo);
     
@@ -430,7 +396,7 @@ void setup() {
     Serial.println("Current Gear: " + gearbox.getCurrentGearName());
     Serial.println("Hall Curve: " + hallSensor.getCurveTypeName() + 
                    " (strength: " + String(hallSensor.getCurveStrength(), 2) + ")");
-    Serial.println("Gear Sensor: " + String(pcf8575Connected ? "CONNECTED" : "DISCONNECTED"));
+    Serial.println("CAN Gear: " + mainCan.getGearName());
     Serial.println("Manual Mode: " + String(manualMode.isManualModeEnabled() ? "ENABLED" : "DISABLED"));
     Serial.println("Type 'help' for available commands");
     Serial.println("Manual Mode Toggle: Hold both neutral buttons for 1 second");
@@ -452,8 +418,6 @@ void loop() {
         }
         
         // Update modular components
-        gearSensor.update();
-        updateSensorConnectionStatus(); // Update connection status for matrix display
         hallSensor.updateClutchControl(gearbox.isIdle());
         
         // Update other systems
@@ -474,18 +438,27 @@ void loop() {
         checkWiFiToggleSwitch();
         if (wifiEnabled) { server.handleClient(); }
         
-        // Update sensor connection status for display
-        gearSensor.update();
-        updateSensorConnectionStatus();
     }
     
     // Poll CAN for incoming messages (ACK, gear pos)
     mainCan.poll();
 
+    // Update state machine gear from CAN (rear node is authoritative for gear position)
+    if (mainCan.isGearValid()) {
+        int canGear = (int)mainCan.getGear();
+        if (canGear != currentGear) {
+            int prev = currentGear;
+            currentGear = canGear;
+            gearbox.setCurrentGear(currentGear);
+            shiftLogger.onGearChanged(currentGear, prev);
+        }
+    }
+
     // Always update these systems (independent of mode)
     // Update manual mode status for matrix display
     manualModeActive = manualMode.isManualModeEnabled();
-    matrixDisplay.updateWithTachometer(gearbox.getCurrentGearName(), rpmSensor.getRpm());
+    pcf8575Connected = mainCan.isGearValid();
+    matrixDisplay.updateWithTachometer(mainCan.getGearName(), rpmSensor.getRpm());
     speedSensor.update();
     rpmSensor.update();
 
@@ -508,8 +481,6 @@ void setupPins() {
     Serial.println("=== PIN ASSIGNMENTS ===");
     Serial.println("Hall Sensor: Pin " + String(PIN_HALL_SENSOR));
     Serial.println("Clutch Servo: Pin " + String(PIN_CLUTCH_SERVO));
-    Serial.println("I2C SDA: Pin " + String(I2C_SDA_PIN));
-    Serial.println("I2C SCL: Pin " + String(I2C_SCL_PIN));
     Serial.println("========================");
 
     // Configure input pins
@@ -524,9 +495,6 @@ void setupPins() {
     pinMode(PIN_CLUTCH_POSITION, INPUT);
 
     clutchServo.attach(PIN_CLUTCH_SERVO);
-
-    // Initialize I2C
-    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
     Serial.println("CAN TX: GPIO" + String(CAN_TX_PIN) + "  RX: GPIO" + String(CAN_RX_PIN));
 }
