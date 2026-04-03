@@ -16,12 +16,12 @@
 #include <Adafruit_ST7789.h>
 #include "can_ids.h"
 
-#define DISP_BL_PIN     15
-#define DISP_MOSI       13
-#define DISP_SCLK       14
-#define DISP_RST        18
-#define DISP_DC         17
-#define DISP_CS         16
+#define DISP_BL_PIN     9   //blk
+#define DISP_MOSI       13  //sda
+#define DISP_SCLK       14  //scl
+#define DISP_RST        12  //res
+#define DISP_DC         11
+#define DISP_CS         10
 
 // Colour definitions (RGB565)
 #define COL_BLACK       0x0000

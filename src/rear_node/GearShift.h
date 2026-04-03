@@ -20,9 +20,9 @@
 #include <Arduino.h>
 #include "can_ids.h"
 
-#define PIN_RELAY_UPSHIFT   21
-#define PIN_RELAY_DOWNSHIFT 47
-#define PIN_RELAY_IGN_CUT   48
+#define PIN_RELAY_UPSHIFT   40
+#define PIN_RELAY_DOWNSHIFT 41
+#define PIN_RELAY_IGN_CUT   42
 
 #define SHIFT_SETTLE_MS     100     // wait after relays release before reading gear
 

@@ -37,13 +37,13 @@
 // PIN CONFIGURATION
 // =============================================================================
 
-#define PIN_GEAR_NEUTRAL    6
-#define PIN_GEAR_1          7
-#define PIN_GEAR_2          8
-#define PIN_GEAR_3          9
-#define PIN_GEAR_4          10
-#define PIN_GEAR_5          11
-#define PIN_GEAR_6          12
+#define PIN_GEAR_NEUTRAL    7
+#define PIN_GEAR_1          6
+#define PIN_GEAR_2          15
+#define PIN_GEAR_3          16
+#define PIN_GEAR_4          17
+#define PIN_GEAR_5          18
+#define PIN_GEAR_6          8
 
 // =============================================================================
 // NEOPIXEL
