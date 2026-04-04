@@ -69,7 +69,7 @@ void IRAM_ATTR rpmISR() {
 #define CYCLE_TIME 1000
 
 // Speed and RPM input pins
-#define PIN_RPM_INPUT      14
+#define PIN_RPM_INPUT      7
 #define PIN_MPH_INPUT      16
 
 // Global state for matrix display (true when CAN gear is valid)

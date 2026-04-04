@@ -5,7 +5,7 @@
 #include <Adafruit_NeoMatrix.h>
 
 // Matrix Configuration
-#define MATRIX_PIN 38
+#define MATRIX_PIN 16
 #define MATRIX_WIDTH 8
 #define MATRIX_HEIGHT 8
 
