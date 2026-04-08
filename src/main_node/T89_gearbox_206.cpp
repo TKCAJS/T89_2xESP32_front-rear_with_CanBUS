@@ -1,3 +1,4 @@
+// 207    Removed pcf8575 gear position and relay actuation, replaced with rear node with comms by CANBUS
 // 206    Solved multiple timing issues - still work in progress
 // 205_1  altered downshift to use servo data instead of delays
 // T89_gearbox_205.ino - MODULAR REFACTOR: Separated components into dedicated header files
@@ -12,7 +13,7 @@
 #include <Arduino.h>
 
 // Version tracking
-#define SOFTWARE_VERSION 206.0
+#define SOFTWARE_VERSION 207.0
 
 // Pin definitions for ESP32-S3 - FIXED PIN ASSIGNMENTS
 #define PIN_NEUTRAL_DOWN    10   // Switch 1 - Neutral Down
@@ -102,7 +103,7 @@ int neutralUpMs = 40;
 int shiftDownMs = 150;
 int shiftUpMs = 150;
 int clutchIdlePos = 0;
-int clutchEngagePos = 180;
+int clutchEngagePos = 185;
 
 // WiFi state
 bool wifiEnabled = false;
