@@ -6,7 +6,6 @@
 
 // Forward declarations
 class ShiftLogger;
-class Speed;
 class RPM;
 
 // State definitions
@@ -99,7 +98,6 @@ private:
     
     // Hardware references
     ShiftLogger* shiftLogger;
-    Speed* speedSensor;
     RPM* rpmSensor;
     SimpleServo* clutchServo;
     
@@ -134,14 +132,14 @@ public:
           stateStartTime(0), lastStateChange(0),
           neutralDownMs(40), neutralUpMs(40), shiftDownMs(150), shiftUpMs(150),
           clutchIdlePos(0), clutchEngagePos(180),
-          shiftLogger(nullptr), speedSensor(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
+          shiftLogger(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
           pinHallSensor(hallPin),
           relayActive(false), relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
           clutchInterlockEnabled(true), clutchPulled(false),
           currentGear(0) {}
     
     // Initialization
-    void begin(ShiftLogger* logger, Speed* speed, RPM* rpm, SimpleServo* servo);
+    void begin(ShiftLogger* logger, RPM* rpm, SimpleServo* servo);
     void setConfiguration(int nDownMs, int nUpMs, int sDownMs, int sUpMs, 
                          int cIdlePos, int cEngagePos);
     
@@ -202,7 +200,7 @@ private:
     void exitShiftingState();
     
     // Shift control (sends CAN command + tracks completion timing)
-    void activateShift(bool isUpshift, int duration, uint16_t ignCutMs = 0);
+    void activateShift(bool isUpshift, int duration, uint16_t ignCutMs = 0, uint8_t targetGear = 0xFF);
     void deactivateShift();
     void engageClutch();
     void releaseClutch();

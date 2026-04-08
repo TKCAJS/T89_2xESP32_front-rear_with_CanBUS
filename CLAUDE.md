@@ -49,25 +49,22 @@ GPIO 45 was originally assigned to the ign cut relay and was moved to GPIO 42 fo
 
 | GPIO | Function |
 |------|----------|
-| 3    | PCF8575 interrupt — to be removed |
 | 5    | Hall sensor (analog) |
 | 6    | Clutch servo |
+| 7    | RPM input |
 | 9    | WiFi toggle switch |
-| 10   | Switch: Neutral Down |
-| 11   | Switch: Neutral Up |
+| 10   | Switch: Manual mode toggle (long press) |
+| 11   | Switch: Neutral (auto direction by gear) |
 | 12   | Switch: Shift Down |
 | 13   | Switch: Shift Up |
-| 14   | RPM input |
 | 15   | Clutch position (analog) |
-| 16   | Speed (MPH) input |
+| 16   | NeoMatrix (8x8) |
 | 17   | CAN TX (SN65HVD230) |
 | 18   | CAN RX (SN65HVD230) |
-| 21   | I2C SDA — to be removed (PCF8575 matrix display) |
-| 45   | I2C SCL — to be removed (PCF8575 matrix display) |
-| 48   | NeoPixel |
+| 48   | NeoPixel (single) |
 
-PCF8575 matrix display and gear sensor control will be removed from the main node.
-Gear position will be handled entirely by the rear node via CAN.
+Gear position received from rear node via CAN.
+Speed sensor will be on a future sensor node via CAN.
 Web server on port 80 (AP SSID: T89_Gearbox).
 
 ---

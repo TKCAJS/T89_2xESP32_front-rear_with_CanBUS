@@ -56,7 +56,7 @@ public:
     }
 
     // Send upshift command. ignCutMs=0 for neutral moves, IGN_CUT_DEFAULT_MS for gear shifts.
-    void sendShiftUp(uint16_t shiftMs, uint16_t ignCutMs = IGN_CUT_DEFAULT_MS) {
+    void sendShiftUp(uint16_t shiftMs, uint16_t ignCutMs = IGN_CUT_DEFAULT_MS, uint8_t targetGear = GEAR_UNKNOWN) {
         if (!initialized) return;
         twai_message_t msg = {};
         msg.extd             = 1;
@@ -68,14 +68,14 @@ public:
         msg.data[3] = (shiftMs >> 8) & 0xFF;
         msg.data[4] = ignCutMs & 0xFF;
         msg.data[5] = (ignCutMs >> 8) & 0xFF;
-        msg.data[6] = 0;
+        msg.data[6] = targetGear;
         msg.data[7] = 0;
         if (twai_transmit(&msg, pdMS_TO_TICKS(5)) != ESP_OK) {
             Serial.println("CAN: sendShiftUp TX failed");
         }
     }
 
-    void sendShiftDown(uint16_t shiftMs) {
+    void sendShiftDown(uint16_t shiftMs, uint8_t targetGear = GEAR_UNKNOWN) {
         if (!initialized) return;
         twai_message_t msg = {};
         msg.extd             = 1;
@@ -87,7 +87,7 @@ public:
         msg.data[3] = (shiftMs >> 8) & 0xFF;
         msg.data[4] = 0;
         msg.data[5] = 0;
-        msg.data[6] = 0;
+        msg.data[6] = targetGear;
         msg.data[7] = 0;
         if (twai_transmit(&msg, pdMS_TO_TICKS(5)) != ESP_OK) {
             Serial.println("CAN: sendShiftDown TX failed");

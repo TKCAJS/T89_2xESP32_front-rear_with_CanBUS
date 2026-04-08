@@ -9,8 +9,8 @@
 // Manual mode shift pulse duration sent to rear node
 #define MANUAL_SHIFT_DURATION_MS 100
 
-extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs);
-extern void canSendShiftDown(uint16_t shiftMs);
+extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear);
+extern void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear);
 
 class ManualMode {
 private:
@@ -19,15 +19,15 @@ private:
     SimpleServo* clutchServo;
     
     // Pin definitions
-    int pinNeutralDown;
-    int pinNeutralUp;
+    int pinManualToggle;
+    int pinNeutral;
     int pinShiftDown;
     int pinShiftUp;
 
     // State variables
     bool manualModeEnabled;
-    bool lastNeutralDownState;
-    bool lastNeutralUpState;
+    bool lastManualToggleState;
+    bool lastNeutralState;
     bool lastShiftDownState;
     bool lastShiftUpState;
     
@@ -48,15 +48,15 @@ private:
 public:
     ManualMode(int nDownPin, int nUpPin, int sDownPin, int sUpPin)
         : hallSensor(nullptr), clutchServo(nullptr),
-          pinNeutralDown(nDownPin), pinNeutralUp(nUpPin),
+          pinManualToggle(nDownPin), pinNeutral(nUpPin),
           pinShiftDown(sDownPin), pinShiftUp(sUpPin),
           manualModeEnabled(false), relayActive(false), relayStartTime(0),
           activeShiftIsUp(false), relayDuration(0), lastToggleCheck(0),
           lastStatusUpdate(0) {
         
         // Initialize button states
-        lastNeutralDownState = HIGH;
-        lastNeutralUpState = HIGH;
+        lastManualToggleState = HIGH;
+        lastNeutralState = HIGH;
         lastShiftDownState = HIGH;
         lastShiftUpState = HIGH;
     }
@@ -125,7 +125,7 @@ public:
     
 private:
     void checkModeToggle() {
-        bool togglePressed = (digitalRead(pinNeutralDown) == LOW);
+        bool togglePressed = (digitalRead(pinManualToggle) == LOW);
 
         if (togglePressed) {
             if (lastToggleCheck == 0) {
@@ -134,7 +134,7 @@ private:
             } else if (millis() - lastToggleCheck >= TOGGLE_HOLD_TIME) {
                 setManualMode(!manualModeEnabled);
                 lastToggleCheck = 0;
-                while (digitalRead(pinNeutralDown) == LOW) {
+                while (digitalRead(pinManualToggle) == LOW) {
                     delay(10);
                     yield();
                 }
@@ -178,7 +178,7 @@ private:
         // Shift Down button
         if (shiftDownState && !lastShiftDownState) {
             if (!relayActive) {
-                canSendShiftDown(MANUAL_SHIFT_DURATION_MS);
+                canSendShiftDown(MANUAL_SHIFT_DURATION_MS, 0xFF);
                 relayActive     = true;
                 relayStartTime  = millis();
                 activeShiftIsUp = false;
@@ -190,7 +190,7 @@ private:
         // Shift Up button
         if (shiftUpState && !lastShiftUpState) {
             if (!relayActive) {
-                canSendShiftUp(MANUAL_SHIFT_DURATION_MS, IGN_CUT_DEFAULT_MS);
+                canSendShiftUp(MANUAL_SHIFT_DURATION_MS, IGN_CUT_DEFAULT_MS, 0xFF);
                 relayActive     = true;
                 relayStartTime  = millis();
                 activeShiftIsUp = true;

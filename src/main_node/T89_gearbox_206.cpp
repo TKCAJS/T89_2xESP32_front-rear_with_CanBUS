@@ -6,7 +6,7 @@
 //        - Moved matrix display functions to MatrixDisplay.h
 //        - Moved hall sensor control to HallSensorControl.h
 //        - Moved gear sensor functions to GearSensorControl.h
-//        - Moved serial commands to SerialCommands.h
+//        - Moved serial commands to  SerialCommands.h
 //        - Significantly reduced main file complexity while maintaining all functionality
 // 205.1  ADDED: Manual Mode for direct racing control
 
@@ -16,8 +16,8 @@
 #define SOFTWARE_VERSION 207.0
 
 // Pin definitions for ESP32-S3 - FIXED PIN ASSIGNMENTS
-#define PIN_NEUTRAL_DOWN    10   // Switch 1 - Neutral Down
-#define PIN_NEUTRAL_UP      11   // Switch 2 - Neutral Up  
+#define PIN_MANUAL_TOGGLE   10   // Switch 1 - Long press to toggle manual mode
+#define PIN_NEUTRAL         11   // Switch 2 - Neutral (auto direction by gear)
 #define PIN_SHIFT_DOWN      12   // Switch 3 - Shift Down
 #define PIN_SHIFT_UP        13   // Switch 4 - Shift Up
 #define PIN_HALL_SENSOR     5    // Hall sensor analog input
@@ -36,7 +36,6 @@
 #include <Adafruit_NeoPixel.h>
 
 // Project includes - MODULAR COMPONENTS (Order matters for dependencies)
-#include "Speed.h"
 #include "RPM.h"
 #include "ShiftLogger.h"
 #include "GearboxStateMachine.h"
@@ -49,15 +48,10 @@
 #include "ManualMode.h"             // NEW: Manual mode control
 #include "MainCan.h"                // CAN bus interface to rear node
 
-// Global variables for Speed and RPM sensors
-volatile unsigned long g_speedPulseCount = 0;
+// Global variable for RPM sensor
 volatile unsigned long g_rpmPulseCount = 0;
 
-// ISR functions for Speed and RPM sensors
-void IRAM_ATTR speedISR() {
-    g_speedPulseCount++;
-}
-
+// ISR for RPM sensor
 void IRAM_ATTR rpmISR() {
     g_rpmPulseCount++;
 }
@@ -69,16 +63,14 @@ void IRAM_ATTR rpmISR() {
 #define FLASH_GAP 150
 #define CYCLE_TIME 1000
 
-// Speed and RPM input pins
+// RPM input pin
 #define PIN_RPM_INPUT      7
-#define PIN_MPH_INPUT      16
 
 // Global state for matrix display (true when CAN gear is valid)
 bool pcf8575Connected = false;
 bool manualModeActive = false;  // NEW: Manual mode status for matrix
 
 // Create controller instances - MOVED AFTER INCLUDES TO ENSURE COMPLETE TYPES
-Speed speedSensor(PIN_MPH_INPUT);
 RPM rpmSensor(PIN_RPM_INPUT, 12.0, 0.3);
 ShiftLogger shiftLogger;
 GearboxStateMachine gearbox(PIN_HALL_SENSOR);
@@ -94,7 +86,7 @@ HallSensorControl hallSensor(PIN_HALL_SENSOR);
 SerialCommands serialCommands;
 
 // NEW: Manual mode controller
-ManualMode manualMode(PIN_NEUTRAL_DOWN, PIN_NEUTRAL_UP,
+ManualMode manualMode(PIN_MANUAL_TOGGLE, PIN_NEUTRAL,
                      PIN_SHIFT_DOWN, PIN_SHIFT_UP);
 
 // Configuration variables
@@ -130,8 +122,8 @@ int colg = 255;
 int colb = 5;
 
 // Button state tracking
-bool lastNeutralDownState = HIGH;
-bool lastNeutralUpState = HIGH;
+bool lastManualToggleState = HIGH;
+bool lastNeutralState = HIGH;
 bool lastShiftDownState = HIGH;
 bool lastShiftUpState = HIGH;
 
@@ -164,8 +156,8 @@ void setupWeb();
 void updateCompatibilityVariables();
 
 // CAN send helpers — called by GearboxStateMachine and ManualMode via extern
-void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs) { mainCan.sendShiftUp(shiftMs, ignCutMs); }
-void canSendShiftDown(uint16_t shiftMs)                  { mainCan.sendShiftDown(shiftMs); }
+void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear) { mainCan.sendShiftUp(shiftMs, ignCutMs, targetGear); }
+void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear)                  { mainCan.sendShiftDown(shiftMs, targetGear); }
 
 // Legacy functions for WebInterface compatibility
 bool isShiftAllowed() { return gearbox.canAcceptShiftCommand(); }
@@ -354,11 +346,9 @@ void setup() {
     rpmSensor.begin();
 
 
-    speedSensor.begin();
-
     shiftLogger.begin();
 
-    gearbox.begin(&shiftLogger, &speedSensor, &rpmSensor, &clutchServo);
+    gearbox.begin(&shiftLogger, &rpmSensor, &clutchServo);
 
     hallSensor.begin(&clutchServo);
     hallSensor.setConfiguration(clutchIdlePos, clutchEngagePos);
@@ -460,7 +450,6 @@ void loop() {
     manualModeActive = manualMode.isManualModeEnabled();
     pcf8575Connected = mainCan.isGearValid();
     matrixDisplay.updateWithTachometer(mainCan.getGearName(), rpmSensor.getRpm());
-    speedSensor.update();
     rpmSensor.update();
 
     // LED heartbeat effect
@@ -485,8 +474,8 @@ void setupPins() {
     Serial.println("========================");
 
     // Configure input pins
-    pinMode(PIN_NEUTRAL_DOWN, INPUT_PULLUP);
-    pinMode(PIN_NEUTRAL_UP, INPUT_PULLUP);
+    pinMode(PIN_MANUAL_TOGGLE, INPUT_PULLUP);
+    pinMode(PIN_NEUTRAL, INPUT_PULLUP);
     pinMode(PIN_SHIFT_DOWN, INPUT_PULLUP);
     pinMode(PIN_SHIFT_UP, INPUT_PULLUP);
     pinMode(PIN_WIFI_SWITCH, INPUT_PULLUP);
@@ -577,12 +566,12 @@ void checkServoPosition() {
 }
 
 void processInputs() {
-    bool neutralBtnState = digitalRead(PIN_NEUTRAL_UP);   // single neutral button
+    bool neutralBtnState = digitalRead(PIN_NEUTRAL);
     bool shiftDownState  = digitalRead(PIN_SHIFT_DOWN);
     bool shiftUpState    = digitalRead(PIN_SHIFT_UP);
 
     // Neutral button — direction decided by current gear
-    if (neutralBtnState == LOW && lastNeutralUpState == HIGH) {
+    if (neutralBtnState == LOW && lastNeutralState == HIGH) {
         if (currentGear == 1) {
             gearbox.processEvent(EVENT_NEUTRAL_UP_PRESSED);
         } else if (currentGear == 2) {
@@ -600,7 +589,7 @@ void processInputs() {
         gearbox.processEvent(EVENT_SHIFT_UP_PRESSED);
     }
 
-    lastNeutralUpState   = neutralBtnState;
+    lastNeutralState     = neutralBtnState;
     lastShiftDownState   = shiftDownState;
     lastShiftUpState     = shiftUpState;
 }

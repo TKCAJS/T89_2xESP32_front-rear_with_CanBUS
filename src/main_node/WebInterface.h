@@ -136,7 +136,6 @@ extern RelayState downshiftRelay;
 extern RelayState upshiftRelay;
 extern bool autoDownshift;
 extern unsigned long clutchStartTime;
-extern Speed speedSensor;
 extern RPM rpmSensor;
 extern SimpleServo clutchServo;
 extern ShiftLogger shiftLogger;
@@ -150,8 +149,8 @@ extern bool isShiftAllowed();
 extern bool canDownshift();
 extern void setShiftInProgress(bool inProgress);
 extern void startDownshiftWithClutchCheck(int durationMs);
-extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs);
-extern void canSendShiftDown(uint16_t shiftMs);
+extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear = 0xFF);
+extern void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear = 0xFF);
 extern void engageClutch();
 extern void displayShiftLetter(char letter);
 extern void saveConfig();
@@ -324,7 +323,7 @@ void WebInterface::handleSensorData() {
     json += "\"servoPosition\":" + String(servoPosition) + ",";
     
     json += "\"currentRpm\":" + String(rpmSensor.getRpm(), 1) + ",";
-    json += "\"currentMph\":" + String(speedSensor.getMph(), 1) + ",";
+    json += "\"currentMph\":0,";
     json += "\"shiftTimingActive\":" + String(shiftLogger.isTimingActive() ? "true" : "false") + ",";
     json += "\"hallCurveName\":\"" + getHallCurveTypeName() + "\",";
     json += "\"hallCurveStrength\":" + String(hallCurveStrength, 1);

@@ -7,8 +7,8 @@
 
 // External functions implemented in T89_gearbox_206.cpp
 extern void displayShiftLetter(char letter);
-extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs);
-extern void canSendShiftDown(uint16_t shiftMs);
+extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear = GEAR_UNKNOWN);
+extern void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear = GEAR_UNKNOWN);
 
 // Global state machine instance for condition functions
 GearboxStateMachine* g_stateMachine = nullptr;
@@ -98,9 +98,8 @@ const int GearboxStateMachine::getTransitionCount() {
     return stateTransitionCount;
 }
 
-void GearboxStateMachine::begin(ShiftLogger* logger, Speed* speed, RPM* rpm, SimpleServo* servo) {
+void GearboxStateMachine::begin(ShiftLogger* logger, RPM* rpm, SimpleServo* servo) {
     shiftLogger = logger;
-    speedSensor = speed;
     rpmSensor = rpm;
     clutchServo = servo;
     
@@ -321,7 +320,7 @@ void GearboxStateMachine::enterShiftingState() {
                     toGear = 1;
                 }
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateShift(false, (fromGear == 0) ? shiftDownMs : neutralDownMs);
+                activateShift(false, (fromGear == 0) ? shiftDownMs : neutralDownMs, 0, (uint8_t)toGear);
                 displayShiftLetter('D');
                 break;
 
@@ -337,7 +336,7 @@ void GearboxStateMachine::enterShiftingState() {
                     toGear = 2;
                 }
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateShift(true, (fromGear == 0) ? shiftUpMs : neutralUpMs, 0);
+                activateShift(true, (fromGear == 0) ? shiftUpMs : neutralUpMs, 0, (uint8_t)toGear);
                 displayShiftLetter('U');
                 break;
 
@@ -347,7 +346,7 @@ void GearboxStateMachine::enterShiftingState() {
                 toGear = fromGear + 1;
                 shiftLogger->startIgnitionCut();
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateShift(true, shiftUpMs, IGN_CUT_DEFAULT_MS);
+                activateShift(true, shiftUpMs, IGN_CUT_DEFAULT_MS, (uint8_t)toGear);
                 displayShiftLetter('U');
                 break;
 
@@ -368,7 +367,7 @@ void GearboxStateMachine::enterShiftingState() {
             case DOWNSHIFT_SHIFTING:
                 // Triggered when clutch is pulled - send CAN command immediately
                 Serial.println("RACING DOWNSHIFT: Clutch pulled detected - sending CAN shift command!");
-                activateShift(false, shiftDownMs);
+                activateShift(false, shiftDownMs, 0, (uint8_t)(currentGear - 1));
                 break;
                 
             default:
@@ -398,9 +397,14 @@ void GearboxStateMachine::updateIdleState() {
 void GearboxStateMachine::updateShiftingState() {
     switch (currentState) {
         case DOWNSHIFT_CLUTCH_ENGAGING:
-            // RACING: No time-based transitions - only voltage-based clutch detection
-            // The clutch pull will be detected by main loop and trigger EVENT_CLUTCH_PULLED
-            // No action needed here - just wait for voltage-based clutch detection
+            // Wait for clutch pull detection. If none within timeout, fire relay anyway
+            // (handles bench testing without clutch, and covers slow/missed clutch pulls)
+            if (clutchPulled) {
+                processEvent(EVENT_CLUTCH_PULLED);
+            } else if (getStateElapsedTime() >= CLUTCH_WAIT_TIMEOUT_MS) {
+                Serial.println("Downshift: no clutch detected, firing relay directly");
+                transitionToState(DOWNSHIFT_SHIFTING);
+            }
             break;
             
         case DOWNSHIFT_CLUTCH_ENGAGED:
@@ -449,11 +453,11 @@ void GearboxStateMachine::exitShiftingState() {
     Serial.println("Exiting shift state: " + getStateName(currentState));
 }
 
-void GearboxStateMachine::activateShift(bool isUpshift, int duration, uint16_t ignCutMs) {
+void GearboxStateMachine::activateShift(bool isUpshift, int duration, uint16_t ignCutMs, uint8_t targetGear) {
     if (isUpshift) {
-        canSendShiftUp((uint16_t)duration, ignCutMs);
+        canSendShiftUp((uint16_t)duration, ignCutMs, targetGear);
     } else {
-        canSendShiftDown((uint16_t)duration);
+        canSendShiftDown((uint16_t)duration, targetGear);
     }
     relayActive     = true;
     relayStartTime  = millis();
@@ -490,7 +494,9 @@ void GearboxStateMachine::releaseClutch() {
 }
 
 void GearboxStateMachine::checkTimeouts() {
-    // Check for shift timeout in any shifting state
+    // DOWNSHIFT_CLUTCH_ENGAGING has its own timeout logic in updateShiftingState
+    if (currentState == DOWNSHIFT_CLUTCH_ENGAGING) return;
+
     if (isShiftingState(currentState) && getStateElapsedTime() >= STATE_SHIFT_TIMEOUT_MS) {
         Serial.println("Shift timeout detected");
         transitionToState(ERROR_SHIFT_TIMEOUT);

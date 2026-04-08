@@ -88,15 +88,18 @@ void canReceivePoll() {
 
         if (msg.identifier == CAN_REAR_CMD_SHIFT_UP || msg.identifier == CAN_REAR_CMD_SHIFT_DN) {
             // Payload (bytes 2-7):
-            //   [2-3] shift_ms   uint16_t LE
-            //   [4-5] ign_cut_ms uint16_t LE
+            //   [2-3] shift_ms    uint16_t LE
+            //   [4-5] ign_cut_ms  uint16_t LE
+            //   [6]   target_gear uint8_t
             uint16_t shift_ms   = (uint16_t)msg.data[2] | ((uint16_t)msg.data[3] << 8);
             uint16_t ign_cut_ms = (uint16_t)msg.data[4] | ((uint16_t)msg.data[5] << 8);
+            uint8_t  target     = msg.data[6];
             uint8_t  dir        = (msg.identifier == CAN_REAR_CMD_SHIFT_UP) ? SHIFT_UP : SHIFT_DOWN;
 
-            Serial.printf("[CAN] Shift %s  shift_ms=%u  ign_cut_ms=%u\n",
-                (dir == SHIFT_UP) ? "UP" : "DOWN", shift_ms, ign_cut_ms);
+            Serial.printf("[CAN] Shift %s  shift_ms=%u  ign_cut_ms=%u  target=%u\n",
+                (dir == SHIFT_UP) ? "UP" : "DOWN", shift_ms, ign_cut_ms, target);
 
+            g_display.setTargetGear(target);
             g_display.setLastShift((ShiftDirection)dir);
             gearShiftRequest(dir, shift_ms, ign_cut_ms, g_currentGear);
         }

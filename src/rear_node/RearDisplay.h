@@ -14,6 +14,8 @@
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
+#include <Fonts/FreeSans12pt7b.h>
+#include <Fonts/FreeSans24pt7b.h>
 #include "can_ids.h"
 
 #define DISP_BL_PIN     9   //blk
@@ -50,7 +52,7 @@ class RearDisplay {
 public:
     RearDisplay() :
         _tft(DISP_CS, DISP_DC, DISP_RST),
-        _gear(GEAR_UNKNOWN), _canHealth(CAN_HEALTH_FAULT),
+        _gear(GEAR_UNKNOWN), _targetGear(GEAR_UNKNOWN), _canHealth(CAN_HEALTH_FAULT),
         _lastShift(SHIFT_NONE), _shiftAge(0),
         _nodeStatus(NODE_STATUS_OK), _needsFullRedraw(true),
         _gearDirty(true), _canDirty(true),
@@ -75,7 +77,18 @@ public:
 
     // -------------------------------------------------------------------------
     void setGear(uint8_t gear) {
-        if (gear != _gear) { _gear = gear; _gearDirty = true; }
+        if (gear != _gear) {
+            _gear = gear;
+            _gearDirty = true;
+            // Clear target once the actual gear settles
+            if (gear != GEAR_BETWEEN && gear != GEAR_UNKNOWN) {
+                _targetGear = GEAR_UNKNOWN;
+            }
+        }
+    }
+
+    void setTargetGear(uint8_t gear) {
+        if (gear != _targetGear) { _targetGear = gear; _gearDirty = true; }
     }
 
     void setCanHealth(CanHealth health) {
@@ -119,6 +132,7 @@ private:
     Adafruit_ST7789 _tft;
 
     uint8_t        _gear;
+    uint8_t        _targetGear;
     CanHealth      _canHealth;
     ShiftDirection _lastShift;
     uint32_t       _shiftAge;
@@ -171,6 +185,20 @@ private:
         _tft.print(str);
     }
 
+    // GFX font helper — cx/topY are pixel centre-x and top-of-bounding-box.
+    // Resets to default font after drawing.
+    void drawGFXCentred(const char *str, int cx, int topY, const GFXfont *font, uint16_t colour) {
+        _tft.setFont(font);
+        _tft.setTextColor(colour, COL_BLACK);
+        int16_t x1, y1;
+        uint16_t w, h;
+        _tft.getTextBounds(str, 0, 0, &x1, &y1, &w, &h);
+        _tft.setCursor(cx - (int16_t)w / 2 - x1, topY - y1);
+        _tft.print(str);
+        _tft.setFont(NULL);
+        _tft.setTextSize(1);
+    }
+
     // -------------------------------------------------------------------------
     void drawStaticLayout() {
         _tft.fillRect(0, Y_TITLE, W, 30, COL_DARKGREY);
@@ -190,18 +218,31 @@ private:
     void drawGear() {
         _tft.fillRect(0, Y_GEAR + 16, W, 140 - 16, COL_BLACK);
 
+        // Vertically centre the big glyph in the usable 124px slot (y=46..170)
+        static const int GEAR_AREA_MID = Y_GEAR + 16 + (140 - 16) / 2;  // y=108
+
         if (_gear == GEAR_UNKNOWN) {
-            drawTextCentred("?",         W / 2, Y_GEAR + 45, 7, COL_RED);
-            drawTextCentred("NO SIGNAL", W / 2, Y_GEAR + 115, 1, COL_RED);
+            drawGFXCentred("?", W / 2, GEAR_AREA_MID - 20, &FreeSans24pt7b, COL_RED);
+            drawTextCentred("NO SIGNAL", W / 2, Y_GEAR + 118, 1, COL_RED);
+        } else if (_targetGear == GEAR_NEUTRAL || (_targetGear >= GEAR_1 && _targetGear <= GEAR_6)) {
+            // Shift in progress — show target gear in orange until actual gear confirms
+            if (_targetGear == GEAR_NEUTRAL) {
+                drawGFXCentred("N", W / 2, GEAR_AREA_MID - 20, &FreeSans24pt7b, COL_ORANGE);
+            } else {
+                char buf[2];
+                snprintf(buf, sizeof(buf), "%d", _targetGear);
+                drawGFXCentred(buf, W / 2, GEAR_AREA_MID - 20, &FreeSans24pt7b, COL_ORANGE);
+            }
+            drawTextCentred("SHIFTING", W / 2, Y_GEAR + 118, 1, COL_ORANGE);
         } else if (_gear == GEAR_BETWEEN) {
-            drawTextCentred("---",      W / 2, Y_GEAR + 55, 4, COL_ORANGE);
-            drawTextCentred("SHIFTING", W / 2, Y_GEAR + 115, 1, COL_ORANGE);
+            drawGFXCentred("---", W / 2, GEAR_AREA_MID - 20, &FreeSans24pt7b, COL_ORANGE);
+            drawTextCentred("SHIFTING", W / 2, Y_GEAR + 118, 1, COL_ORANGE);
         } else if (_gear == GEAR_NEUTRAL) {
-            drawTextCentred("N", W / 2, Y_GEAR + 40, 8, COL_GREEN);
+            drawGFXCentred("N", W / 2, GEAR_AREA_MID - 20, &FreeSans24pt7b, COL_GREEN);
         } else {
             char buf[2];
             snprintf(buf, sizeof(buf), "%d", _gear);
-            drawTextCentred(buf, W / 2, Y_GEAR + 40, 8, COL_WHITE);
+            drawGFXCentred(buf, W / 2, GEAR_AREA_MID - 20, &FreeSans24pt7b, COL_WHITE);
         }
     }
 
@@ -209,29 +250,29 @@ private:
     void drawCan() {
         _tft.fillRect(0, Y_CAN + 16, W, 44, COL_BLACK);
 
-        // Line 1: transceiver presence
+        // Line 1: transceiver presence  (top of text at y+18)
         bool xcvrOk = (_canHealth != CAN_HEALTH_NO_XCVR && _canHealth != CAN_HEALTH_FAULT);
         if (xcvrOk) {
-            drawTextCentred("XCVR OK", W / 2, Y_CAN + 16, 2, COL_GREEN);
+            drawGFXCentred("XCVR OK", W / 2, Y_CAN + 18, &FreeSans12pt7b, COL_GREEN);
         } else {
-            drawTextCentred("NO XCVR", W / 2, Y_CAN + 16, 2, COL_RED);
+            drawGFXCentred("NO XCVR", W / 2, Y_CAN + 18, &FreeSans12pt7b, COL_RED);
         }
 
-        // Line 2: bus status
+        // Line 2: bus status  (top of text at y+38)
         switch (_canHealth) {
             case CAN_HEALTH_OK:
-                drawTextCentred("BUS OK",  W / 2, Y_CAN + 36, 2, COL_GREEN);
+                drawGFXCentred("BUS OK",  W / 2, Y_CAN + 38, &FreeSans12pt7b, COL_GREEN);
                 break;
             case CAN_HEALTH_NO_BUS:
-                drawTextCentred("NO BUS",  W / 2, Y_CAN + 36, 2, COL_ORANGE);
+                drawGFXCentred("NO BUS",  W / 2, Y_CAN + 38, &FreeSans12pt7b, COL_ORANGE);
                 break;
             case CAN_HEALTH_BUS_OFF:
-                drawTextCentred("BUS OFF", W / 2, Y_CAN + 36, 2, COL_RED);
+                drawGFXCentred("BUS OFF", W / 2, Y_CAN + 38, &FreeSans12pt7b, COL_RED);
                 break;
             case CAN_HEALTH_NO_XCVR:
             case CAN_HEALTH_FAULT:
             default:
-                drawTextCentred("------",  W / 2, Y_CAN + 36, 2, COL_DARKGREY);
+                drawGFXCentred("------",  W / 2, Y_CAN + 38, &FreeSans12pt7b, COL_DARKGREY);
                 break;
         }
     }
@@ -241,13 +282,13 @@ private:
         _tft.fillRect(0, Y_SHIFT + 16, W, 24, COL_BLACK);
         switch (_lastShift) {
             case SHIFT_UP:
-                drawTextCentred("UP  ^", W / 2, Y_SHIFT + 22, 2, COL_GREEN);
+                drawGFXCentred("UP  ^",  W / 2, Y_SHIFT + 18, &FreeSans12pt7b, COL_GREEN);
                 break;
             case SHIFT_DOWN:
-                drawTextCentred("DOWN v", W / 2, Y_SHIFT + 22, 2, COL_ORANGE);
+                drawGFXCentred("DOWN v", W / 2, Y_SHIFT + 18, &FreeSans12pt7b, COL_ORANGE);
                 break;
             default:
-                drawTextCentred("---", W / 2, Y_SHIFT + 22, 2, COL_LIGHTGREY);
+                drawGFXCentred("---",    W / 2, Y_SHIFT + 18, &FreeSans12pt7b, COL_LIGHTGREY);
                 break;
         }
     }
@@ -256,7 +297,7 @@ private:
     void drawStatus() {
         _tft.fillRect(0, Y_STATUS + 16, W, 34, COL_BLACK);
         if (_nodeStatus == NODE_STATUS_OK) {
-            drawTextCentred("OK", W / 2, Y_STATUS + 22, 2, COL_GREEN);
+            drawGFXCentred("OK", W / 2, Y_STATUS + 18, &FreeSans12pt7b, COL_GREEN);
             return;
         }
         int y = Y_STATUS + 18;
