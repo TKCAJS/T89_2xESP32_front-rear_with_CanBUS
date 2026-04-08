@@ -576,33 +576,32 @@ void checkServoPosition() {
 }
 
 void processInputs() {
-    bool neutralDownState = digitalRead(PIN_NEUTRAL_DOWN);
-    bool neutralUpState = digitalRead(PIN_NEUTRAL_UP);
-    bool shiftDownState = digitalRead(PIN_SHIFT_DOWN);
-    bool shiftUpState = digitalRead(PIN_SHIFT_UP);
-    
-    // Send events to state machine on button press
-    if (neutralDownState == LOW && lastNeutralDownState == HIGH) {
-        gearbox.processEvent(EVENT_NEUTRAL_DOWN_PRESSED);
+    bool neutralBtnState = digitalRead(PIN_NEUTRAL_UP);   // single neutral button
+    bool shiftDownState  = digitalRead(PIN_SHIFT_DOWN);
+    bool shiftUpState    = digitalRead(PIN_SHIFT_UP);
+
+    // Neutral button — direction decided by current gear
+    if (neutralBtnState == LOW && lastNeutralUpState == HIGH) {
+        if (currentGear == 1) {
+            gearbox.processEvent(EVENT_NEUTRAL_UP_PRESSED);
+        } else if (currentGear == 2) {
+            gearbox.processEvent(EVENT_NEUTRAL_DOWN_PRESSED);
+        } else {
+            Serial.println("[NEUTRAL] Rejected — not in gear 1 or 2");
+        }
     }
-    
-    if (neutralUpState == LOW && lastNeutralUpState == HIGH) {
-        gearbox.processEvent(EVENT_NEUTRAL_UP_PRESSED);
-    }
-    
+
     if (shiftDownState == LOW && lastShiftDownState == HIGH) {
         gearbox.processEvent(EVENT_SHIFT_DOWN_PRESSED);
     }
-    
+
     if (shiftUpState == LOW && lastShiftUpState == HIGH) {
         gearbox.processEvent(EVENT_SHIFT_UP_PRESSED);
     }
-    
-    // Update last button states
-    lastNeutralDownState = neutralDownState;
-    lastNeutralUpState = neutralUpState;
-    lastShiftDownState = shiftDownState;
-    lastShiftUpState = shiftUpState;
+
+    lastNeutralUpState   = neutralBtnState;
+    lastShiftDownState   = shiftDownState;
+    lastShiftUpState     = shiftUpState;
 }
 
 void setupWeb() {

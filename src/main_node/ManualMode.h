@@ -125,28 +125,21 @@ public:
     
 private:
     void checkModeToggle() {
-        bool neutralDownPressed = (digitalRead(pinNeutralDown) == LOW);
-        bool neutralUpPressed = (digitalRead(pinNeutralUp) == LOW);
-        
-        // Both neutral buttons pressed simultaneously
-        if (neutralDownPressed && neutralUpPressed) {
+        bool togglePressed = (digitalRead(pinNeutralDown) == LOW);
+
+        if (togglePressed) {
             if (lastToggleCheck == 0) {
-                // Start timing the hold
                 lastToggleCheck = millis();
-                Serial.println("Manual mode toggle: Hold both neutral buttons...");
+                Serial.println("Manual mode toggle: hold for 1 second...");
             } else if (millis() - lastToggleCheck >= TOGGLE_HOLD_TIME) {
-                // Held long enough - toggle mode
                 setManualMode(!manualModeEnabled);
-                lastToggleCheck = 0; // Reset
-                
-                // Wait for buttons to be released to prevent immediate re-toggle
-                while (digitalRead(pinNeutralDown) == LOW || digitalRead(pinNeutralUp) == LOW) {
+                lastToggleCheck = 0;
+                while (digitalRead(pinNeutralDown) == LOW) {
                     delay(10);
                     yield();
                 }
             }
         } else {
-            // Buttons not both pressed - reset timer
             if (lastToggleCheck != 0) {
                 Serial.println("Manual mode toggle cancelled");
                 lastToggleCheck = 0;

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /home/adrian/Documents/T89_2xESP32_front-rear_with_CanBUS diff --stat)",
+      "Bash(git -C /home/adrian/Documents/T89_2xESP32_front-rear_with_CanBUS status)"
+    ]
+  }
+}
