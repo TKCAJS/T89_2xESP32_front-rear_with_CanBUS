@@ -41,6 +41,7 @@ Pins 6-8 and 15-18 form two inline sequential blocks on the connector — intent
 
 ### ESP32-S3 strapping pins to avoid
 GPIO 0, 3, 45, 46 are sampled at reset. Do not use for outputs that may be driven at boot.
+GPIO 9 is tied to the onboard BOOT button via pull-up resistor — avoid for any use.
 GPIO 45 was originally assigned to the ign cut relay and was moved to GPIO 42 for this reason.
 
 ---
@@ -52,7 +53,7 @@ GPIO 45 was originally assigned to the ign cut relay and was moved to GPIO 42 fo
 | 5    | Hall sensor (analog) |
 | 6    | Clutch servo |
 | 7    | RPM input |
-| 9    | WiFi toggle switch |
+| 21   | WiFi toggle switch |
 | 10   | Switch: Manual mode toggle (long press) |
 | 11   | Switch: Neutral (auto direction by gear) |
 | 12   | Switch: Shift Down |

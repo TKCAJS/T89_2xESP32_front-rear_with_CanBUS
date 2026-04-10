@@ -11,6 +11,7 @@
 // 205.1  ADDED: Manual Mode for direct racing control
 
 #include <Arduino.h>
+#include <driver/gpio.h>
 
 // Version tracking
 #define SOFTWARE_VERSION 207.0
@@ -22,7 +23,7 @@
 #define PIN_SHIFT_UP        13   // Switch 4 - Shift Up
 #define PIN_HALL_SENSOR     5    // Hall sensor analog input
 #define PIN_CLUTCH_SERVO    6    // Servo output
-#define PIN_WIFI_SWITCH     9    // WiFi toggle switch input (momentary)
+#define PIN_WIFI_SWITCH     21   // WiFi toggle switch input (momentary)
 #define PIN_CLUTCH_POSITION 15   // Analog voltage input for clutch position monitoring
 
 // Clutch position threshold
@@ -99,9 +100,13 @@ int clutchEngagePos = 185;
 
 // WiFi state
 bool wifiEnabled = false;
-bool lastWifiSwitchState = HIGH;
+volatile bool wifiTogglePending = false;
 unsigned long lastWifiButtonPress = 0;
 #define WIFI_DEBOUNCE_DELAY 300
+
+void IRAM_ATTR wifiSwitchISR() {
+    wifiTogglePending = true;
+}
 
 // Clutch monitoring
 bool clutchPulled = false;
@@ -479,6 +484,9 @@ void setupPins() {
     pinMode(PIN_SHIFT_DOWN, INPUT_PULLUP);
     pinMode(PIN_SHIFT_UP, INPUT_PULLUP);
     pinMode(PIN_WIFI_SWITCH, INPUT_PULLUP);
+    gpio_pulldown_dis((gpio_num_t)PIN_WIFI_SWITCH);
+    gpio_pullup_en((gpio_num_t)PIN_WIFI_SWITCH);
+    attachInterrupt(digitalPinToInterrupt(PIN_WIFI_SWITCH), wifiSwitchISR, FALLING);
 
     // Configure analog inputs
     pinMode(PIN_HALL_SENSOR, INPUT);
@@ -533,17 +541,14 @@ void toggleWiFi() {
 }
 
 void checkWiFiToggleSwitch() {
-    bool currentWifiSwitchState = digitalRead(PIN_WIFI_SWITCH);
+    if (!wifiTogglePending) return;
+    wifiTogglePending = false;
+
     unsigned long currentTime = millis();
-    
-    if (currentWifiSwitchState == LOW && lastWifiSwitchState == HIGH) {
-        if (currentTime - lastWifiButtonPress > WIFI_DEBOUNCE_DELAY) {
-            toggleWiFi();
-            lastWifiButtonPress = currentTime;
-        }
+    if (currentTime - lastWifiButtonPress > WIFI_DEBOUNCE_DELAY) {
+        lastWifiButtonPress = currentTime;
+        toggleWiFi();
     }
-    
-    lastWifiSwitchState = currentWifiSwitchState;
 }
 
 void checkServoPosition() {
