@@ -49,14 +49,6 @@
 #include "ManualMode.h"             // NEW: Manual mode control
 #include "MainCan.h"                // CAN bus interface to rear node
 
-// Global variable for RPM sensor
-volatile unsigned long g_rpmPulseCount = 0;
-
-// ISR for RPM sensor
-void IRAM_ATTR rpmISR() {
-    g_rpmPulseCount++;
-}
-
 // LED and timing configuration
 #define PIN 48
 #define NUM_LEDS 1
@@ -451,11 +443,24 @@ void loop() {
     }
 
     // Always update these systems (independent of mode)
-    // Update manual mode status for matrix display
     manualModeActive = manualMode.isManualModeEnabled();
     pcf8575Connected = mainCan.isGearValid();
     matrixDisplay.updateWithTachometer(mainCan.getGearName(), rpmSensor.getRpm());
     rpmSensor.update();
+
+    // Broadcast RPM on CAN (~20ms cadence, driven by loop rate)
+    static unsigned long lastRpmTx = 0;
+    if (millis() - lastRpmTx >= 20) {
+        mainCan.sendRpm((uint16_t)rpmSensor.getRpm());
+        lastRpmTx = millis();
+    }
+
+    // Broadcast shift mode on CAN (1Hz)
+    static unsigned long lastShiftStatusTx = 0;
+    if (millis() - lastShiftStatusTx >= 1000) {
+        mainCan.sendShiftStatus(manualModeActive);
+        lastShiftStatusTx = millis();
+    }
 
     // LED heartbeat effect
     unsigned long elapsed = millis() % CYCLE_TIME;

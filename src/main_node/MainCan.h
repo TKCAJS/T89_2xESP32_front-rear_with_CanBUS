@@ -94,6 +94,35 @@ public:
         }
     }
 
+    void sendRpm(uint16_t rpm) {
+        if (!initialized) return;
+        twai_message_t msg = {};
+        msg.extd             = 1;
+        msg.identifier       = CAN_MAIN_RPM;
+        msg.data_length_code = 8;
+        msg.data[0] = txSeq++;
+        msg.data[1] = NODE_STATUS_OK;
+        msg.data[2] = rpm & 0xFF;
+        msg.data[3] = (rpm >> 8) & 0xFF;
+        if (twai_transmit(&msg, 0) != ESP_OK) {
+            Serial.println("CAN: sendRpm TX failed");
+        }
+    }
+
+    void sendShiftStatus(bool manualModeActive) {
+        if (!initialized) return;
+        twai_message_t msg = {};
+        msg.extd             = 1;
+        msg.identifier       = CAN_MAIN_SHIFT_STATUS;
+        msg.data_length_code = 8;
+        msg.data[0] = txSeq++;
+        msg.data[1] = NODE_STATUS_OK;
+        msg.data[2] = manualModeActive ? 1 : 0;
+        if (twai_transmit(&msg, 0) != ESP_OK) {
+            Serial.println("CAN: sendShiftStatus TX failed");
+        }
+    }
+
     // Poll for incoming messages — call from loop()
     void poll() {
         if (!initialized) return;
