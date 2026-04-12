@@ -4,12 +4,12 @@
 #include <Adafruit_NeoMatrix.h>
 
 // RPM thresholds for tachometer bar graph
-#define TACH_IDLE_RPM       1000
+#define TACH_IDLE_RPM       100
 #define TACH_LOW_RPM        3000
-#define TACH_MID_LOW_RPM    5000
-#define TACH_MID_RPM        7000
+#define TACH_MID_LOW_RPM    5500
+#define TACH_MID_RPM        7500
 #define TACH_MID_HIGH_RPM   9000
-#define TACH_HIGH_RPM      11000
+#define TACH_HIGH_RPM      10500
 #define TACH_REDLINE_RPM   13000
 #define TACH_OVERREV_RPM   13500
 
