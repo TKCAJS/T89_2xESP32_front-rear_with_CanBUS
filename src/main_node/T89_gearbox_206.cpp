@@ -217,19 +217,6 @@ void SerialCommands::processCommands() {
                 Serial.println("Hall sensor not initialized");
             }
         }
-        // Matrix tachometer commands
-        else if (command.equalsIgnoreCase("tachotest")) {
-            Serial.println("Running tachometer test sweep...");
-            matrixDisplay.testSweep();
-            Serial.println("Tachometer test complete");
-        }
-        else if (command.equalsIgnoreCase("tachoinfo")) {
-            matrixDisplay.printRpmThresholds();
-        }
-        else if (command.equalsIgnoreCase("rpminfo")) {
-            float currentRpm = rpmSensor.getRpm();
-            Serial.println(matrixDisplay.getRpmRangeInfo(currentRpm));
-        }
         // State machine commands
         else if (command.equalsIgnoreCase("state") || command.equalsIgnoreCase("status")) {
             if (gearbox) {
@@ -307,10 +294,6 @@ void SerialCommands::printHelp() {
     Serial.println("  halltest   - Test hall sensor response in real-time");
     Serial.println("  curve <type> - Set curve: linear, log, exp, smooth, custom");
     Serial.println("  strength <value> - Set curve strength (0.1-5.0)");
-    Serial.println("=== MATRIX TACHOMETER ===");
-    Serial.println("  tachotest  - Run tachometer test sweep animation");
-    Serial.println("  tachoinfo  - Show RPM thresholds for bar graph");
-    Serial.println("  rpminfo    - Show current RPM range information");
     Serial.println("=== GENERAL ===");
     Serial.println("  help       - Show this help");
     Serial.println("NOTE: Hall sensor curves can now be configured via web interface!");

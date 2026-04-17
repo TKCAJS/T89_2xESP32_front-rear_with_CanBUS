@@ -191,102 +191,38 @@ public:
         displayShiftNotification(letter);
     }
     
-    // Matrix tachometer methods from MatrixTachometer.h
-    void testSweep() {
-        Serial.println("=== MATRIX TACHOMETER TEST SWEEP ===");
-        Serial.println("Animating RPM sweep from 0 to 13500 RPM...");
-        
-        for (int rpm = 0; rpm <= 13500; rpm += 250) {
-            updateTachometer(rpm);
-            matrix->show();
-            delay(50);
-            yield();
-        }
-        
-        Serial.println("Sweep complete - returning to normal operation");
-    }
-    
-    void printRpmThresholds() {
-        Serial.println("=== MATRIX TACHOMETER RPM THRESHOLDS ===");
-        Serial.println("RPM Range    | LEDs | Color");
-        Serial.println("-------------|------|-------");
-        Serial.println("0 - 1000     |  0   | Off");
-        Serial.println("1000 - 2500  |  1   | Green");
-        Serial.println("2500 - 4000  |  2   | Green");
-        Serial.println("4000 - 5500  |  3   | Green");
-        Serial.println("5500 - 7000  |  4   | Yellow");
-        Serial.println("7000 - 8500  |  5   | Yellow");
-        Serial.println("8500 - 10000 |  6   | Orange");
-        Serial.println("10000 - 11500|  7   | Red");
-        Serial.println("11500 - 13000|  8   | Red");
-        Serial.println("13000+       |  8   | Red (Flashing)");
-        Serial.println("=========================================");
-    }
-    
-    String getRpmRangeInfo(float currentRpm) {
-        String info = "Current RPM: " + String(currentRpm, 0);
-        
-        if (currentRpm < 1000) {
-            info += " | Range: Idle | LEDs: 0 | Color: Off";
-        } else if (currentRpm < 2500) {
-            info += " | Range: Low | LEDs: 1 | Color: Green";
-        } else if (currentRpm < 4000) {
-            info += " | Range: Low-Mid | LEDs: 2 | Color: Green";
-        } else if (currentRpm < 5500) {
-            info += " | Range: Mid | LEDs: 3 | Color: Green";
-        } else if (currentRpm < 7000) {
-            info += " | Range: Mid-High | LEDs: 4 | Color: Yellow";
-        } else if (currentRpm < 8500) {
-            info += " | Range: High | LEDs: 5 | Color: Yellow";
-        } else if (currentRpm < 10000) {
-            info += " | Range: High+ | LEDs: 6 | Color: Orange";
-        } else if (currentRpm < 11500) {
-            info += " | Range: Very High | LEDs: 7 | Color: Red";
-        } else if (currentRpm < 13000) {
-            info += " | Range: Near Redline | LEDs: 8 | Color: Red";
-        } else {
-            info += " | Range: REDLINE! | LEDs: 8 | Color: Red (Flashing)";
-        }
-        
-        return info;
-    }
-    
 private:
     void updateTachometer(float rpm) {
-        // Calculate how many LEDs should be lit (0-8 LEDs in left column)
         int ledsToLight = 0;
-        uint32_t color = matrix->Color(0, 0, 0); // Default off
+        uint32_t color = matrix->Color(0, 0, 0);
         bool shouldFlash = false;
-        
-        if (rpm >= 1000) {
-            if (rpm < 2500) {
+
+        if (rpm >= 100) {
+            if (rpm < 3000) {
                 ledsToLight = 1;
                 color = matrix->Color(0, 255, 0); // Green
-            } else if (rpm < 4000) {
+            } else if (rpm < 5000) {
                 ledsToLight = 2;
                 color = matrix->Color(0, 255, 0); // Green
-            } else if (rpm < 5500) {
+            } else if (rpm < 7500) {
                 ledsToLight = 3;
                 color = matrix->Color(0, 255, 0); // Green
-            } else if (rpm < 7000) {
+            } else if (rpm < 9000) {
                 ledsToLight = 4;
-                color = matrix->Color(255, 255, 0); // Yellow
-            } else if (rpm < 8500) {
+                color = matrix->Color(0, 255, 0); // Yellow
+            } else if (rpm < 10500) {
                 ledsToLight = 5;
                 color = matrix->Color(255, 255, 0); // Yellow
-            } else if (rpm < 10000) {
+            } else if (rpm < 12000) {
                 ledsToLight = 6;
                 color = matrix->Color(255, 165, 0); // Orange
-            } else if (rpm < 11500) {
+            } else if (rpm < 13500) {
                 ledsToLight = 7;
-                color = matrix->Color(255, 0, 0); // Red
-            } else if (rpm < 13000) {
-                ledsToLight = 8;
                 color = matrix->Color(255, 0, 0); // Red
             } else {
                 ledsToLight = 8;
                 color = matrix->Color(255, 0, 0); // Red
-                shouldFlash = true; // Flash for redline
+                shouldFlash = true;
             }
         }
         
