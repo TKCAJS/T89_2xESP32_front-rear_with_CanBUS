@@ -64,6 +64,7 @@
 #define NODE_OIL            0x08    // (future)   - oil temp + pressure
 #define NODE_BRAKE          0x09    // (future)   - brake pressure front/rear
 // 0x0A-0x3F reserved for future nodes
+#define NODE_SENSOR         0x0A    // STM32H562 - analog sensor hub + PWM pump control
 
 
 // =============================================================================
@@ -112,6 +113,24 @@
 // Acknowledgements FROM rear node (0x60-0x7F)
 #define MSGTYPE_REAR_ACK_SHIFT      0x60    // Shift command received, solenoid firing
 #define MSGTYPE_REAR_ACK_COMPLETE   0x61    // Shift confirmed complete (position verified)
+
+
+// =============================================================================
+// MESSAGE TYPES — NODE_SENSOR (0x0A)
+// =============================================================================
+
+// Sensor data (outbound from sensor node)
+#define MSGTYPE_SENS_OIL_PRESSURE   0x01    // data[2:3] = int16_t  kPa×10
+#define MSGTYPE_SENS_WATER_TEMP     0x02    // data[2:3] = int16_t  °C×10
+#define MSGTYPE_SENS_TPS            0x03    // data[2:3] = uint16_t 0–10000 (0.01 % resolution)
+#define MSGTYPE_SENS_SPEED          0x04    // data[2:3] = uint16_t km/h×10 (from square-wave input)
+#define MSGTYPE_SENS_FUEL_1         0x05    // data[2:3] = uint16_t 0–10000 (0.01 % resolution)
+#define MSGTYPE_SENS_FUEL_2         0x06    // data[2:3] = uint16_t 0–10000 (0.01 % resolution)
+#define MSGTYPE_SENS_PUMP_STATUS    0x07    // data[2]   = uint8_t  0–100 % PWM duty (outbound status)
+#define MSGTYPE_SENS_STATUS         0x08    // node health flags
+
+// Commands TO sensor node (0x40-0x5F)
+#define MSGTYPE_SENS_CMD_PUMP       0x40    // data[2] = uint8_t 0–100 % PWM duty override
 
 
 // =============================================================================
@@ -185,6 +204,7 @@
 #define CAN_HB_LAP                  CAN_ID(CAN_PRIO_INFO,     NODE_LAP,     MSGTYPE_HEARTBEAT,          0)
 #define CAN_HB_OIL                  CAN_ID(CAN_PRIO_INFO,     NODE_OIL,     MSGTYPE_HEARTBEAT,          0)
 #define CAN_HB_BRAKE                CAN_ID(CAN_PRIO_INFO,     NODE_BRAKE,   MSGTYPE_HEARTBEAT,          0)
+#define CAN_HB_SENSOR               CAN_ID(CAN_PRIO_INFO,     NODE_SENSOR,  MSGTYPE_HEARTBEAT,          0)
 
 // --- MAIN NODE ---
 #define CAN_MAIN_STATUS             CAN_ID(CAN_PRIO_INFO,     NODE_MAIN,    MSGTYPE_MAIN_STATUS,        0)
@@ -207,6 +227,17 @@
 #define CAN_REAR_CMD_SHIFT_DN       CAN_ID(CAN_PRIO_CRITICAL, NODE_REAR,    MSGTYPE_REAR_CMD_SHIFT_DN,  0)
 #define CAN_REAR_ACK_SHIFT          CAN_ID(CAN_PRIO_HIGH,     NODE_REAR,    MSGTYPE_REAR_ACK_SHIFT,     0)
 #define CAN_REAR_ACK_COMPLETE       CAN_ID(CAN_PRIO_HIGH,     NODE_REAR,    MSGTYPE_REAR_ACK_COMPLETE,  0)
+
+// --- SENSOR NODE ---
+#define CAN_SENS_OIL_PRESSURE       CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_OIL_PRESSURE,  0)
+#define CAN_SENS_WATER_TEMP         CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_WATER_TEMP,    0)
+#define CAN_SENS_TPS                CAN_ID(CAN_PRIO_HIGH,     NODE_SENSOR,  MSGTYPE_SENS_TPS,           0)
+#define CAN_SENS_SPEED              CAN_ID(CAN_PRIO_HIGH,     NODE_SENSOR,  MSGTYPE_SENS_SPEED,         0)
+#define CAN_SENS_FUEL_1             CAN_ID(CAN_PRIO_LOW,      NODE_SENSOR,  MSGTYPE_SENS_FUEL_1,        0)
+#define CAN_SENS_FUEL_2             CAN_ID(CAN_PRIO_LOW,      NODE_SENSOR,  MSGTYPE_SENS_FUEL_2,        0)
+#define CAN_SENS_PUMP_STATUS        CAN_ID(CAN_PRIO_INFO,     NODE_SENSOR,  MSGTYPE_SENS_PUMP_STATUS,   0)
+#define CAN_SENS_STATUS             CAN_ID(CAN_PRIO_INFO,     NODE_SENSOR,  MSGTYPE_SENS_STATUS,        0)
+#define CAN_SENS_CMD_PUMP           CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_CMD_PUMP,      0)
 
 // --- COOLING NODE (future) ---
 #define CAN_COOL_WATER_TEMP         CAN_ID(CAN_PRIO_MEDIUM,   NODE_COOLING, MSGTYPE_COOL_WATER_TEMP,    0)
