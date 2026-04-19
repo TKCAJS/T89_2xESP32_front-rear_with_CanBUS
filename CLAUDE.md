@@ -1,13 +1,17 @@
 # Honda CBR1000RR Racing Telemetry — Project Context
 
-Two ESP32-S3 nodes communicating over CAN bus (500 Kbps, 29-bit extended frames, SN65HVD230 transceivers).
+Two ESP32-S3 nodes + one STM32H562 sensor node communicating over CAN bus (500 Kbps, 29-bit extended frames, SN65HVD230 transceivers).
 Shared CAN ID definitions live in `lib/can_ids/can_ids.h` — include this in all nodes, never use raw CAN_ID() calls in firmware.
 
 ## Build status
 - **Rear node** — wired, verified. Gear positions detecting correctly. Shift relays (up/down/ign cut) working.
 - **Main node** — wired, CAN working. Gear position received from rear node. Shift commands sending correctly.
 - **CAN bus** — end-to-end working between both nodes.
-- **Next** — remove PCF8575/old gear sensor code from main node. Tune shift durations.
+- **Sensor node** — in design. WeAct STM32H562RGT6. STM32CubeIDE standalone project at `c:/Users/Adrian/Documents/PlatformIO/Projects/Sensor_node/`.
+- **Next** — remove PCF8575/old gear sensor code from main node. Tune shift durations. Scaffold sensor node CubeIDE project.
+
+## can_ids.h synchronisation
+`lib/can_ids/can_ids.h` in this repo is the **source of truth**. The sensor node (STM32CubeIDE) keeps a copy at `Sensor_node/Core/Inc/can_ids.h`. Whenever the header changes in either project, manually copy it to the other and rebuild both. The two copies must stay identical.
 
 ---
 
@@ -65,8 +69,38 @@ GPIO 45 was originally assigned to the ign cut relay and was moved to GPIO 42 fo
 | 48   | NeoPixel (single) |
 
 Gear position received from rear node via CAN.
-Speed sensor will be on a future sensor node via CAN.
+Speed received from sensor node via CAN (CAN_SENS_SPEED).
 Web server on port 80 (AP SSID: T89_Gearbox).
+
+---
+
+---
+
+## Sensor Node — WeAct STM32H562RGT6 (standalone STM32CubeIDE project)
+
+| Pin | Function |
+|-----|----------|
+| PB7 | FDCAN1 TX (SN65HVD230) |
+| PB8 | FDCAN1 RX (SN65HVD230) |
+| TBD | Oil pressure (ADC, analog) |
+| TBD | Water temperature (ADC, analog) |
+| TBD | Throttle position sensor (ADC, analog) |
+| TBD | Speed input (TIMx input capture, square wave via optocoupler) |
+| TBD | Fuel level 1 (ADC, analog) |
+| TBD | Fuel level 2 (ADC, analog) |
+| TBD | PWM water pump (TIMx PWM output) |
+
+### STM32H562 occupied/reserved pins (WeAct board)
+| Pin(s) | Used for |
+|--------|----------|
+| PB2 | Onboard LED |
+| PC13 | Onboard button |
+| PA9/PA10 | Debug UART (USART1, 115200) |
+| PA4-PA7 | SPI1 |
+| PA11/PA12 | USB (CDC virtual COM) |
+| PC8-PC12, PD2, PD4 | SDMMC1 (microSD card slot) |
+
+CAN node ID: `NODE_SENSOR (0x0A)`. Broadcasts: oil pressure, water temp, TPS, speed, fuel×2, pump duty. Accepts pump duty override command.
 
 ---
 
