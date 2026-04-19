@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_NeoMatrix.h>
+#include "MatrixStartupAnimation.h"
 
 // Matrix Configuration
 #define MATRIX_PIN 16
@@ -38,24 +39,26 @@ public:
                      wifiEnabled(nullptr), canGearValid(nullptr),
                      manualModeEnabled(nullptr) {}
 
-    void begin(bool* wifiEnabledPtr, bool* canGearValidPtr, bool* manualModePtr = nullptr) {
+    void begin(bool* wifiEnabledPtr, bool* canGearValidPtr, bool* manualModePtr = nullptr, bool startupAnim = true) {
         wifiEnabled = wifiEnabledPtr;
         canGearValid = canGearValidPtr;
         manualModeEnabled = manualModePtr;
-        
-        // Initialize Dotstar Matrix with corrected wiring pattern
+
         matrix = new Adafruit_NeoMatrix(MATRIX_WIDTH, MATRIX_HEIGHT, MATRIX_PIN,
-            NEO_MATRIX_TOP + NEO_MATRIX_RIGHT + NEO_MATRIX_ROWS + NEO_MATRIX_PROGRESSIVE,
+            NEO_MATRIX_TOP + NEO_MATRIX_LEFT + NEO_MATRIX_ROWS + NEO_MATRIX_PROGRESSIVE,
             NEO_GRB + NEO_KHZ800);
-        
-        Serial.println("Initializing Dotstar 8x8 Matrix...");
+
         matrix->begin();
-        matrix->setBrightness(50); // Set to 50% brightness to avoid being too bright
-        matrix->setTextWrap(false); // Don't wrap text
-        matrix->setTextColor(matrix->Color(255, 255, 255)); // White text
-        matrix->setTextSize(1); // Use default size
-        matrix->fillScreen(0); // Clear screen
+        matrix->setBrightness(50);
+        matrix->setTextWrap(false);
+        matrix->setTextColor(matrix->Color(255, 255, 255));
+        matrix->setTextSize(1);
+        matrix->fillScreen(0);
         matrix->show();
+
+        if (startupAnim) {
+            runMatrixStartupAnimation(matrix);
+        }
     }
     
     void update(const String& currentGearName) {
