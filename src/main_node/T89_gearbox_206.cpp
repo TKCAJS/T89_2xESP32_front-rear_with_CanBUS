@@ -26,8 +26,9 @@
 #define PIN_WIFI_SWITCH     21   // WiFi toggle switch input (momentary)
 #define PIN_CLUTCH_POSITION 15   // Analog voltage input for clutch position monitoring
 
-// Clutch position threshold
-#define CLUTCH_THRESHOLD_VOLTAGE 1.8
+// Clutch voltage thresholds — calibrated via web interface
+float clutchDisengageV   = 1.8f;  // raw ADC voltage: above this = disengaged, relay safe
+float clutchJustEngagedV = 1.8f;  // raw ADC voltage: rising through this = biting point
 
 // Standard includes
 #include <LittleFS.h>
@@ -102,7 +103,12 @@ void IRAM_ATTR wifiSwitchISR() {
 
 // Clutch monitoring
 bool clutchPulled = false;
+bool clutchJustEngaged = false;  // biting point zone: voltage between justEngagedV and disengageV
 float clutchVoltage = 0.0;
+
+// Hall sensor range mirrors (synced from hallSensor each loop)
+int hallMin = 780;
+int hallMax = 4000;
 
 // WiFi Access Point credentials
 const char* ssid = "T89_Gearbox";
@@ -170,6 +176,10 @@ void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter);
 String getGearStatusForWeb() { return mainCan.getGearName(); }
 String getHallCurveTypeName() { return hallSensor.getCurveTypeName(); }
 void saveHallCurveConfig() { /* Handled by HallSensorControl */ }
+
+void saveHallRangeConfig() {
+    hallSensor.setHallRange(hallMin, hallMax);
+}
 
 //===========================================
 // SERIAL COMMANDS IMPLEMENTATION
@@ -542,7 +552,8 @@ void checkWiFiToggleSwitch() {
 void checkServoPosition() {
     int analogValue = analogRead(PIN_CLUTCH_POSITION);
     clutchVoltage = (analogValue * 3.3) / 4095.0;
-    bool newClutchPulled = (clutchVoltage < CLUTCH_THRESHOLD_VOLTAGE);
+    bool newClutchPulled  = (clutchVoltage < clutchDisengageV);
+    clutchJustEngaged = (clutchVoltage >= clutchJustEngagedV && clutchVoltage < clutchDisengageV);
     
     // Detect clutch state change and send event
     if (newClutchPulled != clutchPulled) {
@@ -597,12 +608,14 @@ void setupWeb() {
 void loadConfig() {
     prefs.begin("gearbox", false);
     
-    neutralDownMs = prefs.getInt("neutralDownMs", 40);
-    neutralUpMs = prefs.getInt("neutralUpMs", 40);
-    shiftDownMs = prefs.getInt("shiftDownMs", 150);
-    shiftUpMs = prefs.getInt("shiftUpMs", 150);
-    clutchIdlePos = prefs.getInt("clutchIdlePos", 0);
-    clutchEngagePos = prefs.getInt("clutchEngagePos", 180);
+    neutralDownMs    = prefs.getInt("neutralDownMs", 40);
+    neutralUpMs      = prefs.getInt("neutralUpMs", 40);
+    shiftDownMs      = prefs.getInt("shiftDownMs", 150);
+    shiftUpMs        = prefs.getInt("shiftUpMs", 150);
+    clutchIdlePos    = prefs.getInt("clutchIdlePos", 0);
+    clutchEngagePos  = prefs.getInt("clutchEngagePos", 180);
+    clutchDisengageV   = prefs.getFloat("clutchDisengV", 1.8f);
+    clutchJustEngagedV = prefs.getFloat("clutchBiteV",   1.8f);
     prefs.end();
 
     Serial.println("Configuration loaded:");
@@ -623,6 +636,8 @@ void saveConfig() {
     prefs.putInt("shiftUpMs", shiftUpMs);
     prefs.putInt("clutchIdlePos", clutchIdlePos);
     prefs.putInt("clutchEngagePos", clutchEngagePos);
+    prefs.putFloat("clutchDisengV", clutchDisengageV);
+    prefs.putFloat("clutchBiteV",   clutchJustEngagedV);
     prefs.end();
 
     gearbox.setConfiguration(neutralDownMs, neutralUpMs, shiftDownMs, shiftUpMs,
@@ -643,6 +658,8 @@ void updateCompatibilityVariables() {
     // Update hall sensor globals for web interface
     hallCurveType = hallSensor.getCurveType();
     hallCurveStrength = hallSensor.getCurveStrength();
+    hallMin = hallSensor.getHallMin();
+    hallMax = hallSensor.getHallMax();
 }
 
 // end of code

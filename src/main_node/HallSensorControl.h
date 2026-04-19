@@ -14,11 +14,14 @@ private:
     SimpleServo* clutchServo;
     int clutchIdlePos;
     int clutchEngagePos;
+    int hallMin;
+    int hallMax;
     
 public:
-    HallSensorControl(int pin) : hallPin(pin), curveType(HALL_LOGARITHMIC), 
+    HallSensorControl(int pin) : hallPin(pin), curveType(HALL_LOGARITHMIC),
                                 curveStrength(2.0), clutchServo(nullptr),
-                                clutchIdlePos(0), clutchEngagePos(180) {}
+                                clutchIdlePos(0), clutchEngagePos(180),
+                                hallMin(780), hallMax(4000) {}
     
     void begin(SimpleServo* servo) {
         clutchServo = servo;
@@ -43,7 +46,7 @@ public:
         int hallValue = analogRead(hallPin);
         
         // Use non-linear mapping
-        int servoPos = hallToServoNonLinear(hallValue, 780, 4000, 
+        int servoPos = hallToServoNonLinear(hallValue, hallMin, hallMax,
                                            clutchIdlePos, clutchEngagePos,
                                            curveType, curveStrength);
         
@@ -107,7 +110,17 @@ public:
     float getCurveStrength() const {
         return curveStrength;
     }
-    
+
+    void setHallRange(int min, int max) {
+        hallMin = constrain(min, 0, 4095);
+        hallMax = constrain(max, 0, 4095);
+        saveConfiguration();
+        Serial.println("Hall range set: " + String(hallMin) + "-" + String(hallMax));
+    }
+
+    int getHallMin() const { return hallMin; }
+    int getHallMax() const { return hallMax; }
+
     void runTest() {
         Serial.println("=== HALL SENSOR TEST MODE ===");
         Serial.println("Move the hall sensor and observe the response");
@@ -118,10 +131,10 @@ public:
             int hallValue = analogRead(hallPin);
             
             // Linear mapping (old way)
-            int linearServo = map(hallValue, 780, 4000, clutchIdlePos, clutchEngagePos);
-            
+            int linearServo = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
+
             // Non-linear mapping (new way)
-            int curvedServo = hallToServoNonLinear(hallValue, 780, 4000, 
+            int curvedServo = hallToServoNonLinear(hallValue, hallMin, hallMax,
                                                   clutchIdlePos, clutchEngagePos,
                                                   curveType, curveStrength);
             
@@ -221,6 +234,8 @@ private:
         prefs.begin("gearbox", false);
         prefs.putInt("hallCurveType", (int)curveType);
         prefs.putFloat("hallCurveStr", curveStrength);
+        prefs.putInt("hallMin", hallMin);
+        prefs.putInt("hallMax", hallMax);
         prefs.end();
         Serial.println("Hall sensor curve configuration saved");
     }
@@ -230,6 +245,8 @@ private:
         prefs.begin("gearbox", true);
         curveType = (HallResponseCurve)prefs.getInt("hallCurveType", HALL_LOGARITHMIC);
         curveStrength = prefs.getFloat("hallCurveStr", 2.0);
+        hallMin = prefs.getInt("hallMin", 780);
+        hallMax = prefs.getInt("hallMax", 4000);
         prefs.end();
         
         Serial.println("Hall sensor curve configuration loaded:");

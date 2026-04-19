@@ -144,6 +144,15 @@ extern ShiftLogger shiftLogger;
 extern HallResponseCurve hallCurveType;
 extern float hallCurveStrength;
 
+// Hall sensor range globals
+extern int hallMin;
+extern int hallMax;
+
+// Clutch voltage threshold globals
+extern float clutchDisengageV;
+extern float clutchJustEngagedV;
+extern bool clutchJustEngaged;
+
 // Function declarations for callbacks
 extern bool isShiftAllowed();
 extern bool canDownshift();
@@ -158,6 +167,7 @@ extern void loadConfig();
 extern String getGearStatusForWeb();
 extern String getHallCurveTypeName();
 extern void saveHallCurveConfig();
+extern void saveHallRangeConfig();
 
 // Implementation of web interface methods
 void WebInterface::handleUpdate() {
@@ -258,6 +268,51 @@ void WebInterface::handleCommand() {
         canSendShiftUp(100, 0);
         server->send(200, "text/plain", "Upshift CAN command sent (100ms)");
         return;
+    } else if (action == "setServoPos") {
+        int pos = constrain(server->arg("pos").toInt(), 0, 180);
+        clutchServo.write(pos);
+        server->send(200, "text/plain", String(pos));
+        return;
+    } else if (action == "saveClutchIdle") {
+        int pos = constrain(server->arg("pos").toInt(), 0, 180);
+        clutchIdlePos = pos;
+        saveConfig();
+        clutchServo.write(clutchIdlePos);
+        server->send(200, "text/plain", "Idle saved: " + String(pos) + "\xC2\xB0");
+        Serial.println("Clutch idle calibrated: " + String(pos) + "°");
+        return;
+    } else if (action == "saveClutchEngage") {
+        int pos = constrain(server->arg("pos").toInt(), 0, 180);
+        clutchEngagePos = pos;
+        saveConfig();
+        server->send(200, "text/plain", "Engage saved: " + String(pos) + "\xC2\xB0");
+        Serial.println("Clutch engage calibrated: " + String(pos) + "°");
+        return;
+    } else if (action == "saveHallRange") {
+        int min = server->arg("min").toInt();
+        int max = server->arg("max").toInt();
+        if (min >= 0 && max <= 4095 && min < max) {
+            hallMin = min;
+            hallMax = max;
+            saveHallRangeConfig();
+            server->send(200, "text/plain", "Hall range saved: " + String(min) + "-" + String(max));
+            Serial.println("Hall range calibrated: " + String(min) + "-" + String(max));
+        } else {
+            server->send(400, "text/plain", "Invalid hall range");
+        }
+        return;
+    } else if (action == "captureDisengageV") {
+        clutchDisengageV = clutchVoltage;
+        saveConfig();
+        server->send(200, "text/plain", String(clutchDisengageV, 3));
+        Serial.println("Clutch disengage threshold set: " + String(clutchDisengageV, 3) + "V");
+        return;
+    } else if (action == "captureJustEngagedV") {
+        clutchJustEngagedV = clutchVoltage;
+        saveConfig();
+        server->send(200, "text/plain", String(clutchJustEngagedV, 3));
+        Serial.println("Clutch just-engaged threshold set: " + String(clutchJustEngagedV, 3) + "V");
+        return;
     } else if (action == "testIgnitionCut") {
         // Test ignition cut relay - use the shift logger's method for proper timing
         shiftLogger.startIgnitionCut();
@@ -318,9 +373,12 @@ void WebInterface::handleSensorData() {
     json += "\"softwareVersion\":" + String(SOFTWARE_VERSION) + ",";
     
     int hallValue = analogRead(PIN_HALL_SENSOR);
-    int servoPosition = map(hallValue, 780, 4000, clutchIdlePos, clutchEngagePos);
+    int servoPosition = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
     servoPosition = constrain(servoPosition, 0, 180);
     json += "\"servoPosition\":" + String(servoPosition) + ",";
+    json += "\"clutchDisengageV\":" + String(clutchDisengageV, 3) + ",";
+    json += "\"clutchJustEngagedV\":" + String(clutchJustEngagedV, 3) + ",";
+    json += "\"clutchJustEngaged\":" + String(clutchJustEngaged ? "true" : "false") + ",";
     
     json += "\"currentRpm\":" + String(rpmSensor.getRpm(), 1) + ",";
     json += "\"currentMph\":0,";
@@ -341,7 +399,11 @@ void WebInterface::handleConfigData() {
     json += "\"clutchIdlePos\":" + String(clutchIdlePos) + ",";
     json += "\"clutchEngagePos\":" + String(clutchEngagePos) + ",";
     json += "\"hallCurveType\":" + String((int)hallCurveType) + ",";
-    json += "\"hallCurveStrength\":" + String(hallCurveStrength, 2);
+    json += "\"hallCurveStrength\":" + String(hallCurveStrength, 2) + ",";
+    json += "\"hallMin\":" + String(hallMin) + ",";
+    json += "\"hallMax\":" + String(hallMax) + ",";
+    json += "\"clutchDisengageV\":" + String(clutchDisengageV, 3) + ",";
+    json += "\"clutchJustEngagedV\":" + String(clutchJustEngagedV, 3);
     json += "}";
     
     server->send(200, "application/json", json);
