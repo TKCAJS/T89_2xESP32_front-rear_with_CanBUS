@@ -571,6 +571,7 @@ void processInputs() {
             gearbox.processEvent(EVENT_NEUTRAL_DOWN_PRESSED);
         } else {
             Serial.println("[NEUTRAL] Rejected — not in gear 1 or 2");
+            matrixDisplay.displayShiftNotification('N', 255, 0, 0); // red = acknowledged but can't action
         }
     }
 

@@ -18,6 +18,7 @@ private:
     bool showShiftNotification;
     char shiftNotificationChar;
     unsigned long shiftNotificationStart;
+    uint8_t notifR, notifG, notifB;
     unsigned long lastRainbowUpdate;
     uint16_t rainbowOffset;
     
@@ -32,12 +33,22 @@ private:
     bool* canGearValid;
     bool* manualModeEnabled;
 
+    volatile bool animRunning = false;
+
+    static void animationTask(void* param) {
+        MatrixDisplay* self = static_cast<MatrixDisplay*>(param);
+        runMatrixStartupAnimation(self->matrix);
+        self->animRunning = false;
+        vTaskDelete(nullptr);
+    }
+
 public:
     MatrixDisplay() : matrix(nullptr), showShiftNotification(false),
                      shiftNotificationChar(' '), shiftNotificationStart(0),
+                     notifR(255), notifG(255), notifB(255),
                      lastRainbowUpdate(0), rainbowOffset(0),
                      wifiEnabled(nullptr), canGearValid(nullptr),
-                     manualModeEnabled(nullptr) {}
+                     manualModeEnabled(nullptr), animRunning(false) {}
 
     void begin(bool* wifiEnabledPtr, bool* canGearValidPtr, bool* manualModePtr = nullptr, bool startupAnim = true) {
         wifiEnabled = wifiEnabledPtr;
@@ -57,13 +68,15 @@ public:
         matrix->show();
 
         if (startupAnim) {
-            runMatrixStartupAnimation(matrix);
+            animRunning = true;
+            xTaskCreate(animationTask, "MatrixAnim", 4096, this, 1, nullptr);
         }
     }
     
     void update(const String& currentGearName) {
+        if (animRunning) return;
         unsigned long currentMillis = millis();
-        
+
         // Check if we should stop displaying the shift notification
         if (showShiftNotification && (currentMillis - shiftNotificationStart >= SHIFT_NOTIFICATION_DURATION)) {
             showShiftNotification = false;
@@ -74,11 +87,8 @@ public:
             lastRainbowUpdate = currentMillis;
             
             if (showShiftNotification) {
-                // Display the shift notification (U/D) temporarily
-                matrix->fillScreen(0); // Clear screen (black)
-                matrix->setTextColor(matrix->Color(255, 255, 255)); // White text
-                
-                // Center the character on the 8x8 display
+                matrix->fillScreen(0);
+                matrix->setTextColor(matrix->Color(notifR, notifG, notifB));
                 matrix->setCursor(0, 0);
                 matrix->print(shiftNotificationChar);
                 
@@ -116,8 +126,9 @@ public:
     }
     
     void updateWithTachometer(const String& currentGearName, float currentRpm) {
+        if (animRunning) return;
         unsigned long currentMillis = millis();
-        
+
         // Check if we should stop displaying the shift notification
         if (showShiftNotification && (currentMillis - shiftNotificationStart >= SHIFT_NOTIFICATION_DURATION)) {
             showShiftNotification = false;
@@ -139,10 +150,8 @@ public:
                     }
                 }
                 
-                matrix->setTextColor(matrix->Color(255, 255, 255)); // White text
-                
-                // Center the character on the remaining area (columns 1-7)
-                matrix->setCursor(2, 0);  // Adjusted for non-tachometer area
+                matrix->setTextColor(matrix->Color(notifR, notifG, notifB));
+                matrix->setCursor(2, 0);
                 matrix->print(shiftNotificationChar);
                 
             } else {
@@ -184,12 +193,13 @@ public:
         }
     }
     
-    void displayShiftNotification(char notificationChar) {
+    void displayShiftNotification(char notificationChar, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255) {
         shiftNotificationChar = notificationChar;
+        notifR = r; notifG = g; notifB = b;
         showShiftNotification = true;
         shiftNotificationStart = millis();
     }
-    
+
     void displayShiftLetter(char letter) {
         displayShiftNotification(letter);
     }

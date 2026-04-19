@@ -25,13 +25,13 @@ const StateTransition stateTransitions[] = {
     
     // FROM 1ST GEAR
     // Can only go to neutral via neutral up button (clutch required) or shift up to 2nd
-    {IDLE_GEAR_1, EVENT_NEUTRAL_UP_PRESSED, WAITING_FOR_CLUTCH_NEUTRAL_UP, nullptr},   // 1st → N (clutch required)
+    {IDLE_GEAR_1, EVENT_NEUTRAL_UP_PRESSED, NEUTRAL_UP_SHIFTING, nullptr},              // 1st → N (no clutch)
     {IDLE_GEAR_1, EVENT_SHIFT_UP_PRESSED, UPSHIFTING, nullptr},                       // 1st → 2nd (ignition cut)
     // All other buttons invalid from 1st gear                  
     
     // FROM 2ND GEAR  
     // Can go to neutral (half shift down), or skip neutral to 1st (full shift down), or up to 3rd
-    {IDLE_GEAR_2, EVENT_NEUTRAL_DOWN_PRESSED, WAITING_FOR_CLUTCH_NEUTRAL_DOWN, nullptr}, // 2nd → N (clutch required)
+    {IDLE_GEAR_2, EVENT_NEUTRAL_DOWN_PRESSED, NEUTRAL_DOWN_SHIFTING, nullptr},           // 2nd → N (no clutch)
     {IDLE_GEAR_2, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING, nullptr},         // 2nd → 1st (servo, skip N)
     {IDLE_GEAR_2, EVENT_SHIFT_UP_PRESSED, UPSHIFTING, nullptr},                         // 2nd → 3rd (ignition cut)
     // Neutral up invalid from 2nd gear
@@ -321,7 +321,7 @@ void GearboxStateMachine::enterShiftingState() {
                 }
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
                 activateShift(false, (fromGear == 0) ? shiftDownMs : neutralDownMs, 0, (uint8_t)toGear);
-                displayShiftLetter('D');
+                displayShiftLetter(toGear == 0 ? 'N' : 'D');
                 break;
 
             case NEUTRAL_UP_SHIFTING:
@@ -337,7 +337,7 @@ void GearboxStateMachine::enterShiftingState() {
                 }
                 shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
                 activateShift(true, (fromGear == 0) ? shiftUpMs : neutralUpMs, 0, (uint8_t)toGear);
-                displayShiftLetter('U');
+                displayShiftLetter(toGear == 0 ? 'N' : 'U');
                 break;
 
             case UPSHIFTING:
