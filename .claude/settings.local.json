@@ -7,7 +7,16 @@
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
       "Bash(\"c:/Users/Adrian/.platformio/penv/Scripts/platformio.exe\" pkg:*)",
-      "Bash(c:/Users/Adrian/.platformio/penv/Scripts/uv.exe pip:*)"
+      "Bash(c:/Users/Adrian/.platformio/penv/Scripts/uv.exe pip:*)",
+      "Bash(pip install:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.nordicsemi.com)",
+      "WebFetch(domain:docs.zephyrproject.org)",
+      "WebFetch(domain:www.mouser.com)",
+      "WebFetch(domain:www.st.com)",
+      "Bash(git fetch *)",
+      "Bash(git push *)"
     ]
   }
 }
