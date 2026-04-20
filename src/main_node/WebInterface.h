@@ -31,9 +31,8 @@ public:
         if (LittleFS.exists("/index.html")) {
             File file = LittleFS.open("/index.html", "r");
             if (file) {
-                String content = file.readString();
+                server->streamFile(file, "text/html");
                 file.close();
-                server->send(200, "text/html", content);
                 Serial.println("Served index.html from LittleFS");
             } else {
                 server->send(500, "text/plain", "Error reading index.html file");
@@ -56,9 +55,8 @@ public:
         if (LittleFS.exists("/hello.html")) {
             File file = LittleFS.open("/hello.html", "r");
             if (file) {
-                String content = file.readString();
+                server->streamFile(file, "text/html");
                 file.close();
-                server->send(200, "text/html", content);
                 Serial.println("Served hello.html from LittleFS");
             } else {
                 server->send(500, "text/plain", "Error reading hello.html file");
@@ -80,9 +78,8 @@ public:
         if (LittleFS.exists("/calibration.html")) {
             File file = LittleFS.open("/calibration.html", "r");
             if (file) {
-                String content = file.readString();
+                server->streamFile(file, "text/html");
                 file.close();
-                server->send(200, "text/html", content);
                 Serial.println("Served calibration.html from LittleFS");
             } else {
                 server->send(500, "text/plain", "Error reading calibration.html file");
@@ -220,7 +217,7 @@ void WebInterface::handleHallCurveUpdate() {
         int newCurveType = server->arg("hallCurveType").toInt();
         float newCurveStrength = server->arg("hallCurveStrength").toFloat();
         
-        if (newCurveType >= 0 && newCurveType <= 4 &&
+        if (newCurveType >= 0 && newCurveType <= 5 &&
             newCurveStrength >= 0.1 && newCurveStrength <= 5.0) {
             
             hallCurveType = (HallResponseCurve)newCurveType;
@@ -298,6 +295,24 @@ void WebInterface::handleCommand() {
         saveConfig();
         server->send(200, "text/plain", "Engage saved: " + String(pos) + "\xC2\xB0");
         Serial.println("Clutch engage calibrated: " + String(pos) + "°");
+        return;
+    } else if (action == "savePiecewiseZone") {
+        int hbs = server->arg("hBiteStart").toInt();
+        int hbe = server->arg("hBiteEnd").toInt();
+        int sbs = server->arg("sBiteStart").toInt();
+        int sbe = server->arg("sBiteEnd").toInt();
+        if (hbs >= 0 && hbe <= 4095 && hbs < hbe && sbs >= 0 && sbe <= 180 && sbs < sbe) {
+            hallSensor.setPiecewiseZone(hbs, hbe, sbs, sbe);
+            server->send(200, "text/plain", "Piecewise zone saved");
+            Serial.println("Piecewise zone saved via web");
+        } else {
+            server->send(400, "text/plain", "Invalid piecewise zone parameters");
+        }
+        return;
+    } else if (action == "setCurveType") {
+        String type = server->arg("type");
+        hallSensor.setCurveType(type);
+        server->send(200, "text/plain", "Curve set: " + hallSensor.getCurveTypeName());
         return;
     } else if (action == "saveHallRange") {
         int min = server->arg("min").toInt();
@@ -415,7 +430,13 @@ void WebInterface::handleConfigData() {
     json += "\"hallMin\":" + String(hallMin) + ",";
     json += "\"hallMax\":" + String(hallMax) + ",";
     json += "\"clutchDisengageV\":" + String(clutchDisengageV, 3) + ",";
-    json += "\"clutchJustEngagedV\":" + String(clutchJustEngagedV, 3);
+    json += "\"clutchJustEngagedV\":" + String(clutchJustEngagedV, 3) + ",";
+    json += "\"clutchServoMin\":" + String(CLUTCH_SERVO_MIN) + ",";
+    json += "\"clutchServoMax\":" + String(CLUTCH_SERVO_MAX) + ",";
+    json += "\"hallBiteStart\":"  + String(hallSensor.getHallBiteStart())  + ",";
+    json += "\"hallBiteEnd\":"    + String(hallSensor.getHallBiteEnd())    + ",";
+    json += "\"servoBiteStart\":" + String(hallSensor.getServoBiteStart()) + ",";
+    json += "\"servoBiteEnd\":"   + String(hallSensor.getServoBiteEnd());
     json += "}";
     
     server->send(200, "application/json", json);

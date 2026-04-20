@@ -17,12 +17,19 @@ private:
     int hallMin;
     int hallMax;
     bool servoOverride;  // true = slider/web controls servo; hall sensor backs off
+    // Piecewise breakpoints
+    int hallBiteStart;   // ADC value where biting zone input begins
+    int hallBiteEnd;     // ADC value where biting zone input ends
+    int servoBiteStart;  // servo angle at start of biting zone (just-engaged)
+    int servoBiteEnd;    // servo angle at end of biting zone (just-disengaged)
     
 public:
     HallSensorControl(int pin) : hallPin(pin), curveType(HALL_LOGARITHMIC),
                                 curveStrength(2.0), clutchServo(nullptr),
                                 clutchIdlePos(0), clutchEngagePos(180),
-                                hallMin(780), hallMax(4000), servoOverride(false) {}
+                                hallMin(780), hallMax(3330), servoOverride(false),
+                                hallBiteStart(1000), hallBiteEnd(3000),
+                                servoBiteStart(98), servoBiteEnd(115) {}
     
     void begin(SimpleServo* servo) {
         clutchServo = servo;
@@ -48,12 +55,16 @@ public:
         if (!isIdle) return;
         
         int hallValue = analogRead(hallPin);
-        
-        // Use non-linear mapping
-        int servoPos = hallToServoNonLinear(hallValue, hallMin, hallMax,
+        int servoPos;
+
+        if (curveType == HALL_PIECEWISE) {
+            servoPos = hallToPiecewise(hallValue);
+        } else {
+            servoPos = hallToServoNonLinear(hallValue, hallMin, hallMax,
                                            clutchIdlePos, clutchEngagePos,
                                            curveType, curveStrength);
-        
+        }
+
         clutchServo->write(servoPos);
     }
     
@@ -81,6 +92,9 @@ public:
         } else if (type == "custom") {
             curveType = HALL_CUSTOM;
             Serial.println("Hall curve set to CUSTOM POWER");
+        } else if (type == "piecewise") {
+            curveType = HALL_PIECEWISE;
+            Serial.println("Hall curve set to PIECEWISE");
         } else {
             Serial.println("Invalid curve type. Use: linear, log, exp, smooth, custom");
             return;
@@ -102,8 +116,9 @@ public:
             case HALL_LOGARITHMIC: return "Logarithmic";
             case HALL_EXPONENTIAL: return "Exponential";
             case HALL_SMOOTH_STEP: return "Smooth Step";
-            case HALL_CUSTOM: return "Custom Power";
-            default: return "Unknown";
+            case HALL_CUSTOM:     return "Custom Power";
+            case HALL_PIECEWISE:  return "Piecewise";
+            default:              return "Unknown";
         }
     }
     
@@ -125,6 +140,21 @@ public:
     int getHallMin() const { return hallMin; }
     int getHallMax() const { return hallMax; }
 
+    void setPiecewiseZone(int hBiteStart, int hBiteEnd, int sBiteStart, int sBiteEnd) {
+        hallBiteStart  = constrain(hBiteStart, 0, 4095);
+        hallBiteEnd    = constrain(hBiteEnd,   0, 4095);
+        servoBiteStart = constrain(sBiteStart, 0, 180);
+        servoBiteEnd   = constrain(sBiteEnd,   0, 180);
+        saveConfiguration();
+        Serial.println("Piecewise zone: hall " + String(hallBiteStart) + "-" + String(hallBiteEnd) +
+                       " -> servo " + String(servoBiteStart) + "-" + String(servoBiteEnd) + "deg");
+    }
+
+    int getHallBiteStart()  const { return hallBiteStart; }
+    int getHallBiteEnd()    const { return hallBiteEnd; }
+    int getServoBiteStart() const { return servoBiteStart; }
+    int getServoBiteEnd()   const { return servoBiteEnd; }
+
     void runTest() {
         Serial.println("=== HALL SENSOR TEST MODE ===");
         Serial.println("Move the hall sensor and observe the response");
@@ -134,15 +164,14 @@ public:
         while (!Serial.available()) {
             int hallValue = analogRead(hallPin);
             
-            // Linear mapping (old way)
             int linearServo = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
+            int curvedServo = (curveType == HALL_PIECEWISE)
+                ? hallToPiecewise(hallValue)
+                : hallToServoNonLinear(hallValue, hallMin, hallMax,
+                                      clutchIdlePos, clutchEngagePos,
+                                      curveType, curveStrength);
 
-            // Non-linear mapping (new way)
-            int curvedServo = hallToServoNonLinear(hallValue, hallMin, hallMax,
-                                                  clutchIdlePos, clutchEngagePos,
-                                                  curveType, curveStrength);
-            
-            Serial.printf("%4d | %3d° | %3d° | %3d°\n", 
+            Serial.printf("%4d | %3d° | %3d° | %3d°\n",
                           hallValue, linearServo, curvedServo, curvedServo);
             
             delay(100);
@@ -174,6 +203,17 @@ public:
     }
     
 private:
+    int hallToPiecewise(int hallValue) {
+        hallValue = constrain(hallValue, hallMin, hallMax);
+        if (hallValue <= hallBiteStart) {
+            return map(hallValue, hallMin, hallBiteStart, clutchIdlePos, servoBiteStart);
+        } else if (hallValue <= hallBiteEnd) {
+            return map(hallValue, hallBiteStart, hallBiteEnd, servoBiteStart, servoBiteEnd);
+        } else {
+            return map(hallValue, hallBiteEnd, hallMax, servoBiteEnd, clutchEngagePos);
+        }
+    }
+
     /**
      * Apply non-linear curve to normalized input (0.0 to 1.0)
      * Returns value from 0.0 to 1.0
@@ -240,6 +280,10 @@ private:
         prefs.putFloat("hallCurveStr", curveStrength);
         prefs.putInt("hallMin", hallMin);
         prefs.putInt("hallMax", hallMax);
+        prefs.putInt("hallBiteStart",  hallBiteStart);
+        prefs.putInt("hallBiteEnd",    hallBiteEnd);
+        prefs.putInt("servoBiteStart", servoBiteStart);
+        prefs.putInt("servoBiteEnd",   servoBiteEnd);
         prefs.end();
         Serial.println("Hall sensor curve configuration saved");
     }
@@ -249,8 +293,12 @@ private:
         prefs.begin("gearbox", true);
         curveType = (HallResponseCurve)prefs.getInt("hallCurveType", HALL_LOGARITHMIC);
         curveStrength = prefs.getFloat("hallCurveStr", 2.0);
-        hallMin = prefs.getInt("hallMin", 780);
-        hallMax = prefs.getInt("hallMax", 4000);
+        hallMin       = prefs.getInt("hallMin",       780);
+        hallMax       = prefs.getInt("hallMax",       3330);
+        hallBiteStart = prefs.getInt("hallBiteStart", 1000);
+        hallBiteEnd   = prefs.getInt("hallBiteEnd",   3000);
+        servoBiteStart= prefs.getInt("servoBiteStart",98);
+        servoBiteEnd  = prefs.getInt("servoBiteEnd",  115);
         prefs.end();
         
         Serial.println("Hall sensor curve configuration loaded:");

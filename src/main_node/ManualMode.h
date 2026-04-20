@@ -162,8 +162,7 @@ private:
         int hallValue = hallSensor->getRawValue();
         
         // Direct mapping: hall sensor directly controls servo position
-        // Map hall range (780-4000) to servo range (0-180)
-        int servoPosition = map(hallValue, 780, 4000, 0, 180);
+        int servoPosition = map(hallValue, hallSensor->getHallMin(), hallSensor->getHallMax(), 0, 180);
         servoPosition = constrain(servoPosition, 0, 180);
         
         // Set servo position directly - no state machine interference
@@ -217,7 +216,7 @@ private:
             // Show manual mode status
             if (hallSensor) {
                 int hallValue = hallSensor->getRawValue();
-                int servoPos = map(hallValue, 780, 4000, 0, 180);
+                int servoPos = map(hallValue, hallSensor->getHallMin(), hallSensor->getHallMax(), 0, 180);
                 servoPos = constrain(servoPos, 0, 180);
                 
                 Serial.println("MANUAL MODE: Hall=" + String(hallValue) +

@@ -8,7 +8,8 @@ enum HallResponseCurve {
   HALL_LOGARITHMIC = 1,
   HALL_EXPONENTIAL = 2,
   HALL_SMOOTH_STEP = 3,
-  HALL_CUSTOM = 4
+  HALL_CUSTOM = 4,
+  HALL_PIECEWISE = 5   // 3-zone map concentrating resolution on the biting zone
 };
 
 #endif

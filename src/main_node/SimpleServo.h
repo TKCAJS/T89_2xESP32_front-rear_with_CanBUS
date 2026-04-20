@@ -16,6 +16,8 @@
 
 class SimpleServo {
     int _pin = -1;
+    int _minAngle = 0;
+    int _maxAngle = 180;
 
 public:
     void attach(int pin) {
@@ -23,9 +25,14 @@ public:
         ledcAttach(pin, SIMPLE_SERVO_FREQ, SIMPLE_SERVO_BITS);
     }
 
+    void setLimits(int minAngle, int maxAngle) {
+        _minAngle = minAngle;
+        _maxAngle = maxAngle;
+    }
+
     void write(int angle) {
         if (_pin < 0) return;
-        angle = constrain(angle, 0, 180);
+        angle = constrain(angle, _minAngle, _maxAngle);
         uint32_t ticks = map(angle, 0, 180, SIMPLE_SERVO_MIN_TICKS, SIMPLE_SERVO_MAX_TICKS);
         ledcWrite(_pin, ticks);
     }

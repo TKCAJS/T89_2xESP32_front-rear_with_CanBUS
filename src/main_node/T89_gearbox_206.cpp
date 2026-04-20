@@ -26,6 +26,10 @@
 #define PIN_WIFI_SWITCH     21   // WiFi toggle switch input (momentary)
 #define PIN_CLUTCH_POSITION 15   // Analog voltage input for clutch position monitoring
 
+// Clutch servo travel limits — physically measured, never exceed these
+#define CLUTCH_SERVO_MIN  42
+#define CLUTCH_SERVO_MAX  137
+
 // Clutch voltage thresholds — calibrated via web interface
 float clutchDisengageV   = 1.8f;  // raw ADC voltage: above this = disengaged, relay safe
 float clutchJustEngagedV = 1.8f;  // raw ADC voltage: rising through this = biting point
@@ -108,7 +112,7 @@ float clutchVoltage = 0.0;
 
 // Hall sensor range mirrors (synced from hallSensor each loop)
 int hallMin = 780;
-int hallMax = 4000;
+int hallMax = 3330;
 
 // WiFi Access Point credentials
 const char* ssid = "T89_Gearbox";
@@ -491,6 +495,7 @@ void setupPins() {
     pinMode(PIN_CLUTCH_POSITION, INPUT);
 
     clutchServo.attach(PIN_CLUTCH_SERVO);
+    clutchServo.setLimits(CLUTCH_SERVO_MIN, CLUTCH_SERVO_MAX);
 
     Serial.println("CAN TX: GPIO" + String(CAN_TX_PIN) + "  RX: GPIO" + String(CAN_RX_PIN));
 }

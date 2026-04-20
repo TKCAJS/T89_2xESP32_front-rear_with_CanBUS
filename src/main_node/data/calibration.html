@@ -282,6 +282,37 @@
                         <button class="btn" onclick="saveHallCalibration()">Save Hall Range</button>
                         <div id="hallSaveResult"></div>
                     </div>
+
+                    <div class="calibration-step" style="margin-top:12px;">
+                        <span class="step-number">4</span>
+                        <strong>Piecewise Biting Zone</strong>
+                        <div style="font-size:12px;color:#aaa;margin:6px 0;">
+                            Hall ADC range assigned to biting zone servo travel
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">
+                            <label style="font-size:12px;">Hall bite start (ADC)<br>
+                                <input id="hBiteStart" type="number" min="0" max="4095" value="1000"
+                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                            </label>
+                            <label style="font-size:12px;">Hall bite end (ADC)<br>
+                                <input id="hBiteEnd" type="number" min="0" max="4095" value="3000"
+                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                            </label>
+                            <label style="font-size:12px;">Servo bite start (°) — just-engaged<br>
+                                <input id="sBiteStart" type="number" min="0" max="180" value="98"
+                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                            </label>
+                            <label style="font-size:12px;">Servo bite end (°) — just-disengaged<br>
+                                <input id="sBiteEnd" type="number" min="0" max="180" value="115"
+                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                            </label>
+                        </div>
+                        <button class="btn" onclick="savePiecewiseZone()">Save Piecewise Zone</button>
+                        <button class="btn btn-secondary" id="activatePiecewiseBtn"
+                                onclick="activatePiecewiseMapping()"
+                                style="margin-left:4px;">Use Piecewise Mapping</button>
+                        <div id="piecewiseSaveResult" style="margin-top:6px;"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -306,11 +337,24 @@
 
             <!-- Servo slider -->
             <h3>Manual Servo Control</h3>
-            <div style="padding:10px 0;">
-                <input type="range" id="servoSlider" min="0" max="180" value="90"
-                       style="width:100%;cursor:pointer;" oninput="onServoSlider(this.value)">
-                <div style="display:flex;justify-content:space-between;font-size:12px;color:#aaa;">
-                    <span>0°</span><span>Servo angle: <strong id="sliderAngle">90</strong>°</span><span>180°</span>
+            <div style="padding:16px 0 8px;">
+                <div style="position:relative; height:36px;">
+                    <!-- coloured track: dead zones grey, active range green -->
+                    <div id="sliderTrack" style="position:absolute;top:50%;transform:translateY(-50%);
+                         width:100%;height:10px;border-radius:5px;pointer-events:none;z-index:0;
+                         background:#555;"></div>
+                    <input type="range" id="servoSlider" min="0" max="180" value="90"
+                           style="position:relative;z-index:1;width:100%;cursor:pointer;
+                                  background:transparent;appearance:none;-webkit-appearance:none;"
+                           oninput="onServoSlider(this.value)">
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px;">
+                    <span style="color:#888;">0° (dead)</span>
+                    <span style="color:#fff;">Servo: <strong id="sliderAngle">90</strong>°</span>
+                    <span style="color:#888;">(dead) 180°</span>
+                </div>
+                <div id="sliderLimitLabel" style="text-align:center;font-size:12px;color:#4CAF50;margin-top:2px;">
+                    Active range: loading...
                 </div>
             </div>
             <div style="margin:8px 0;">
@@ -534,8 +578,10 @@
     </div>
 
     <script>
+        let pendingHallRange = null;  // holds test result, not overwritten by poll
+
         let calibrationData = {
-            hallRange: { min: 780, max: 4000 },
+            hallRange: { min: 780, max: 3330 },
             clutchPositions: { idle: 0, engage: 180 },
             relayTimings: { neutralDown: 40, neutralUp: 40, shiftDown: 150, shiftUp: 150 },
             sensors: { gear: false, speed: false, rpm: false, temp: false }
@@ -571,6 +617,13 @@
                     document.getElementById('hallRaw').textContent = data.hallValue || 'N/A';
                     document.getElementById('hallCurveType').textContent = data.hallCurveName || 'Unknown';
                     document.getElementById('hallCurveStrength').textContent = data.hallCurveStrength || 'N/A';
+                    const btn = document.getElementById('activatePiecewiseBtn');
+                    if (btn && data.hallCurveName === 'Piecewise') {
+                        btn.textContent = 'Piecewise Active'; btn.style.background = '#4CAF50';
+                    } else if (btn) {
+                        btn.textContent = 'Use Piecewise Mapping'; btn.style.background = '';
+                        btn.className = 'btn btn-secondary';
+                    }
 
                     // Calculate servo positions using calibrated range
                     const hallValue = data.hallValue || 0;
@@ -651,8 +704,17 @@
                     // Update calibration data
                     calibrationData.clutchPositions.idle   = config.clutchIdlePos  || 0;
                     calibrationData.clutchPositions.engage = config.clutchEngagePos || 180;
-                    if (config.hallMin != null) calibrationData.hallRange.min = config.hallMin;
-                    if (config.hallMax != null) calibrationData.hallRange.max = config.hallMax;
+                    if (!pendingHallRange) {
+                        if (config.hallMin != null) calibrationData.hallRange.min = config.hallMin;
+                        if (config.hallMax != null) calibrationData.hallRange.max = config.hallMax;
+                    }
+                    if (config.clutchServoMin != null && config.clutchServoMax != null) {
+                        updateSliderTrack(config.clutchServoMin, config.clutchServoMax);
+                    }
+                    if (config.hallBiteStart != null) document.getElementById('hBiteStart').value = config.hallBiteStart;
+                    if (config.hallBiteEnd   != null) document.getElementById('hBiteEnd').value   = config.hallBiteEnd;
+                    if (config.servoBiteStart != null) document.getElementById('sBiteStart').value = config.servoBiteStart;
+                    if (config.servoBiteEnd   != null) document.getElementById('sBiteEnd').value   = config.servoBiteEnd;
                     calibrationData.relayTimings.neutralDown = config.neutralDownMs || 40;
                     calibrationData.relayTimings.neutralUp = config.neutralUpMs || 40;
                     calibrationData.relayTimings.shiftDown = config.shiftDownMs || 150;
@@ -779,9 +841,9 @@
                             const max = Math.max(...samples);
                             const range = max - min;
                             
-                            calibrationData.hallRange = { min, max };
-                            
-                            document.getElementById('hallRangeResults').innerHTML = 
+                            pendingHallRange = { min, max };
+
+                            document.getElementById('hallRangeResults').innerHTML =
                                 `Range test complete!<br>
                                 Min: <span class="value-highlight">${min}</span>, 
                                 Max: <span class="value-highlight">${max}</span>, 
@@ -815,15 +877,21 @@
         }
 
         function saveHallCalibration() {
-            const min = calibrationData.hallRange.min;
-            const max = calibrationData.hallRange.max;
+            if (!pendingHallRange) {
+                document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Run range test first.</span>';
+                return;
+            }
+            const min = pendingHallRange.min;
+            const max = pendingHallRange.max;
             if (min >= max) {
-                document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Run range test first — min must be less than max.</span>';
+                document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Invalid range — min must be less than max.</span>';
                 return;
             }
             fetch('/cmd?action=saveHallRange&min=' + min + '&max=' + max)
                 .then(r => r.text())
                 .then(msg => {
+                    calibrationData.hallRange = { min, max };
+                    pendingHallRange = null;
                     document.getElementById('hallSaveResult').innerHTML = '<span style="color:#4CAF50;">' + msg + '</span>';
                     updateProgress(50, 'Hall sensor range saved');
                     updateCalibrationSummary();
@@ -831,6 +899,22 @@
                 .catch(() => {
                     document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Save failed</span>';
                 });
+        }
+
+        let servoLimitMin = 0, servoLimitMax = 180;
+
+        function updateSliderTrack(min, max) {
+            servoLimitMin = min;
+            servoLimitMax = max;
+            const pMin = (min / 180 * 100).toFixed(1);
+            const pMax = (max / 180 * 100).toFixed(1);
+            document.getElementById('sliderTrack').style.background =
+                `linear-gradient(to right,
+                    #555 0%, #555 ${pMin}%,
+                    #4CAF50 ${pMin}%, #4CAF50 ${pMax}%,
+                    #555 ${pMax}%, #555 100%)`;
+            document.getElementById('sliderLimitLabel').textContent =
+                `Active range: ${min}° – ${max}°  (dead zones: 0°–${min}° and ${max}°–180°)`;
         }
 
         // Servo override toggle
@@ -913,6 +997,53 @@
                 })
                 .catch(() => {
                     document.getElementById('engageSaveResult').innerHTML = '<span style="color:#F44336;">Save failed</span>';
+                });
+        }
+
+        function savePiecewiseZone() {
+            const hBiteStart = parseInt(document.getElementById('hBiteStart').value);
+            const hBiteEnd   = parseInt(document.getElementById('hBiteEnd').value);
+            const sBiteStart = parseInt(document.getElementById('sBiteStart').value);
+            const sBiteEnd   = parseInt(document.getElementById('sBiteEnd').value);
+            if (hBiteStart >= hBiteEnd) {
+                document.getElementById('piecewiseSaveResult').innerHTML =
+                    '<span style="color:#F44336;">Hall bite start must be less than bite end.</span>';
+                return;
+            }
+            if (sBiteStart >= sBiteEnd) {
+                document.getElementById('piecewiseSaveResult').innerHTML =
+                    '<span style="color:#F44336;">Servo bite start must be less than bite end.</span>';
+                return;
+            }
+            fetch('/cmd?action=savePiecewiseZone'
+                + '&hBiteStart=' + hBiteStart
+                + '&hBiteEnd='   + hBiteEnd
+                + '&sBiteStart=' + sBiteStart
+                + '&sBiteEnd='   + sBiteEnd)
+                .then(r => r.text())
+                .then(msg => {
+                    document.getElementById('piecewiseSaveResult').innerHTML =
+                        '<span style="color:#4CAF50;">' + msg + '</span>';
+                })
+                .catch(() => {
+                    document.getElementById('piecewiseSaveResult').innerHTML =
+                        '<span style="color:#F44336;">Save failed</span>';
+                });
+        }
+
+        function activatePiecewiseMapping() {
+            fetch('/cmd?action=setCurveType&type=piecewise')
+                .then(r => r.text())
+                .then(msg => {
+                    document.getElementById('piecewiseSaveResult').innerHTML =
+                        '<span style="color:#4CAF50;">' + msg + '</span>';
+                    const btn = document.getElementById('activatePiecewiseBtn');
+                    btn.textContent = 'Piecewise Active';
+                    btn.style.background = '#4CAF50';
+                })
+                .catch(() => {
+                    document.getElementById('piecewiseSaveResult').innerHTML =
+                        '<span style="color:#F44336;">Activation failed</span>';
                 });
         }
 
