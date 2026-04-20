@@ -16,12 +16,13 @@ private:
     int clutchEngagePos;
     int hallMin;
     int hallMax;
+    bool servoOverride;  // true = slider/web controls servo; hall sensor backs off
     
 public:
     HallSensorControl(int pin) : hallPin(pin), curveType(HALL_LOGARITHMIC),
                                 curveStrength(2.0), clutchServo(nullptr),
                                 clutchIdlePos(0), clutchEngagePos(180),
-                                hallMin(780), hallMax(4000) {}
+                                hallMin(780), hallMax(4000), servoOverride(false) {}
     
     void begin(SimpleServo* servo) {
         clutchServo = servo;
@@ -39,8 +40,11 @@ public:
         clutchEngagePos = engagePos;
     }
     
+    void setServoOverride(bool active) { servoOverride = active; }
+    bool isServoOverride() const { return servoOverride; }
+
     void updateClutchControl(bool isIdle) {
-        // Only control clutch manually when in idle state (not shifting)
+        if (servoOverride) return;  // slider/web has control
         if (!isIdle) return;
         
         int hallValue = analogRead(hallPin);

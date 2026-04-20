@@ -168,6 +168,7 @@ extern String getGearStatusForWeb();
 extern String getHallCurveTypeName();
 extern void saveHallCurveConfig();
 extern void saveHallRangeConfig();
+extern HallSensorControl hallSensor;
 
 // Implementation of web interface methods
 void WebInterface::handleUpdate() {
@@ -267,6 +268,16 @@ void WebInterface::handleCommand() {
         }
         canSendShiftUp(100, 0);
         server->send(200, "text/plain", "Upshift CAN command sent (100ms)");
+        return;
+    } else if (action == "enableServoOverride") {
+        hallSensor.setServoOverride(true);
+        server->send(200, "text/plain", "override:on");
+        Serial.println("Servo override ON — hall sensor paused");
+        return;
+    } else if (action == "disableServoOverride") {
+        hallSensor.setServoOverride(false);
+        server->send(200, "text/plain", "override:off");
+        Serial.println("Servo override OFF — hall sensor active");
         return;
     } else if (action == "setServoPos") {
         int pos = constrain(server->arg("pos").toInt(), 0, 180);
@@ -384,7 +395,8 @@ void WebInterface::handleSensorData() {
     json += "\"currentMph\":0,";
     json += "\"shiftTimingActive\":" + String(shiftLogger.isTimingActive() ? "true" : "false") + ",";
     json += "\"hallCurveName\":\"" + getHallCurveTypeName() + "\",";
-    json += "\"hallCurveStrength\":" + String(hallCurveStrength, 1);
+    json += "\"hallCurveStrength\":" + String(hallCurveStrength, 1) + ",";
+    json += "\"servoOverride\":" + String(hallSensor.isServoOverride() ? "true" : "false");
     json += "}";
     
     server->send(200, "application/json", json);
