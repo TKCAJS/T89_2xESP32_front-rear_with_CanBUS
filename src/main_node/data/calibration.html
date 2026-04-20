@@ -293,6 +293,17 @@
                 <strong>Purpose:</strong> Find exact servo positions and clutch voltage thresholds using live feedback
             </div>
 
+            <!-- Mode toggle -->
+            <div style="margin-bottom:16px;padding:12px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;gap:16px;">
+                <button id="overrideToggle" class="btn btn-secondary" onclick="toggleServoOverride()"
+                        style="min-width:180px;font-size:15px;">
+                    Enable Slider Mode
+                </button>
+                <span id="overrideStatus" style="color:#aaa;font-size:13px;">
+                    Paddle controls servo
+                </span>
+            </div>
+
             <!-- Servo slider -->
             <h3>Manual Servo Control</h3>
             <div style="padding:10px 0;">
@@ -583,6 +594,11 @@
                     document.getElementById('disengVDisplay').textContent = (3.3 - disengV).toFixed(3);
                     document.getElementById('biteVDisplay').textContent   = (3.3 - biteV).toFixed(3);
 
+                    // Sync override toggle state
+                    if (data.servoOverride !== undefined && data.servoOverride !== servoOverrideActive) {
+                        setOverrideUI(data.servoOverride);
+                    }
+
                     // Clutch state labels
                     const stateEl = document.getElementById('clutchStateLabel');
                     const biteEl  = document.getElementById('biteLabel');
@@ -815,6 +831,35 @@
                 .catch(() => {
                     document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Save failed</span>';
                 });
+        }
+
+        // Servo override toggle
+        let servoOverrideActive = false;
+
+        function setOverrideUI(active) {
+            servoOverrideActive = active;
+            const btn = document.getElementById('overrideToggle');
+            const status = document.getElementById('overrideStatus');
+            if (active) {
+                btn.textContent = 'Disable Slider Mode';
+                btn.style.background = '#F44336';
+                status.textContent = 'Slider controls servo — paddle ignored';
+                status.style.color = '#F44336';
+            } else {
+                btn.textContent = 'Enable Slider Mode';
+                btn.style.background = '';
+                btn.className = 'btn btn-secondary';
+                status.textContent = 'Paddle controls servo';
+                status.style.color = '#aaa';
+            }
+        }
+
+        function toggleServoOverride() {
+            const action = servoOverrideActive ? 'disableServoOverride' : 'enableServoOverride';
+            fetch('/cmd?action=' + action)
+                .then(r => r.text())
+                .then(() => setOverrideUI(!servoOverrideActive))
+                .catch(() => {});
         }
 
         // Servo slider
@@ -1182,6 +1227,9 @@ SENSOR STATUS:
         // Cleanup when leaving page
         window.addEventListener('beforeunload', function() {
             stopDataUpdates();
+            if (servoOverrideActive) {
+                navigator.sendBeacon('/cmd?action=disableServoOverride');
+            }
         });
     </script>
 </body>
