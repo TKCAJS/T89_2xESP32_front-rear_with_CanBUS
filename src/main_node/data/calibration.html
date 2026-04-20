@@ -298,11 +298,11 @@
                                 <input id="hBiteEnd" type="number" min="0" max="4095" value="3000"
                                        style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
                             </label>
-                            <label style="font-size:12px;">Servo bite start (°) — just-engaged<br>
+                            <label style="font-size:12px;">Servo bite start (&deg;) &mdash; just-engaged<br>
                                 <input id="sBiteStart" type="number" min="0" max="180" value="98"
                                        style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
                             </label>
-                            <label style="font-size:12px;">Servo bite end (°) — just-disengaged<br>
+                            <label style="font-size:12px;">Servo bite end (&deg;) &mdash; just-disengaged<br>
                                 <input id="sBiteEnd" type="number" min="0" max="180" value="115"
                                        style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
                             </label>
@@ -349,9 +349,9 @@
                            oninput="onServoSlider(this.value)">
                 </div>
                 <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px;">
-                    <span style="color:#888;">0° (dead)</span>
-                    <span style="color:#fff;">Servo: <strong id="sliderAngle">90</strong>°</span>
-                    <span style="color:#888;">(dead) 180°</span>
+                    <span style="color:#888;">0&deg; (dead)</span>
+                    <span style="color:#fff;">Servo: <strong id="sliderAngle">90</strong>&deg;</span>
+                    <span style="color:#888;">(dead) 180&deg;</span>
                 </div>
                 <div id="sliderLimitLabel" style="text-align:center;font-size:12px;color:#4CAF50;margin-top:2px;">
                     Active range: loading...
@@ -884,7 +884,7 @@
             const min = pendingHallRange.min;
             const max = pendingHallRange.max;
             if (min >= max) {
-                document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Invalid range — min must be less than max.</span>';
+                document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Invalid range &mdash; min must be less than max.</span>';
                 return;
             }
             fetch('/cmd?action=saveHallRange&min=' + min + '&max=' + max)
@@ -914,7 +914,7 @@
                     #4CAF50 ${pMin}%, #4CAF50 ${pMax}%,
                     #555 ${pMax}%, #555 100%)`;
             document.getElementById('sliderLimitLabel').textContent =
-                `Active range: ${min}° – ${max}°  (dead zones: 0°–${min}° and ${max}°–180°)`;
+                `Active range: ${min}\u00B0 - ${max}\u00B0  (dead zones: 0\u00B0-${min}\u00B0 and ${max}\u00B0-180\u00B0)`;
         }
 
         // Servo override toggle
@@ -927,7 +927,7 @@
             if (active) {
                 btn.textContent = 'Disable Slider Mode';
                 btn.style.background = '#F44336';
-                status.textContent = 'Slider controls servo — paddle ignored';
+                status.textContent = 'Slider controls servo - paddle ignored';
                 status.style.color = '#F44336';
             } else {
                 btn.textContent = 'Enable Slider Mode';
