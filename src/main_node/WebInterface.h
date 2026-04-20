@@ -339,6 +339,14 @@ void WebInterface::handleCommand() {
         server->send(200, "text/plain", String(clutchJustEngagedV, 3));
         Serial.println("Clutch just-engaged threshold set: " + String(clutchJustEngagedV, 3) + "V");
         return;
+    } else if (action == "setJustEngagedV") {
+        float v = server->arg("v").toFloat();
+        v = constrain(v, 0.0f, 3.3f);
+        clutchJustEngagedV = v;
+        saveConfig();
+        server->send(200, "text/plain", String(v, 3));
+        Serial.println("Clutch just-engaged threshold set manually: " + String(v, 3) + "V");
+        return;
     } else if (action == "testIgnitionCut") {
         // Test ignition cut relay - use the shift logger's method for proper timing
         shiftLogger.startIgnitionCut();
@@ -392,7 +400,7 @@ void WebInterface::handleSensorData() {
     json += "\"wifiEnabled\":" + String(wifiEnabled ? "true" : "false") + ",";
     json += "\"apIP\":\"" + WiFi.softAPIP().toString() + "\",";
     json += "\"hallValue\":" + String(analogRead(PIN_HALL_SENSOR)) + ",";
-    json += "\"clutchVoltage\":" + String(3.3 - clutchVoltage, 2) + ",";
+    json += "\"clutchVoltage\":" + String(clutchVoltage, 3) + ",";
     json += "\"clutchPulled\":" + String(clutchPulled ? "true" : "false") + ",";
     json += "\"shiftSequenceState\":" + String(shiftSequenceState) + ",";
     json += "\"currentGear\":\"" + getGearStatusForWeb() + "\",";

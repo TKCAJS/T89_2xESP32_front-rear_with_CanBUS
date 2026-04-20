@@ -186,41 +186,6 @@
                 margin: 20px 0;
             }
         }
-        .hall-curve-section {
-            background: #3a2a4d;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 5px;
-            border-left: 4px solid #9C27B0;
-        }
-        .curve-info {
-            color: #B39DDB;
-            font-size: 0.9em;
-            margin-top: 8px;
-        }
-        .strength-slider {
-            width: 100%;
-        }
-        .strength-display {
-            color: #9C27B0;
-            font-weight: bold;
-            font-size: 1.1em;
-        }
-        .curve-description {
-            background: #2a2a2a;
-            padding: 10px;
-            border-radius: 3px;
-            margin-top: 10px;
-            font-size: 0.85em;
-            color: #ccc;
-        }
-        .hall-test-btn {
-            background: #9C27B0;
-            margin: 5px;
-        }
-        .hall-test-btn:hover {
-            background: #7B1FA2;
-        }
     </style>
 </head>
 <body>
@@ -298,7 +263,7 @@
         
         <!-- Configuration form -->
         <h3>Configuration</h3>
-        <div class='triple-grid'>
+        <div class='grid'>
             <div>
                 <form onsubmit='updateConfig(event)'>
                     <h4>Gear Control Settings</h4>
@@ -341,28 +306,22 @@
                     Changes take effect immediately
                 </div>
             </div>
-            <div class='hall-curve-section'>
-                <form onsubmit='updateHallCurve(event)'>
-                    <h4>Hall Sensor Response Curve</h4>
-                    <div class='form-group'>
-                        <label>Curve Type:</label>
-                        <select id='hallCurveType'>
-                            <option value='0'>Linear</option>
-                            <option value='1'>Logarithmic</option>
-                            <option value='2'>Exponential</option>
-                            <option value='3'>Smooth Step</option>
-                            <option value='4'>Custom Power</option>
-                        </select>
-                    </div>
-                    <div class='form-group'>
-                        <label>Curve Strength: <span id='strengthDisplay' class='strength-display'>2.0</span></label>
-                        <input type='range' id='hallCurveStrength' class='strength-slider' min='0.1' max='5.0' step='0.1' value='2.0' oninput='updateStrengthDisplay()'>
-                    </div>
-                    <div id='curveDescription' class='curve-description'>Loading...</div>
-                    <div class='curve-info'>Adjust the curve type and strength to customize clutch response</div>
-                    <button type='submit' class='btn hall-test-btn'>Update Hall Curve</button>
-                </form>
+        </div>
+
+        <!-- Downshift trigger threshold -->
+        <h3>Auto-Downshift Trigger</h3>
+        <div style='background:#2a2a4d;padding:15px;border-radius:5px;border-left:4px solid #6B6BFF;max-width:400px;'>
+            <h4>Clutch Bite-Point Voltage</h4>
+            <div class='form-group'>
+                <label>Trigger voltage (raw ADC V):</label>
+                <div id='bitePointDisplay' style='font-size:1.4em;color:#6B6BFF;font-weight:bold;margin:8px 0;'>Loading...</div>
             </div>
+            <div class='form-group'>
+                <label>Set trigger (V):</label>
+                <input type='number' id='bitePointInput' min='0' max='3.3' step='0.001' placeholder='e.g. 1.500'>
+            </div>
+            <button class='btn' onclick='saveDownshiftTrigger()'>Save to Flash</button>
+            <div id='bitePointResult' style='margin-top:8px;color:#aaa;font-size:0.9em;'></div>
         </div>
     </div>
 
@@ -432,25 +391,7 @@
             });
         }
         
-        function getCurveDescription(type, strength) {
-            const descriptions = {
-                '0': 'Linear: Uniform response throughout range',
-                '1': 'Logarithmic: More sensitive initially, gentle at end (recommended for smooth clutch)',
-                '2': 'Exponential: Gentle initially, more sensitive at end',
-                '3': 'Smooth Step: S-curve with rapid transition in middle',
-                '4': 'Custom Power: Configurable power curve (x^strength)'
-            };
-            return descriptions[type] + ' (Strength: ' + strength + ')';
-        }
-        
-        function updateStrengthDisplay() {
-            const strength = document.getElementById('hallCurveStrength').value;
-            document.getElementById('strengthDisplay').textContent = parseFloat(strength).toFixed(1);
-            const curveType = document.getElementById('hallCurveType').value;
-            document.getElementById('curveDescription').textContent = getCurveDescription(curveType, strength);
-        }
-        
-        function updateStatus() {
+function updateStatus() {
             fetch('/sensorData').then(r => r.json()).then(d => {
                 if(lastValues.mph !== d.currentMph) {
                     drawGauge('mphGauge', d.currentMph, 150, 'MPH', '#4CAF50', '');
@@ -489,6 +430,7 @@
                 status += '<br><span class="shift-timing">Shift Timing: ' + (d.shiftTimingActive ? 'ACTIVE' : 'Idle') + '</span>';
                 status += '<br>Hall Curve: ' + d.hallCurveName + ' (' + d.hallCurveStrength + ')';
                 document.getElementById('status').innerHTML = status;
+                document.getElementById('bitePointDisplay').textContent = d.clutchJustEngagedV.toFixed(3) + ' V  (live: ' + d.clutchVoltage + ' V)';
                 
                 let tempStatus = '<div class="temp-reading temp-current">Current: ' + d.currentTemp.toFixed(1) + '°C</div>';
                 tempStatus += '<div class="temp-reading temp-target">Target: ' + d.targetTemp.toFixed(1) + '°C</div>';
@@ -522,9 +464,9 @@
                 document.getElementById('clutchIdlePos').value = d.clutchIdlePos;
                 document.getElementById('clutchEngagePos').value = d.clutchEngagePos;
                 document.getElementById('targetTemperature').value = d.targetTemperature;
-                document.getElementById('hallCurveType').value = d.hallCurveType;
-                document.getElementById('hallCurveStrength').value = d.hallCurveStrength;
-                updateStrengthDisplay();
+                let displayedBiteV = d.clutchJustEngagedV.toFixed(3);
+                document.getElementById('bitePointDisplay').textContent = displayedBiteV + ' V';
+                document.getElementById('bitePointInput').value = displayedBiteV;
             }).catch(e => console.error('Config load error:', e));
         }
         
@@ -552,29 +494,22 @@
             });
         }
         
-        function updateHallCurve(e) {
-            e.preventDefault();
-            let formData = new FormData();
-            formData.append('hallCurveType', document.getElementById('hallCurveType').value);
-            formData.append('hallCurveStrength', document.getElementById('hallCurveStrength').value);
-            
-            fetch('/updateHallCurve', {method: 'POST', body: formData}).then(r => {
-                if(r.ok) {
-                    alert('Hall curve configuration updated!');
-                    updateStatus();
+        function saveDownshiftTrigger() {
+            let displayedV = parseFloat(document.getElementById('bitePointInput').value);
+            if (isNaN(displayedV) || displayedV < 0 || displayedV > 3.3) {
+                document.getElementById('bitePointResult').textContent = 'Invalid value (0.000-3.300 V)';
+                return;
+            }
+            fetch('/cmd?action=setJustEngagedV&v=' + displayedV.toFixed(3)).then(r => {
+                if (r.ok) {
+                    document.getElementById('bitePointDisplay').textContent = displayedV.toFixed(3) + ' V';
+                    document.getElementById('bitePointResult').textContent = 'Saved (' + displayedV.toFixed(3) + ' V)';
                 } else {
-                    alert('Error updating hall curve');
+                    document.getElementById('bitePointResult').textContent = 'Save failed';
                 }
-            }).catch(e => {
-                console.error('Hall curve update error:', e);
-                alert('Error updating hall curve');
-            });
+            }).catch(() => { document.getElementById('bitePointResult').textContent = 'Save error'; });
         }
-        
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('hallCurveType').addEventListener('change', updateStrengthDisplay);
-        });
-        
+
         loadConfig();
         updateStatus();
         updateShiftData();

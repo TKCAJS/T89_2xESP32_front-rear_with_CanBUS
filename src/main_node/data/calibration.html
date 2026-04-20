@@ -254,9 +254,37 @@
                         Calibrated Max: <span id="hallMaxDisplay">Loading...</span>
                     </div>
                     
-                    <div class="gauge-container">
-                        <canvas id="hallGauge" width="200" height="200"></canvas>
-                        <div>Hall Sensor Value</div>
+                    <div style="margin-top:16px;">
+                        <div style="margin-bottom:14px;">
+                            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                                <span style="color:#9C27B0;font-weight:bold;">Hall Raw</span>
+                                <span id="hbarRawVal" style="color:#fff;">--</span>
+                                <span style="color:#888;">/ 4095</span>
+                            </div>
+                            <div style="height:18px;background:#444;border-radius:4px;overflow:hidden;">
+                                <div id="hbarRaw" style="height:100%;background:#9C27B0;width:0%;transition:width 0.15s;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:14px;">
+                            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                                <span style="color:#FF9800;font-weight:bold;">Servo Command</span>
+                                <span id="hbarDegVal" style="color:#fff;">--</span>
+                                <span style="color:#888;">&deg; / 180&deg;</span>
+                            </div>
+                            <div style="height:18px;background:#444;border-radius:4px;overflow:hidden;">
+                                <div id="hbarDeg" style="height:100%;background:#FF9800;width:0%;transition:width 0.15s;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                                <span style="color:#4CAF50;font-weight:bold;">Clutch Voltage</span>
+                                <span id="hbarVoltVal" style="color:#fff;">--</span>
+                                <span style="color:#888;">V / 3.3 V</span>
+                            </div>
+                            <div style="height:18px;background:#444;border-radius:4px;overflow:hidden;">
+                                <div id="hbarVolt" style="height:100%;background:#4CAF50;width:0%;transition:width 0.15s;"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -635,17 +663,15 @@
 
                     // Voltage bar update
                     const rawV = parseFloat(data.clutchVoltage) || 0;
-                    const displayV = (3.3 - rawV).toFixed(3);  // displayed = 3.3 - raw (matches existing UI)
-                    document.getElementById('clutchVoltDisplay').textContent = displayV;
+                    document.getElementById('clutchVoltDisplay').textContent = rawV.toFixed(3);
 
                     const disengV = parseFloat(data.clutchDisengageV) || 1.8;
                     const biteV   = parseFloat(data.clutchJustEngagedV) || 1.8;
-                    // Markers use raw voltage axis (0-3.3)
                     document.getElementById('disengMarker').style.left = ((disengV / 3.3) * 100).toFixed(1) + '%';
                     document.getElementById('biteMarker').style.left   = ((biteV   / 3.3) * 100).toFixed(1) + '%';
                     document.getElementById('voltFill').style.width    = ((rawV    / 3.3) * 100).toFixed(1) + '%';
-                    document.getElementById('disengVDisplay').textContent = (3.3 - disengV).toFixed(3);
-                    document.getElementById('biteVDisplay').textContent   = (3.3 - biteV).toFixed(3);
+                    document.getElementById('disengVDisplay').textContent = disengV.toFixed(3);
+                    document.getElementById('biteVDisplay').textContent   = biteV.toFixed(3);
 
                     // Sync override toggle state
                     if (data.servoOverride !== undefined && data.servoOverride !== servoOverrideActive) {
@@ -679,9 +705,16 @@
                     document.getElementById('engineStatus').textContent = data.engineRunning ? 'RUNNING' : 'STOPPED';
                     document.getElementById('pumpPwm').textContent = data.pumpPwmPercent || '0';
                     
-                    // Update gauges
-                    drawGauge('hallGauge', data.hallValue || 0, 4095, 'Hall', '#9C27B0', '');
-                    drawGauge('clutchGauge', data.servoPosition || 0, 180, 'Position', '#FF9800', '&deg;');
+                    // Update horizontal bar gauges
+                    const hRaw = data.hallValue || 0;
+                    const hDeg = data.servoPosition || 0;
+                    const hVolt = Math.max(0, Math.min(3.3, parseFloat(data.clutchVoltage) || 0));
+                    document.getElementById('hbarRaw').style.width  = (hRaw / 4095 * 100).toFixed(1) + '%';
+                    document.getElementById('hbarDeg').style.width  = (hDeg / 180  * 100).toFixed(1) + '%';
+                    document.getElementById('hbarVolt').style.width = (hVolt / 3.3 * 100).toFixed(1) + '%';
+                    document.getElementById('hbarRawVal').textContent  = hRaw;
+                    document.getElementById('hbarDegVal').textContent  = hDeg;
+                    document.getElementById('hbarVoltVal').textContent = hVolt.toFixed(3);
                     
                     // Update sensor status indicators
                     updateSensorStatusIndicators(data);
