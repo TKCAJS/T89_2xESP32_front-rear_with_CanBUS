@@ -744,10 +744,14 @@
                     if (config.clutchServoMin != null && config.clutchServoMax != null) {
                         updateSliderTrack(config.clutchServoMin, config.clutchServoMax);
                     }
-                    if (config.hallBiteStart != null) document.getElementById('hBiteStart').value = config.hallBiteStart;
-                    if (config.hallBiteEnd   != null) document.getElementById('hBiteEnd').value   = config.hallBiteEnd;
-                    if (config.servoBiteStart != null) document.getElementById('sBiteStart').value = config.servoBiteStart;
-                    if (config.servoBiteEnd   != null) document.getElementById('sBiteEnd').value   = config.servoBiteEnd;
+                    const piecewiseIds = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd'];
+                    const piecewiseFocused = piecewiseIds.some(id => document.activeElement === document.getElementById(id));
+                    if (!piecewiseFocused) {
+                        if (config.hallBiteStart != null) document.getElementById('hBiteStart').value = config.hallBiteStart;
+                        if (config.hallBiteEnd   != null) document.getElementById('hBiteEnd').value   = config.hallBiteEnd;
+                        if (config.servoBiteStart != null) document.getElementById('sBiteStart').value = config.servoBiteStart;
+                        if (config.servoBiteEnd   != null) document.getElementById('sBiteEnd').value   = config.servoBiteEnd;
+                    }
                     calibrationData.relayTimings.neutralDown = config.neutralDownMs || 40;
                     calibrationData.relayTimings.neutralUp = config.neutralUpMs || 40;
                     calibrationData.relayTimings.shiftDown = config.shiftDownMs || 150;
