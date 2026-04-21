@@ -865,37 +865,37 @@
             let sampleCount = 0;
             const maxSamples = 20;
             
+            let testTimeout;
             const testInterval = setInterval(() => {
                 fetch('/sensorData')
                     .then(r => r.json())
                     .then(data => {
                         samples.push(data.hallValue);
                         sampleCount++;
-                        
+
                         if (sampleCount >= maxSamples) {
                             clearInterval(testInterval);
+                            clearTimeout(testTimeout);
                             const min = Math.min(...samples);
                             const max = Math.max(...samples);
                             const range = max - min;
-                            
+
                             pendingHallRange = { min, max };
 
                             document.getElementById('hallRangeResults').innerHTML =
                                 `Range test complete!<br>
-                                Min: <span class="value-highlight">${min}</span>, 
-                                Max: <span class="value-highlight">${max}</span>, 
+                                Min: <span class="value-highlight">${min}</span>,
+                                Max: <span class="value-highlight">${max}</span>,
                                 Range: <span class="value-highlight">${range}</span>`;
-                            
+
                             updateProgress(25, 'Hall sensor range calibrated');
                         }
                     });
             }, 250);
-            
-            setTimeout(() => {
-                if (testInterval) {
-                    clearInterval(testInterval);
-                    document.getElementById('hallRangeResults').innerHTML = 'Test timeout - try again';
-                }
+
+            testTimeout = setTimeout(() => {
+                clearInterval(testInterval);
+                document.getElementById('hallRangeResults').innerHTML = 'Test timeout - try again';
             }, 10000);
         }
 
