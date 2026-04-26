@@ -300,7 +300,17 @@ void GearboxStateMachine::enterIdleState() {
 
 void GearboxStateMachine::enterShiftingState() {
     Serial.println("Starting shift operation: " + getStateName(currentState));
-    
+
+    // Track expected gear so relay completion lands in the right idle state
+    switch (currentState) {
+        case NEUTRAL_DOWN_SHIFTING:       expectedGear = (currentGear == 2) ? 0 : 1; break;
+        case NEUTRAL_UP_SHIFTING:         expectedGear = (currentGear == 1) ? 0 : 2; break;
+        case UPSHIFTING:                  expectedGear = currentGear + 1; break;
+        case DOWNSHIFT_CLUTCH_ENGAGING:
+        case DOWNSHIFT_SHIFTING:          expectedGear = currentGear - 1; break;
+        default:                          expectedGear = currentGear; break;
+    }
+
     // Start shift timing based on state and determine target gear
     if (shiftLogger) {
         uint8_t shiftType = 0; // upshift
@@ -478,7 +488,10 @@ void GearboxStateMachine::updateRelayControl() {
     if (relayActive) {
         if (millis() - relayStartTime >= relayDuration) {
             deactivateShift();
-            processEvent(EVENT_RELAY_FINISHED);
+            // Go directly to expected gear idle state — don't wait for CAN confirmation,
+            // which arrives later and would leave a gap in IDLE_NEUTRAL where the next
+            // shift press triggers WAITING_FOR_CLUTCH instead of a direct shift.
+            transitionToState(getIdleStateForGear(expectedGear));
         }
     }
 }

@@ -435,7 +435,6 @@ void loop() {
             int prev = currentGear;
             currentGear = canGear;
             gearbox.setCurrentGear(currentGear);
-            shiftLogger.onGearChanged(currentGear, prev);
         }
     }
 
