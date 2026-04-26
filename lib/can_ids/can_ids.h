@@ -83,6 +83,7 @@
 #define MSGTYPE_MAIN_SD_STATUS      0x03    // SD card / logging status
 #define MSGTYPE_MAIN_RPM            0x04    // RPM broadcast (~20ms)        data[2:3]=RPM uint16_t LE
 #define MSGTYPE_MAIN_SHIFT_STATUS   0x05    // Shift mode broadcast (1Hz)   data[2]=mode (0=Auto,1=Manual)
+#define MSGTYPE_MAIN_SHIFT_STACK    0x06    // Stacked downshift target      data[2]=targetGear (0=none, 1-6=target)
 // 0x40-0x5F commands TO main node
 #define MSGTYPE_MAIN_CFG_REQ        0x40    // Request config broadcast
 
@@ -212,6 +213,7 @@
 #define CAN_MAIN_SD_STATUS          CAN_ID(CAN_PRIO_INFO,     NODE_MAIN,    MSGTYPE_MAIN_SD_STATUS,     0)
 #define CAN_MAIN_RPM                CAN_ID(CAN_PRIO_HIGH,     NODE_MAIN,    MSGTYPE_MAIN_RPM,           0)
 #define CAN_MAIN_SHIFT_STATUS       CAN_ID(CAN_PRIO_INFO,     NODE_MAIN,    MSGTYPE_MAIN_SHIFT_STATUS,  0)
+#define CAN_MAIN_SHIFT_STACK        CAN_ID(CAN_PRIO_HIGH,     NODE_MAIN,    MSGTYPE_MAIN_SHIFT_STACK,   0)
 #define CAN_MAIN_CFG_REQ            CAN_ID(CAN_PRIO_LOW,      NODE_MAIN,    MSGTYPE_MAIN_CFG_REQ,       0)
 
 // --- DISPLAY NODE ---

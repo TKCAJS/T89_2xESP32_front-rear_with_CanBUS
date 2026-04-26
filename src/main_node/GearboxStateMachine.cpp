@@ -9,6 +9,7 @@
 extern void displayShiftLetter(char letter);
 extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear = GEAR_UNKNOWN);
 extern void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear = GEAR_UNKNOWN);
+extern void canSendShiftStack(uint8_t targetGear);
 
 // Global state machine instance for condition functions
 GearboxStateMachine* g_stateMachine = nullptr;
@@ -137,6 +138,26 @@ void GearboxStateMachine::update() {
 }
 
 bool GearboxStateMachine::processEvent(GearboxEvent event) {
+    // Stacked downshift: capture paddle press during an active downshift sequence
+    if (event == EVENT_SHIFT_DOWN_PRESSED &&
+        (currentState == DOWNSHIFT_CLUTCH_ENGAGING || currentState == DOWNSHIFT_SHIFTING)) {
+        if (targetGear == 0) {
+            targetGear = max(1, expectedGear - 1);  // first queued press
+        } else {
+            targetGear = max(1, targetGear - 1);    // additional presses
+        }
+        canSendShiftStack(targetGear);
+        Serial.println("Stacked downshift queued, target: " + String(targetGear));
+        return true;
+    }
+
+    // Shift up cancels any pending stack
+    if (event == EVENT_SHIFT_UP_PRESSED && targetGear > 0) {
+        targetGear = 0;
+        canSendShiftStack(0);
+        Serial.println("Stacked downshift cancelled by upshift");
+    }
+
     // Special handling for gear change events
     if (event == EVENT_GEAR_CHANGED) {
         GearboxState newIdleState = getIdleStateForGear(currentGear);
@@ -567,10 +588,22 @@ void GearboxStateMachine::setCurrentGear(int gear) {
         
         // Process gear change event to update state if needed
         processEvent(EVENT_GEAR_CHANGED);
-        
+
         // Notify shift logger
         if (shiftLogger) {
             shiftLogger->onGearChanged(gear, oldGear);
+        }
+
+        // Stacked downshift: CAN confirmed the gear — fire next or clear
+        if (targetGear > 0) {
+            if (currentGear > targetGear && isIdleState(currentState)) {
+                Serial.println("Stacked: gear " + String(currentGear) + " confirmed, firing toward " + String(targetGear));
+                processEvent(EVENT_SHIFT_DOWN_PRESSED);
+            } else {
+                // Reached target or shift failed — clear stack
+                targetGear = 0;
+                canSendShiftStack(0);
+            }
         }
     }
 }

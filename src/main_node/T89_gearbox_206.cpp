@@ -165,6 +165,7 @@ void updateCompatibilityVariables();
 // CAN send helpers — called by GearboxStateMachine and ManualMode via extern
 void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear) { mainCan.sendShiftUp(shiftMs, ignCutMs, targetGear); }
 void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear)                  { mainCan.sendShiftDown(shiftMs, targetGear); }
+void canSendShiftStack(uint8_t targetGear)                                   { mainCan.sendShiftStack(targetGear); }
 
 // Legacy functions for WebInterface compatibility
 bool isShiftAllowed() { return gearbox.canAcceptShiftCommand(); }

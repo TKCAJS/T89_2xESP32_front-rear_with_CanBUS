@@ -117,6 +117,7 @@ private:
     // Current gear tracking
     int currentGear;     // 0=N, 1-6=gears — confirmed by CAN
     int expectedGear;    // gear we expect after the current shift relay fires
+    int targetGear;      // stacked downshift target (0 = no stack pending)
     
     // Timeouts - FIXED: Updated constant names to match cpp file
     static const unsigned long STATE_SHIFT_TIMEOUT_MS = 500;
@@ -137,7 +138,7 @@ public:
           pinHallSensor(hallPin),
           relayActive(false), relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
           clutchInterlockEnabled(true), clutchPulled(false),
-          currentGear(0), expectedGear(0) {}
+          currentGear(0), expectedGear(0), targetGear(0) {}
     
     // Initialization
     void begin(ShiftLogger* logger, RPM* rpm, SimpleServo* servo);

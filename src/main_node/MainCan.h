@@ -109,6 +109,20 @@ public:
         }
     }
 
+    void sendShiftStack(uint8_t targetGear) {
+        if (!initialized) return;
+        twai_message_t msg = {};
+        msg.extd             = 1;
+        msg.identifier       = CAN_MAIN_SHIFT_STACK;
+        msg.data_length_code = 8;
+        msg.data[0] = txSeq++;
+        msg.data[1] = NODE_STATUS_OK;
+        msg.data[2] = targetGear;
+        if (twai_transmit(&msg, 0) != ESP_OK) {
+            Serial.println("CAN: sendShiftStack TX failed");
+        }
+    }
+
     void sendShiftStatus(bool manualModeActive) {
         if (!initialized) return;
         twai_message_t msg = {};
