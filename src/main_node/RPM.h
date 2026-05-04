@@ -62,7 +62,7 @@ public:
     void update() {
         unsigned long now = millis();
         if (now - lastCalcTime >= calcInterval) {
-            calculateRpm();
+            calculateRpm(now - lastCalcTime);
             lastCalcTime = now;
         }
 
@@ -93,7 +93,7 @@ public:
     }
 
 private:
-    void calculateRpm() {
+    void calculateRpm(unsigned long elapsedMs) {
         int16_t pulseCount = 0;
         pcnt_get_counter_value(pcntUnit, &pulseCount);
         pcnt_counter_clear(pcntUnit);
@@ -102,7 +102,7 @@ private:
             lastPulseTime = millis();
         }
 
-        float timeMinutes = calcInterval / 60000.0;  // ms to minutes
+        float timeMinutes = elapsedMs / 60000.0f;
         float instantRpm = (pulseCount / timeMinutes) / pulsesPerRevolution;
 
         // Exponential moving average (smoothing)
