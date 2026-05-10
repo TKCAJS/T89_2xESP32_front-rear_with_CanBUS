@@ -16,6 +16,35 @@ private:
     uint8_t _gear;
     bool    _gearValid;
 
+    bool install() {
+        twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
+            (gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
+        twai_timing_config_t  t_config = TWAI_TIMING_CONFIG_500KBITS();
+        twai_filter_config_t  f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+        return twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK &&
+               twai_start() == ESP_OK;
+    }
+
+    void checkAndRecover() {
+        twai_status_info_t info;
+        if (twai_get_status_info(&info) != ESP_OK) return;
+
+        if (info.state == TWAI_STATE_BUS_OFF ||
+            info.state == TWAI_STATE_RECOVERING ||
+            info.state == TWAI_STATE_STOPPED) {
+            Serial.printf("CAN: state=%d — restarting\n", info.state);
+            twai_stop();
+            twai_driver_uninstall();
+            delay(50);
+            if (install()) {
+                Serial.println("CAN: recovery OK");
+            } else {
+                Serial.println("CAN: recovery failed");
+                initialized = false;
+            }
+        }
+    }
+
 public:
     MainCan() : initialized(false), txSeq(0), _gear(GEAR_UNKNOWN), _gearValid(false) {}
 
@@ -37,17 +66,8 @@ public:
     }
 
     bool begin() {
-        twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
-            (gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
-        twai_timing_config_t  t_config = TWAI_TIMING_CONFIG_500KBITS();
-        twai_filter_config_t  f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-        if (twai_driver_install(&g_config, &t_config, &f_config) != ESP_OK) {
-            Serial.println("CAN: driver install failed");
-            return false;
-        }
-        if (twai_start() != ESP_OK) {
-            Serial.println("CAN: start failed");
+        if (!install()) {
+            Serial.println("CAN: init failed");
             return false;
         }
         initialized = true;
@@ -137,9 +157,17 @@ public:
         }
     }
 
-    // Poll for incoming messages — call from loop()
+    // Poll for incoming messages and check bus health — call from loop()
     void poll() {
         if (!initialized) return;
+
+        static unsigned long lastHealthCheck = 0;
+        unsigned long now = millis();
+        if (now - lastHealthCheck >= 1000) {
+            checkAndRecover();
+            lastHealthCheck = now;
+        }
+
         twai_message_t msg;
         while (twai_receive(&msg, 0) == ESP_OK) {
             if (!msg.extd) continue;

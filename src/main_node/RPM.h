@@ -105,6 +105,12 @@ private:
         float timeMinutes = elapsedMs / 60000.0f;
         float instantRpm = (pulseCount / timeMinutes) / pulsesPerRevolution;
 
+        // Reject glitch samples — if RPM drops more than 40% in one window,
+        // likely electrical interference from relay/servo. Skip the sample.
+        if (currentRpm > 500 && instantRpm < currentRpm * 0.6f) {
+            return;
+        }
+
         // Exponential moving average (smoothing)
         currentRpm = (smoothingAlpha * instantRpm) + ((1.0 - smoothingAlpha) * currentRpm);
 

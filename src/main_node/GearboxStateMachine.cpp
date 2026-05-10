@@ -138,9 +138,8 @@ void GearboxStateMachine::update() {
 }
 
 bool GearboxStateMachine::processEvent(GearboxEvent event) {
-    // Stacked downshift: capture paddle press during an active downshift sequence
-    if (event == EVENT_SHIFT_DOWN_PRESSED &&
-        (currentState == DOWNSHIFT_CLUTCH_ENGAGING || currentState == DOWNSHIFT_SHIFTING)) {
+    // Stacked downshift: capture paddle press any time a shift is already in progress
+    if (event == EVENT_SHIFT_DOWN_PRESSED && !isIdleState(currentState)) {
         if (targetGear == 0) {
             targetGear = max(1, expectedGear - 1);  // first queued press
         } else {

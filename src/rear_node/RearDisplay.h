@@ -18,12 +18,14 @@
 #include <Fonts/FreeSans24pt7b.h>
 #include "can_ids.h"
 
-#define DISP_BL_PIN     9   //blk
-#define DISP_MOSI       13  //sda
+
+
 #define DISP_SCLK       14  //scl
+#define DISP_MOSI       13  //sda
 #define DISP_RST        12  //res
 #define DISP_DC         11
 #define DISP_CS         10
+#define DISP_BL_PIN     9   //blk
 
 // Colour definitions (RGB565)
 #define COL_BLACK       0x0000
@@ -66,7 +68,7 @@ public:
         SPI.begin(DISP_SCLK, -1, DISP_MOSI, DISP_CS);
 
         _tft.init(170, 320);
-        _tft.setRotation(0);
+        _tft.setRotation(2);
         _tft.fillScreen(COL_BLACK);
 
         drawStaticLayout();
