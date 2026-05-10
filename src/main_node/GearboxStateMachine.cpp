@@ -150,11 +150,13 @@ bool GearboxStateMachine::processEvent(GearboxEvent event) {
         return true;
     }
 
-    // Shift up cancels any pending stack
-    if (event == EVENT_SHIFT_UP_PRESSED && targetGear > 0) {
+    // Shift up always clears any pending stack
+    if (event == EVENT_SHIFT_UP_PRESSED) {
+        if (targetGear > 0) {
+            Serial.println("Stacked downshift cancelled by upshift");
+        }
         targetGear = 0;
         canSendShiftStack(0);
-        Serial.println("Stacked downshift cancelled by upshift");
     }
 
     // Special handling for gear change events
