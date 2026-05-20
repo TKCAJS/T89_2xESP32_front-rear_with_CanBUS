@@ -35,7 +35,6 @@ private:
             Serial.printf("CAN: state=%d — restarting\n", info.state);
             twai_stop();
             twai_driver_uninstall();
-            delay(50);
             if (install()) {
                 Serial.println("CAN: recovery OK");
             } else {
@@ -90,7 +89,7 @@ public:
         msg.data[5] = (ignCutMs >> 8) & 0xFF;
         msg.data[6] = targetGear;
         msg.data[7] = 0;
-        if (twai_transmit(&msg, pdMS_TO_TICKS(5)) != ESP_OK) {
+        if (twai_transmit(&msg, 0) != ESP_OK) {
             Serial.println("CAN: sendShiftUp TX failed");
         }
     }
@@ -109,7 +108,7 @@ public:
         msg.data[5] = 0;
         msg.data[6] = targetGear;
         msg.data[7] = 0;
-        if (twai_transmit(&msg, pdMS_TO_TICKS(5)) != ESP_OK) {
+        if (twai_transmit(&msg, 0) != ESP_OK) {
             Serial.println("CAN: sendShiftDown TX failed");
         }
     }
