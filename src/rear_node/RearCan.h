@@ -206,6 +206,8 @@ void sendStatus(uint8_t gear, uint8_t rawPins) {
 
 void sendHeartbeat() {
     uint8_t payload[6] = { 0 };
+    payload[0] = SOFTWARE_VERSION & 0xFF;
+    payload[1] = (SOFTWARE_VERSION >> 8) & 0xFF;
     canSend(CAN_HB_REAR, s_seqHeartbeat++, g_nodeStatus, payload, 6);
 }
 

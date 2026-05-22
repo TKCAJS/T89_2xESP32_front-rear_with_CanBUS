@@ -26,6 +26,8 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+
+#define SOFTWARE_VERSION 100  // v1.0.0
 #include "esp_system.h"
 #include "esp_task_wdt.h"
 #include <Adafruit_NeoPixel.h>

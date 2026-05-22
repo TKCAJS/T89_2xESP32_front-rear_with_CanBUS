@@ -8,6 +8,7 @@
 #define CAN_TX_PIN          17
 #define CAN_RX_PIN          18
 #define IGN_CUT_DEFAULT_MS  30
+#define MAIN_NODE_VERSION   211
 
 class MainCan {
 private:
@@ -161,10 +162,24 @@ public:
         if (!initialized) return;
 
         static unsigned long lastHealthCheck = 0;
+        static unsigned long lastHeartbeat   = 0;
         unsigned long now = millis();
         if (now - lastHealthCheck >= 1000) {
             checkAndRecover();
             lastHealthCheck = now;
+        }
+        if (now - lastHeartbeat >= 1000) {
+            twai_message_t hb = {};
+            hb.extd             = 1;
+            hb.identifier       = CAN_HB_MAIN;
+            hb.data_length_code = 8;
+            hb.data[0]          = txSeq++;
+            hb.data[1]          = NODE_STATUS_OK;
+            uint16_t ver        = MAIN_NODE_VERSION;
+            hb.data[2]          = ver & 0xFF;
+            hb.data[3]          = (ver >> 8) & 0xFF;
+            twai_transmit(&hb, 0);
+            lastHeartbeat = now;
         }
 
         twai_message_t msg;
