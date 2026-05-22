@@ -245,7 +245,9 @@
                 <div>
                     <h3>Live Hall Sensor Data</h3>
                     <div class="data-display" id="hallData">
-                        Raw Value: <span id="hallRaw">Loading...</span><br>
+                        Left Paddle: <span id="hallLeft">Loading...</span><br>
+                        Right Paddle: <span id="hallRight">Loading...</span><br>
+                        Paddle (result): <span id="hallRaw">Loading...</span><br>
                         Linear Servo: <span id="hallLinear">Loading...</span>&deg;<br>
                         Curved Servo: <span id="hallCurved">Loading...</span>&deg;<br>
                         Current Curve: <span id="hallCurveType">Loading...</span><br>
@@ -642,7 +644,9 @@
                 .then(r => r.json())
                 .then(data => {
                     // Update hall sensor data
-                    document.getElementById('hallRaw').textContent = data.hallValue || 'N/A';
+                    document.getElementById('hallLeft').textContent  = data.hallLeft  ?? 'N/A';
+                    document.getElementById('hallRight').textContent = data.hallRight ?? 'N/A';
+                    document.getElementById('hallRaw').textContent   = data.hallValue || 'N/A';
                     document.getElementById('hallCurveType').textContent = data.hallCurveName || 'Unknown';
                     document.getElementById('hallCurveStrength').textContent = data.hallCurveStrength || 'N/A';
                     const btn = document.getElementById('activatePiecewiseBtn');

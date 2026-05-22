@@ -6,7 +6,18 @@
 #include "SimpleServo.h"
 #include "HallResponseTypes.h"
 
-#define HALL_PIN_2  4   // second clutch paddle — higher value wins
+#define HALL_PIN_2          4     // second clutch paddle — higher value wins
+#define HALL_PIN_2_RAW_MIN  1000  // raw ADC at fully released
+#define HALL_PIN_2_RAW_MAX  3600  // raw ADC at fully pulled
+#define HALL_PIN_1_MIN       770  // pin 5 reference min (matched scale target)
+#define HALL_PIN_1_MAX      3300  // pin 5 reference max
+
+// Remap pin 4 raw reading onto pin 5's scale so max() is meaningful
+inline int hallPin2Scaled() {
+    int raw = analogRead(HALL_PIN_2);
+    return constrain(map(raw, HALL_PIN_2_RAW_MIN, HALL_PIN_2_RAW_MAX,
+                         HALL_PIN_1_MIN, HALL_PIN_1_MAX), HALL_PIN_1_MIN, HALL_PIN_1_MAX);
+}
 
 class HallSensorControl {
 private:
@@ -57,7 +68,7 @@ public:
         if (servoOverride) return;  // slider/web has control
         if (!isIdle) return;
         
-        int hallValue = max(analogRead(hallPin), analogRead(HALL_PIN_2));
+        int hallValue = max((int)analogRead(hallPin), hallPin2Scaled());
         int servoPos;
 
         if (curveType == HALL_PIECEWISE) {
@@ -72,7 +83,7 @@ public:
     }
     
     int getRawValue() {
-        return max(analogRead(hallPin), analogRead(HALL_PIN_2));
+        return max((int)analogRead(hallPin), hallPin2Scaled());
     }
     
     // Configuration functions
@@ -165,7 +176,7 @@ public:
         Serial.println("Format: Raw | Linear | Curved | Servo");
         
         while (!Serial.available()) {
-            int hallValue = max(analogRead(hallPin), analogRead(HALL_PIN_2));
+            int hallValue = max((int)analogRead(hallPin), hallPin2Scaled());
             
             int linearServo = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
             int curvedServo = (curveType == HALL_PIECEWISE)

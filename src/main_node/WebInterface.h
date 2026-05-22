@@ -399,14 +399,18 @@ void WebInterface::handleSensorData() {
     json += "\"waitingForClutch\":" + String(waitingForClutch ? "true" : "false") + ",";
     json += "\"wifiEnabled\":" + String(wifiEnabled ? "true" : "false") + ",";
     json += "\"apIP\":\"" + WiFi.softAPIP().toString() + "\",";
-    json += "\"hallValue\":" + String(analogRead(PIN_HALL_SENSOR)) + ",";
+    int hallLeft   = analogRead(PIN_HALL_SENSOR);
+    int hallRight  = analogRead(HALL_PIN_2);          // raw — for display only
+    int hallValue  = max(hallLeft, hallPin2Scaled()); // scaled max — drives servo
+    json += "\"hallLeft\":"  + String(hallLeft)  + ",";
+    json += "\"hallRight\":" + String(hallRight) + ",";
+    json += "\"hallValue\":" + String(hallValue) + ",";
     json += "\"clutchVoltage\":" + String(clutchVoltage, 3) + ",";
     json += "\"clutchPulled\":" + String(clutchPulled ? "true" : "false") + ",";
     json += "\"shiftSequenceState\":" + String(shiftSequenceState) + ",";
     json += "\"currentGear\":\"" + getGearStatusForWeb() + "\",";
     json += "\"softwareVersion\":" + String(SOFTWARE_VERSION) + ",";
-    
-    int hallValue = analogRead(PIN_HALL_SENSOR);
+
     int servoPosition = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
     servoPosition = constrain(servoPosition, 0, 180);
     json += "\"servoPosition\":" + String(servoPosition) + ",";
