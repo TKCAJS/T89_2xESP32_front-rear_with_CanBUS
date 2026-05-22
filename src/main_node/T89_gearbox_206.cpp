@@ -1,3 +1,6 @@
+// 210    Stacked downshift, piecewise clutch mapping, dual hall sensor, CAN bus recovery,
+//        RPM glitch protection, matrix startup animation, neutral paddle no-clutch,
+//        non-blocking CAN TX, rear display 180° rotation
 // 207    Removed pcf8575 gear position and relay actuation, replaced with rear node with comms by CANBUS
 // 206    Solved multiple timing issues - still work in progress
 // 205_1  altered downshift to use servo data instead of delays
@@ -14,7 +17,7 @@
 #include <driver/gpio.h>
 
 // Version tracking
-#define SOFTWARE_VERSION 207.0
+#define SOFTWARE_VERSION 210.0
 
 // Pin definitions for ESP32-S3 - FIXED PIN ASSIGNMENTS
 #define PIN_MANUAL_TOGGLE   10   // Switch 1 - Long press to toggle manual mode

@@ -6,6 +6,8 @@
 #include "SimpleServo.h"
 #include "HallResponseTypes.h"
 
+#define HALL_PIN_2  4   // second clutch paddle — higher value wins
+
 class HallSensorControl {
 private:
     int hallPin;
@@ -34,6 +36,7 @@ public:
     void begin(SimpleServo* servo) {
         clutchServo = servo;
         pinMode(hallPin, INPUT);
+        pinMode(HALL_PIN_2, INPUT);
         loadConfiguration();
         
         Serial.println("Hall Sensor Control initialized:");
@@ -54,7 +57,7 @@ public:
         if (servoOverride) return;  // slider/web has control
         if (!isIdle) return;
         
-        int hallValue = analogRead(hallPin);
+        int hallValue = max(analogRead(hallPin), analogRead(HALL_PIN_2));
         int servoPos;
 
         if (curveType == HALL_PIECEWISE) {
@@ -69,7 +72,7 @@ public:
     }
     
     int getRawValue() {
-        return analogRead(hallPin);
+        return max(analogRead(hallPin), analogRead(HALL_PIN_2));
     }
     
     // Configuration functions
@@ -162,7 +165,7 @@ public:
         Serial.println("Format: Raw | Linear | Curved | Servo");
         
         while (!Serial.available()) {
-            int hallValue = analogRead(hallPin);
+            int hallValue = max(analogRead(hallPin), analogRead(HALL_PIN_2));
             
             int linearServo = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
             int curvedServo = (curveType == HALL_PIECEWISE)
