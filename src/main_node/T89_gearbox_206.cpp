@@ -359,7 +359,10 @@ void setup() {
     manualMode.begin(&hallSensor, &clutchServo);
     
     loadConfig();
-    
+
+    // Seed the CalConfig NVS blob from live globals (first boot) or load it.
+    calInit(neutralDownMs, neutralUpMs, shiftUpMs, shiftDownMs, clutchIdlePos, clutchEngagePos);
+
     // Update configurations
     gearbox.setConfiguration(neutralDownMs, neutralUpMs, shiftDownMs, shiftUpMs,
                             clutchIdlePos, clutchEngagePos);

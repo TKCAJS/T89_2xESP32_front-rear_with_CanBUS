@@ -6,18 +6,7 @@
 #include "SimpleServo.h"
 #include "HallResponseTypes.h"
 
-#define HALL_PIN_2          4     // second clutch paddle — higher value wins
-#define HALL_PIN_2_RAW_MIN  1000  // raw ADC at fully released
-#define HALL_PIN_2_RAW_MAX  3600  // raw ADC at fully pulled
-#define HALL_PIN_1_MIN       770  // pin 5 reference min (matched scale target)
-#define HALL_PIN_1_MAX      3300  // pin 5 reference max
-
-// Remap pin 4 raw reading onto pin 5's scale so max() is meaningful
-inline int hallPin2Scaled() {
-    int raw = analogRead(HALL_PIN_2);
-    return constrain(map(raw, HALL_PIN_2_RAW_MIN, HALL_PIN_2_RAW_MAX,
-                         HALL_PIN_1_MIN, HALL_PIN_1_MAX), HALL_PIN_1_MIN, HALL_PIN_1_MAX);
-}
+#define HALL_PIN_2  4  // second clutch paddle (right)
 
 class HallSensorControl {
 private:
@@ -29,6 +18,8 @@ private:
     int clutchEngagePos;
     int hallMin;
     int hallMax;
+    int pin2RawMin;   // pin4 raw ADC at idle (lever released) — calibrated
+    int pin2RawMax;   // pin4 raw ADC at pulled (lever fully in) — calibrated
     bool servoOverride;  // true = slider/web controls servo; hall sensor backs off
     // Piecewise breakpoints
     int hallBiteStart;   // ADC value where biting zone input begins
@@ -40,7 +31,8 @@ public:
     HallSensorControl(int pin) : hallPin(pin), curveType(HALL_LOGARITHMIC),
                                 curveStrength(2.0), clutchServo(nullptr),
                                 clutchIdlePos(0), clutchEngagePos(180),
-                                hallMin(780), hallMax(3330), servoOverride(false),
+                                hallMin(780), hallMax(3330),
+                                pin2RawMin(1000), pin2RawMax(3600), servoOverride(false),
                                 hallBiteStart(1000), hallBiteEnd(3000),
                                 servoBiteStart(98), servoBiteEnd(115) {}
     
@@ -68,7 +60,7 @@ public:
         if (servoOverride) return;  // slider/web has control
         if (!isIdle) return;
         
-        int hallValue = max((int)analogRead(hallPin), hallPin2Scaled());
+        int hallValue = max((int)analogRead(hallPin), pin2Scaled());
         int servoPos;
 
         if (curveType == HALL_PIECEWISE) {
@@ -83,7 +75,7 @@ public:
     }
     
     int getRawValue() {
-        return max((int)analogRead(hallPin), hallPin2Scaled());
+        return max((int)analogRead(hallPin), pin2Scaled());
     }
     
     // Configuration functions
@@ -169,6 +161,17 @@ public:
     int getServoBiteStart() const { return servoBiteStart; }
     int getServoBiteEnd()   const { return servoBiteEnd; }
 
+    // Pin4 (right paddle) getters
+    int getPin2Scaled()  const { return pin2Scaled(); }
+    int getPin2RawMin()  const { return pin2RawMin; }
+    int getPin2RawMax()  const { return pin2RawMax; }
+
+    // One-shot capture: hold paddle in position, click. Saves immediately.
+    String capturePin1Idle()   { hallMin    = analogRead(hallPin);    saveConfiguration(); return String(hallMin); }
+    String capturePin1Pulled() { hallMax    = analogRead(hallPin);    saveConfiguration(); return String(hallMax); }
+    String capturePin2Idle()   { pin2RawMin = analogRead(HALL_PIN_2); saveConfiguration(); return String(pin2RawMin); }
+    String capturePin2Pulled() { pin2RawMax = analogRead(HALL_PIN_2); saveConfiguration(); return String(pin2RawMax); }
+
     void runTest() {
         Serial.println("=== HALL SENSOR TEST MODE ===");
         Serial.println("Move the hall sensor and observe the response");
@@ -176,7 +179,7 @@ public:
         Serial.println("Format: Raw | Linear | Curved | Servo");
         
         while (!Serial.available()) {
-            int hallValue = max((int)analogRead(hallPin), hallPin2Scaled());
+            int hallValue = max((int)analogRead(hallPin), pin2Scaled());
             
             int linearServo = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
             int curvedServo = (curveType == HALL_PIECEWISE)
@@ -217,6 +220,12 @@ public:
     }
     
 private:
+    // Map pin4 raw reading onto pin5's calibrated scale so max() is meaningful.
+    int pin2Scaled() const {
+        int raw = analogRead(HALL_PIN_2);
+        return constrain(map(raw, pin2RawMin, pin2RawMax, hallMin, hallMax), hallMin, hallMax);
+    }
+
     int hallToPiecewise(int hallValue) {
         hallValue = constrain(hallValue, hallMin, hallMax);
         if (hallValue <= hallBiteStart) {
@@ -298,6 +307,8 @@ private:
         prefs.putInt("hallBiteEnd",    hallBiteEnd);
         prefs.putInt("servoBiteStart", servoBiteStart);
         prefs.putInt("servoBiteEnd",   servoBiteEnd);
+        prefs.putInt("pin2RawMin",     pin2RawMin);
+        prefs.putInt("pin2RawMax",     pin2RawMax);
         prefs.end();
         Serial.println("Hall sensor curve configuration saved");
     }
@@ -313,6 +324,8 @@ private:
         hallBiteEnd   = prefs.getInt("hallBiteEnd",   3000);
         servoBiteStart= prefs.getInt("servoBiteStart",98);
         servoBiteEnd  = prefs.getInt("servoBiteEnd",  115);
+        pin2RawMin    = prefs.getInt("pin2RawMin",    1000);
+        pin2RawMax    = prefs.getInt("pin2RawMax",    3600);
         prefs.end();
         
         Serial.println("Hall sensor curve configuration loaded:");

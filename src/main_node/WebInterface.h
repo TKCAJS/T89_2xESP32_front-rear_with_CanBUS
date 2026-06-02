@@ -6,6 +6,7 @@
 #include "HallResponseTypes.h"
 #include "SimpleServo.h"
 #include "MainCan.h"
+#include "CalConfig.h"
 
 class WebInterface {
 private:
@@ -16,6 +17,7 @@ public:
     
     void setupRoutes() {
         server->on("/", HTTP_GET, [this]() { this->handleRoot(); });
+        server->on("/index.html", HTTP_GET, [this]() { this->handleRoot(); });
         server->on("/update", HTTP_POST, [this]() { this->handleUpdate(); });
         server->on("/updateHallCurve", HTTP_POST, [this]() { this->handleHallCurveUpdate(); });
         server->on("/cmd", HTTP_GET, [this]() { this->handleCommand(); });
@@ -25,6 +27,11 @@ public:
         server->on("/shiftLogs", HTTP_GET, [this]() { this->handleShiftLogs(); });
         server->on("/hello", HTTP_GET, [this]() { this->handleHelloPage(); });
         server->on("/calibration", HTTP_GET, [this]() { this->handleCalibrationPage(); });
+        // NVS calibration config API (CalConfig blob, CRC-verified)
+        server->on("/api/config",   HTTP_GET,  [this]() { this->handleApiGetConfig(); });
+        server->on("/api/config",   HTTP_POST, [this]() { this->handleApiPostConfig(); });
+        server->on("/api/defaults", HTTP_POST, [this]() { this->handleApiDefaults(); });
+        server->on("/nvsconfig",    HTTP_GET,  [this]() { this->handleNvsConfigPage(); });
     }
     
     void handleRoot() {
@@ -104,6 +111,11 @@ public:
     void handleConfigData();
     void handleShiftStats();
     void handleShiftLogs();
+    // NVS CalConfig API
+    void handleApiGetConfig();
+    void handleApiPostConfig();
+    void handleApiDefaults();
+    void handleNvsConfigPage();
 };
 
 // Forward declarations for structures
@@ -314,6 +326,18 @@ void WebInterface::handleCommand() {
         hallSensor.setCurveType(type);
         server->send(200, "text/plain", "Curve set: " + hallSensor.getCurveTypeName());
         return;
+    } else if (action == "captureHallLIdle") {
+        server->send(200, "text/plain", hallSensor.capturePin1Idle());
+        return;
+    } else if (action == "captureHallLPulled") {
+        server->send(200, "text/plain", hallSensor.capturePin1Pulled());
+        return;
+    } else if (action == "captureHallRIdle") {
+        server->send(200, "text/plain", hallSensor.capturePin2Idle());
+        return;
+    } else if (action == "captureHallRPulled") {
+        server->send(200, "text/plain", hallSensor.capturePin2Pulled());
+        return;
     } else if (action == "saveHallRange") {
         int min = server->arg("min").toInt();
         int max = server->arg("max").toInt();
@@ -401,7 +425,7 @@ void WebInterface::handleSensorData() {
     json += "\"apIP\":\"" + WiFi.softAPIP().toString() + "\",";
     int hallLeft   = analogRead(PIN_HALL_SENSOR);
     int hallRight  = analogRead(HALL_PIN_2);          // raw — for display only
-    int hallValue  = max(hallLeft, hallPin2Scaled()); // scaled max — drives servo
+    int hallValue  = max(hallLeft, hallSensor.getPin2Scaled()); // scaled max — drives servo
     json += "\"hallLeft\":"  + String(hallLeft)  + ",";
     json += "\"hallRight\":" + String(hallRight) + ",";
     json += "\"hallValue\":" + String(hallValue) + ",";
@@ -448,7 +472,9 @@ void WebInterface::handleConfigData() {
     json += "\"hallBiteStart\":"  + String(hallSensor.getHallBiteStart())  + ",";
     json += "\"hallBiteEnd\":"    + String(hallSensor.getHallBiteEnd())    + ",";
     json += "\"servoBiteStart\":" + String(hallSensor.getServoBiteStart()) + ",";
-    json += "\"servoBiteEnd\":"   + String(hallSensor.getServoBiteEnd());
+    json += "\"servoBiteEnd\":"   + String(hallSensor.getServoBiteEnd())   + ",";
+    json += "\"pin2RawMin\":"     + String(hallSensor.getPin2RawMin())     + ",";
+    json += "\"pin2RawMax\":"     + String(hallSensor.getPin2RawMax());
     json += "}";
     
     server->send(200, "application/json", json);
@@ -460,6 +486,142 @@ void WebInterface::handleShiftStats() {
 
 void WebInterface::handleShiftLogs() {
     server->send(200, "application/json", shiftLogger.getRecentLogs(20));
+}
+
+// ---------------------------------------------------------------------------
+//  NVS CalConfig API handlers
+// ---------------------------------------------------------------------------
+
+// Helper: build and send a CalConfig as JSON, optionally with an HTTP code.
+static void sendCalJson(WebServer *server, const CalConfig &c, int code = 200) {
+    JsonDocument doc;
+    calToJson(c, doc);
+    String out;
+    serializeJson(doc, out);
+    server->send(code, "application/json", out);
+}
+
+// GET /api/config — return the current CalConfig as JSON.
+void WebInterface::handleApiGetConfig() {
+    xSemaphoreTake(gCalMutex, portMAX_DELAY);
+    CalConfig snap = gCalConfig;
+    xSemaphoreGive(gCalMutex);
+    sendCalJson(server, snap);
+}
+
+// POST /api/config — parse JSON body, validate, commit, read back, echo.
+// On success also syncs live globals and calls saveConfig() so the existing
+// "gearbox" NVS namespace stays in step.
+void WebInterface::handleApiPostConfig() {
+    if (!server->hasArg("plain")) {
+        server->send(400, "application/json", "{\"error\":\"empty body\"}");
+        return;
+    }
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, server->arg("plain"));
+    if (err) {
+        server->send(400, "application/json",
+                     String("{\"error\":\"bad json: ") + err.c_str() + "\"}");
+        return;
+    }
+
+    // Work on a copy so the live config is never partially updated.
+    CalConfig candidate;
+    xSemaphoreTake(gCalMutex, portMAX_DELAY);
+    candidate = gCalConfig;
+    xSemaphoreGive(gCalMutex);
+
+    calJsonOverlay(doc, candidate);
+
+    String why = calValidate(candidate);
+    if (why.length()) {
+        server->send(400, "application/json", String("{\"error\":\"") + why + "\"}");
+        return;
+    }
+
+    calSeal(candidate);
+    if (!calNvsWrite(candidate)) {
+        server->send(500, "application/json", "{\"error\":\"nvs write failed\"}");
+        return;
+    }
+
+    // Read back so the response reflects what actually landed on flash.
+    CalConfig stored;
+    if (!calNvsRead(stored)) {
+        server->send(500, "application/json", "{\"error\":\"nvs readback failed\"}");
+        return;
+    }
+
+    // Promote to live globals and persist in the existing "gearbox" namespace too.
+    neutralDownMs   = stored.neutralDownMs;
+    neutralUpMs     = stored.neutralUpMs;
+    shiftUpMs       = stored.shiftUpMs;
+    shiftDownMs     = stored.shiftDownMs;
+    clutchIdlePos   = stored.clutchIdlePos;
+    clutchEngagePos = stored.clutchEngagePos;
+    saveConfig();
+    if (!shiftInProgress && shiftSequenceState == 0) {
+        clutchServo.write(clutchIdlePos);
+    }
+
+    xSemaphoreTake(gCalMutex, portMAX_DELAY);
+    gCalConfig = stored;
+    xSemaphoreGive(gCalMutex);
+
+    sendCalJson(server, stored);
+    Serial.println("CalConfig: saved via /api/config");
+}
+
+// POST /api/defaults — restore factory defaults, commit, echo.
+void WebInterface::handleApiDefaults() {
+    CalConfig def;
+    calLoadDefaults(def);
+    calSeal(def);
+    if (!calNvsWrite(def)) {
+        server->send(500, "application/json", "{\"error\":\"nvs write failed\"}");
+        return;
+    }
+
+    CalConfig stored;
+    if (!calNvsRead(stored)) {
+        server->send(500, "application/json", "{\"error\":\"nvs readback failed\"}");
+        return;
+    }
+
+    neutralDownMs   = stored.neutralDownMs;
+    neutralUpMs     = stored.neutralUpMs;
+    shiftUpMs       = stored.shiftUpMs;
+    shiftDownMs     = stored.shiftDownMs;
+    clutchIdlePos   = stored.clutchIdlePos;
+    clutchEngagePos = stored.clutchEngagePos;
+    saveConfig();
+    if (!shiftInProgress && shiftSequenceState == 0) {
+        clutchServo.write(clutchIdlePos);
+    }
+
+    xSemaphoreTake(gCalMutex, portMAX_DELAY);
+    gCalConfig = stored;
+    xSemaphoreGive(gCalMutex);
+
+    sendCalJson(server, stored);
+    Serial.println("CalConfig: defaults restored via /api/defaults");
+}
+
+// GET /nvsconfig — serve nvsconfig.html from LittleFS.
+// Upload instruction: PlatformIO → "Upload Filesystem Image" (env:main_node)
+void WebInterface::handleNvsConfigPage() {
+    if (LittleFS.exists("/nvsconfig.html")) {
+        File file = LittleFS.open("/nvsconfig.html", "r");
+        if (file) {
+            server->streamFile(file, "text/html");
+            file.close();
+            return;
+        }
+    }
+    server->send(404, "text/plain",
+        "nvsconfig.html not found in LittleFS.\n"
+        "Run PlatformIO 'Upload Filesystem Image' (env: main_node) to upload the data/ folder.");
 }
 
 #endif
