@@ -161,20 +161,6 @@
             text-align: center;
             margin: 20px 0;
         }
-        .nav-buttons {
-            text-align: center;
-            margin: 20px 0;
-            padding: 20px;
-            background: #2a2a2a;
-            border-radius: 8px;
-        }
-        .back-btn {
-            background: #666;
-            margin-right: 20px;
-        }
-        .back-btn:hover {
-            background: #555;
-        }
         .test-active {
             animation: pulse 1s infinite;
         }
@@ -228,8 +214,12 @@
             <p id="progressText">Ready to start calibration</p>
         </div>
 
-        <div class="nav-buttons">
-            <a href="/" class="btn back-btn">&larr; Main Control Panel</a>
+        <div style='display:flex;gap:8px;margin-bottom:16px;'>
+            <a href='/' class='btn' style='background:#2196F3;'>Home</a>
+            <a class='btn' style='background:#FF9800;opacity:0.5;pointer-events:none;'>Calibration</a>
+            <a href='/nvsconfig' class='btn' style='background:#9C27B0;'>NVS Config</a>
+        </div>
+        <div style='margin-bottom:16px;'>
             <button class="btn" onclick="startFullCalibration()">Start Full Calibration</button>
             <button class="btn btn-secondary" onclick="refreshData()">Refresh Data</button>
         </div>
@@ -308,9 +298,8 @@
                     
                     <div class="calibration-step">
                         <span class="step-number">3</span>
-                        <strong>Save Range to Firmware:</strong>
-                        <button class="btn" onclick="saveHallCalibration()">Save Hall Range</button>
-                        <div id="hallSaveResult"></div>
+                        <strong>Save Range:</strong>
+                        Use <a href="/nvsconfig" style="color:#9C27B0;">NVS Config</a> to capture and persist the hall min/max.
                     </div>
 
                     <div class="calibration-step" style="margin-top:12px;">
@@ -443,20 +432,16 @@
                     <div class="calibration-step">
                         <span class="step-number">1</span>
                         <strong>Idle Position</strong> (lever released, clutch fully engaged)<br>
-                        <small style="color:#aaa;">Use slider above, then save.</small><br>
-                        <span style="font-size:13px;">Saved: <strong id="clutchIdle">--</strong>&deg;</span><br>
-                        <button class="btn" style="margin-top:8px;" onclick="saveClutchIdle()">Save Slider Value as Idle</button>
-                        <div id="idleSaveResult" style="margin-top:4px;"></div>
+                        <small style="color:#aaa;">Use slider above to find the angle, then enter it in <a href="/nvsconfig" style="color:#FF9800;">NVS Config</a>.</small><br>
+                        <span style="font-size:13px;">Saved: <strong id="clutchIdle">--</strong>&deg;</span>
                     </div>
                 </div>
                 <div>
                     <div class="calibration-step">
                         <span class="step-number">2</span>
                         <strong>Engage Position</strong> (lever pulled, clutch fully disengaged)<br>
-                        <small style="color:#aaa;">Use slider above, then save.</small><br>
-                        <span style="font-size:13px;">Saved: <strong id="clutchEngage">--</strong>&deg;</span><br>
-                        <button class="btn" style="margin-top:8px;" onclick="saveClutchEngage()">Save Slider Value as Engage</button>
-                        <div id="engageSaveResult" style="margin-top:4px;"></div>
+                        <small style="color:#aaa;">Use slider above to find the angle, then enter it in <a href="/nvsconfig" style="color:#FF9800;">NVS Config</a>.</small><br>
+                        <span style="font-size:13px;">Saved: <strong id="clutchEngage">--</strong>&deg;</span>
                     </div>
                 </div>
             </div>
@@ -608,8 +593,6 @@
     </div>
 
     <script>
-        let pendingHallRange = null;  // holds test result, not overwritten by poll
-
         let calibrationData = {
             hallRange: { min: 780, max: 3330 },
             clutchPositions: { idle: 0, engage: 180 },
@@ -741,10 +724,8 @@
                     // Update calibration data
                     calibrationData.clutchPositions.idle   = config.clutchIdlePos  || 0;
                     calibrationData.clutchPositions.engage = config.clutchEngagePos || 180;
-                    if (!pendingHallRange) {
-                        if (config.hallMin != null) calibrationData.hallRange.min = config.hallMin;
-                        if (config.hallMax != null) calibrationData.hallRange.max = config.hallMax;
-                    }
+                    if (config.hallMin != null) calibrationData.hallRange.min = config.hallMin;
+                    if (config.hallMax != null) calibrationData.hallRange.max = config.hallMax;
                     if (config.clutchServoMin != null && config.clutchServoMax != null) {
                         updateSliderTrack(config.clutchServoMin, config.clutchServoMax);
                     }
@@ -884,8 +865,6 @@
                             const max = Math.max(...samples);
                             const range = max - min;
 
-                            pendingHallRange = { min, max };
-
                             document.getElementById('hallRangeResults').innerHTML =
                                 `Range test complete!<br>
                                 Min: <span class="value-highlight">${min}</span>,
@@ -917,30 +896,6 @@
             }, 2000);
         }
 
-        function saveHallCalibration() {
-            if (!pendingHallRange) {
-                document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Run range test first.</span>';
-                return;
-            }
-            const min = pendingHallRange.min;
-            const max = pendingHallRange.max;
-            if (min >= max) {
-                document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Invalid range &mdash; min must be less than max.</span>';
-                return;
-            }
-            fetch('/cmd?action=saveHallRange&min=' + min + '&max=' + max)
-                .then(r => r.text())
-                .then(msg => {
-                    calibrationData.hallRange = { min, max };
-                    pendingHallRange = null;
-                    document.getElementById('hallSaveResult').innerHTML = '<span style="color:#4CAF50;">' + msg + '</span>';
-                    updateProgress(50, 'Hall sensor range saved');
-                    updateCalibrationSummary();
-                })
-                .catch(() => {
-                    document.getElementById('hallSaveResult').innerHTML = '<span style="color:#F44336;">Save failed</span>';
-                });
-        }
 
         let servoLimitMin = 0, servoLimitMax = 180;
 
@@ -1011,64 +966,57 @@
             fetch('/cmd?action=setServoPos&pos=' + pos).catch(() => {});
         }
 
-        function saveClutchIdle() {
-            const pos = parseInt(document.getElementById('servoSlider').value);
-            fetch('/cmd?action=saveClutchIdle&pos=' + pos)
-                .then(r => r.text())
-                .then(msg => {
-                    calibrationData.clutchPositions.idle = pos;
-                    document.getElementById('clutchIdle').textContent = pos;
-                    document.getElementById('idleSaveResult').innerHTML = '<span style="color:#4CAF50;">' + msg + '</span>';
-                    updateProgress(60, 'Clutch idle position saved');
-                })
-                .catch(() => {
-                    document.getElementById('idleSaveResult').innerHTML = '<span style="color:#F44336;">Save failed</span>';
-                });
-        }
-
-        function saveClutchEngage() {
-            const pos = parseInt(document.getElementById('servoSlider').value);
-            fetch('/cmd?action=saveClutchEngage&pos=' + pos)
-                .then(r => r.text())
-                .then(msg => {
-                    calibrationData.clutchPositions.engage = pos;
-                    document.getElementById('clutchEngage').textContent = pos;
-                    document.getElementById('engageSaveResult').innerHTML = '<span style="color:#4CAF50;">' + msg + '</span>';
-                    updateProgress(70, 'Clutch engage position saved');
-                })
-                .catch(() => {
-                    document.getElementById('engageSaveResult').innerHTML = '<span style="color:#F44336;">Save failed</span>';
-                });
-        }
 
         function savePiecewiseZone() {
-            const hBiteStart = parseInt(document.getElementById('hBiteStart').value);
-            const hBiteEnd   = parseInt(document.getElementById('hBiteEnd').value);
-            const sBiteStart = parseInt(document.getElementById('sBiteStart').value);
-            const sBiteEnd   = parseInt(document.getElementById('sBiteEnd').value);
+            const ids = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd'];
+            const [hBiteStart, hBiteEnd, sBiteStart, sBiteEnd] =
+                ids.map(id => parseInt(document.getElementById(id).value));
+            const resultEl = document.getElementById('piecewiseSaveResult');
+
+            // Clear previous invalid state
+            ids.forEach(id => document.getElementById(id).style.borderColor = '#555');
+
+            const hallOk  = v => !isNaN(v) && v >= 0 && v <= 4095;
+            const servoOk = v => !isNaN(v) && v >= 0 && v <= 180;
+            const errors = [];
+            if (!hallOk(hBiteStart))  { errors.push('hBiteStart'); document.getElementById('hBiteStart').style.borderColor = '#F44336'; }
+            if (!hallOk(hBiteEnd))    { errors.push('hBiteEnd');   document.getElementById('hBiteEnd').style.borderColor   = '#F44336'; }
+            if (!servoOk(sBiteStart)) { errors.push('sBiteStart'); document.getElementById('sBiteStart').style.borderColor = '#F44336'; }
+            if (!servoOk(sBiteEnd))   { errors.push('sBiteEnd');   document.getElementById('sBiteEnd').style.borderColor   = '#F44336'; }
+            if (errors.length) {
+                resultEl.innerHTML = '<span style="color:#F44336;">Out of bounds — Hall: 0–4095, Servo: 0–180.</span>';
+                return;
+            }
             if (hBiteStart >= hBiteEnd) {
-                document.getElementById('piecewiseSaveResult').innerHTML =
-                    '<span style="color:#F44336;">Hall bite start must be less than bite end.</span>';
+                resultEl.innerHTML = '<span style="color:#F44336;">Hall bite start must be less than bite end.</span>';
                 return;
             }
             if (sBiteStart >= sBiteEnd) {
-                document.getElementById('piecewiseSaveResult').innerHTML =
-                    '<span style="color:#F44336;">Servo bite start must be less than bite end.</span>';
+                resultEl.innerHTML = '<span style="color:#F44336;">Servo bite start must be less than bite end.</span>';
                 return;
             }
+
+            resultEl.innerHTML = '<span style="color:#aaa;">Saving...</span>';
             fetch('/cmd?action=savePiecewiseZone'
                 + '&hBiteStart=' + hBiteStart
                 + '&hBiteEnd='   + hBiteEnd
                 + '&sBiteStart=' + sBiteStart
                 + '&sBiteEnd='   + sBiteEnd)
-                .then(r => r.text())
-                .then(msg => {
-                    document.getElementById('piecewiseSaveResult').innerHTML =
-                        '<span style="color:#4CAF50;">' + msg + '</span>';
+                .then(r => { if (!r.ok) throw new Error('rejected'); return r.text(); })
+                .then(() => fetch('/configData'))
+                .then(r => r.json())
+                .then(cfg => {
+                    if (cfg.hallBiteStart === hBiteStart &&
+                        cfg.hallBiteEnd   === hBiteEnd   &&
+                        cfg.servoBiteStart === sBiteStart &&
+                        cfg.servoBiteEnd   === sBiteEnd) {
+                        resultEl.innerHTML = '<span style="color:#4CAF50;">Saved — confirmed from read-back.</span>';
+                    } else {
+                        resultEl.innerHTML = '<span style="color:#FF9800;">Sent but read-back mismatch — check firmware.</span>';
+                    }
                 })
                 .catch(() => {
-                    document.getElementById('piecewiseSaveResult').innerHTML =
-                        '<span style="color:#F44336;">Save failed</span>';
+                    resultEl.innerHTML = '<span style="color:#F44336;">Save failed or network error.</span>';
                 });
         }
 

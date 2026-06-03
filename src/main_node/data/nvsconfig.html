@@ -10,9 +10,6 @@
         .container { max-width: 620px; margin: 0 auto; }
         h1 { margin: 0 0 4px; font-size: 1.4em; color: white; }
         .subtitle { color: #888; font-size: 0.85em; margin: 0 0 20px; }
-        .nav { margin-bottom: 18px; }
-        .back { color: #aaa; text-decoration: none; font-size: 13px; }
-        .back:hover { color: white; }
         .card {
             background: #2a2a2a;
             padding: 20px;
@@ -69,7 +66,11 @@
 </head>
 <body>
 <div class="container">
-    <div class="nav"><a href="/" class="back">&larr; Main Panel</a></div>
+    <div style='display:flex;gap:8px;margin-bottom:16px;'>
+        <a href='/' class='btn' style='background:#2196F3;'>Home</a>
+        <a href='/calibration' class='btn' style='background:#FF9800;'>Calibration</a>
+        <a class='btn' style='background:#9C27B0;opacity:0.5;pointer-events:none;'>NVS Config</a>
+    </div>
     <h1>T89 NVS Config</h1>
     <p class="subtitle">
         Calibration values stored as a CRC-verified blob in NVS flash.<br>
