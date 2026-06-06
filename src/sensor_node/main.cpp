@@ -92,8 +92,7 @@ void setup() {
     Serial.begin(115200);
 
     // Display (SPI2: PB13=CLK, PB15=DIN, CS=PB12, DC=PC6, RST=PC7)
-    SPI_2.begin();
-    tft.initR(INITR_BLACKTAB);
+    tft.initR(INITR_REDTAB);
     tft.setRotation(1);
     tft.fillScreen(ST7735_BLACK);
     tft.setTextColor(ST7735_WHITE);
