@@ -66,7 +66,7 @@ same safe state.
 
 | Peripheral | Notes |
 |------------|-------|
-| ST7735 128×160 TFT (SPI2) | DIN=PB15, CLK=PB13, CS=PB12, DC=PC6, RST=PC7, BL→3.3 V (always on). Init: INITR_REDTAB |
+| ST7735 128×160 TFT (SPI2) | DIN=PB15, CLK=PB13, CS=PB12, DC=PC6, RST=PC7, BL→3.3 V (always on). Init: INITR_REDTAB, patchOffset(0,1), setRotation(0) → 128×160 portrait, clean edges. Module rotated 90° on mount for preferred orientation. |
 | Dallas DS18B20 (OneWire) | Single GPIO, bit-bang |
 | Oil pressure sensor | ADC input |
 | Throttle position sensor (TPS) | ADC input |

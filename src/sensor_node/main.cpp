@@ -7,14 +7,29 @@
 #include "can_ids.h"
 
 // ── Display (ST7735 128×160, SPI2) ────────────────────────────────────────────
-// Module pins: RST, CS, DC, DIN, CLK, VCC(3.3V), BL(3.3V tied), GND
-// BL is wired directly to 3.3 V — always on, no GPIO needed.
-#define TFT_CS   PB12   // CS
-#define TFT_DC   PC6    // DC
-#define TFT_RST  PC7    // RST
+// Module pins: RST=PC7, CS=PB12, DC=PC6, DIN=PB15, CLK=PB13, VCC=3.3V, BL=3.3V, GND
+// Confirmed working: INITR_REDTAB, patchOffset(0,1), setRotation(3) → 160×128 landscape
+#define TFT_CS   PB12
+#define TFT_DC   PC6
+#define TFT_RST  PC7
+
+// INITR_REDTAB == INITR_144GREENTAB == 0x01 causes setRotation to set _width=128.
+// Override fixes dimensions. patchOffset exposes protected setColRowStart() to
+// shift the panel window (rowstart=1 eliminates edge garbage in this module).
+class ST7735Patched : public Adafruit_ST7735 {
+public:
+    ST7735Patched(SPIClass *spi, int8_t cs, int8_t dc, int8_t rst)
+        : Adafruit_ST7735(spi, cs, dc, rst) {}
+    void patchOffset(int8_t col, int8_t row) { setColRowStart(col, row); }
+    void setRotation(uint8_t m) override {
+        Adafruit_ST7735::setRotation(m);
+        if (m & 1) { _width = 160; _height = 128; }
+        else        { _width = 128; _height = 160; }
+    }
+};
 
 SPIClass SPI_2(PB15, PB14, PB13);   // MOSI=DIN, MISO(NC), SCK=CLK
-Adafruit_ST7735 tft = Adafruit_ST7735(&SPI_2, TFT_CS, TFT_DC, TFT_RST);
+ST7735Patched tft(&SPI_2, TFT_CS, TFT_DC, TFT_RST);
 
 // ── One-wire / Dallas temperature ─────────────────────────────────────────────
 // TODO: assign final pin
@@ -24,7 +39,7 @@ OneWire oneWire(ONEWIRE_PIN);
 DallasTemperature dallas(&oneWire);
 
 // ── Analogue inputs ───────────────────────────────────────────────────────────
-// TODO: assign final ADC pins (avoid PA4-PA7 SPI1, reserved board pins)
+// TODO: assign final ADC pins
 #define PIN_OIL_PRESSURE  PC1
 #define PIN_TPS           PC2
 #define PIN_FUEL_1        PC3
@@ -33,7 +48,7 @@ DallasTemperature dallas(&oneWire);
 
 // ── Pump PWM (via MOSFET, 12 V) ───────────────────────────────────────────────
 // Hardware pull-down on gate holds it LOW from power-on through the boot window.
-#define PIN_PUMP_PWM  PB0   // TIM3_CH3, 3.3 V PWM into MOSFET board
+#define PIN_PUMP_PWM  PB0   // TIM3_CH3
 
 // ── State ─────────────────────────────────────────────────────────────────────
 static float   g_oilPressure = 0.0f;
@@ -48,7 +63,6 @@ static uint8_t g_pumpDuty    = 0;
 // GPIO init — blanket analog pass FIRST, peripheral configs follow in setup()
 // ─────────────────────────────────────────────────────────────────────────────
 static void gpio_blanket_init() {
-    // Step 1: enable all GPIO port clocks
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -58,8 +72,6 @@ static void gpio_blanket_init() {
     __HAL_RCC_GPIOG_CLK_ENABLE();
     __HAL_RCC_GPIOH_CLK_ENABLE();
 
-    // Step 2: set every pin to analog/no-pull (lowest power, best EMI)
-    // Step 3: exclude PA13 (SWDIO) and PA14 (SWCLK) to preserve SWD
     GPIO_InitTypeDef cfg = {};
     cfg.Mode = GPIO_MODE_ANALOG;
     cfg.Pull = GPIO_NOPULL;
@@ -75,40 +87,33 @@ static void gpio_blanket_init() {
     HAL_GPIO_Init(GPIOF, &cfg);
     HAL_GPIO_Init(GPIOG, &cfg);
     HAL_GPIO_Init(GPIOH, &cfg);
-
-    // Step 4: peripheral pin configuration happens in setup() via library inits,
-    // which override the analog blanket on their specific pins only.
 }
 
 void setup() {
-    // Blanket pass must be first — before any peripheral or library init
     gpio_blanket_init();
 
-    // Pump to safe state immediately (hardware pull-down already holds gate low)
     pinMode(PIN_PUMP_PWM, OUTPUT);
     analogWrite(PIN_PUMP_PWM, 0);
 
-    // Debug UART (USART1, PA9/PA10)
     Serial.begin(115200);
 
-    // Display (SPI2: PB13=CLK, PB15=DIN, CS=PB12, DC=PC6, RST=PC7)
+    // Display
     tft.initR(INITR_REDTAB);
-    tft.setRotation(1);
+    tft.patchOffset(0, 1);  // rowstart=1 for this module's panel window
+    tft.setRotation(0);     // portrait 128×160 — clean edges, rotate module 90° on mount
     tft.fillScreen(ST7735_BLACK);
     tft.setTextColor(ST7735_WHITE);
-    tft.setTextSize(1);
+    tft.setTextSize(2);
     tft.setCursor(0, 0);
     tft.println("Sensor Node");
     tft.println("Init OK");
 
-    // Dallas one-wire temperature
     dallas.begin();
 
-    // TODO: initialise FDCAN1 at 500 Kbps, 29-bit extended frames (PB7 TX, PB8 RX)
+    // TODO: initialise FDCAN1 at 500 Kbps, 29-bit extended frames (PB7=TX, PB8=RX)
 }
 
 void loop() {
-    // ── Read analogue sensors ─────────────────────────────────────────────────
     g_oilPressure = analogRead(PIN_OIL_PRESSURE);
     g_tps         = analogRead(PIN_TPS);
     g_fuel1       = analogRead(PIN_FUEL_1);
@@ -118,16 +123,11 @@ void loop() {
     dallas.requestTemperatures();
     g_dallasTemp = dallas.getTempCByIndex(0);
 
-    // ── Pump PWM ──────────────────────────────────────────────────────────────
-    // TODO: closed-loop control based on temperature
     analogWrite(PIN_PUMP_PWM, g_pumpDuty);
 
-    // ── CAN broadcast ─────────────────────────────────────────────────────────
-    // TODO: send CAN frames using IDs from can_ids.h:
-    //   CAN_SENS_OIL_PRESSURE, CAN_SENS_WATER_TEMP, CAN_SENS_TPS,
-    //   CAN_SENS_SPEED, CAN_SENS_FUEL_1, CAN_SENS_FUEL_2
+    // TODO: send CAN frames — CAN_SENS_OIL_PRESSURE, CAN_SENS_WATER_TEMP,
+    //       CAN_SENS_TPS, CAN_SENS_SPEED, CAN_SENS_FUEL_1, CAN_SENS_FUEL_2
 
-    // ── Update display ────────────────────────────────────────────────────────
     // TODO: render live sensor readings to ST7735
 
     delay(50);
