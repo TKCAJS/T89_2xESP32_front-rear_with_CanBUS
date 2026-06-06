@@ -7,12 +7,14 @@
 #include "can_ids.h"
 
 // ── Display (ST7735 128×160, SPI2) ────────────────────────────────────────────
-// TODO: assign final SPI2 pins once PCB layout is finalised (avoid SPI1 PA4-PA7)
-#define TFT_CS   PB12
-#define TFT_DC   PB13
-#define TFT_RST  PB14
+// Module pins: RST, CS, DC, DIN, CLK, VCC(3.3V), BL(3.3V tied), GND
+// BL is wired directly to 3.3 V — always on, no GPIO needed.
+#define TFT_CS   PB12   // CS
+#define TFT_DC   PC6    // DC
+#define TFT_RST  PC7    // RST
 
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+SPIClass SPI_2(PB15, PB14, PB13);   // MOSI=DIN, MISO(NC), SCK=CLK
+Adafruit_ST7735 tft = Adafruit_ST7735(&SPI_2, TFT_CS, TFT_DC, TFT_RST);
 
 // ── One-wire / Dallas temperature ─────────────────────────────────────────────
 // TODO: assign final pin
@@ -31,8 +33,7 @@ DallasTemperature dallas(&oneWire);
 
 // ── Pump PWM (via MOSFET, 12 V) ───────────────────────────────────────────────
 // Hardware pull-down on gate holds it LOW from power-on through the boot window.
-// TODO: assign a TIMx-capable pin
-#define PIN_PUMP_PWM  PB0
+#define PIN_PUMP_PWM  PB0   // TIM3_CH3, 3.3 V PWM into MOSFET board
 
 // ── State ─────────────────────────────────────────────────────────────────────
 static float   g_oilPressure = 0.0f;
@@ -90,7 +91,8 @@ void setup() {
     // Debug UART (USART1, PA9/PA10)
     Serial.begin(115200);
 
-    // Display
+    // Display (SPI2: PB13=CLK, PB15=DIN, CS=PB12, DC=PC6, RST=PC7)
+    SPI_2.begin();
     tft.initR(INITR_BLACKTAB);
     tft.setRotation(1);
     tft.fillScreen(ST7735_BLACK);
