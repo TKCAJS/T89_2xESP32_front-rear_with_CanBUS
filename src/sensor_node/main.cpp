@@ -63,10 +63,10 @@ static void gpio_blanket_init() {
     cfg.Mode = GPIO_MODE_ANALOG;
     cfg.Pull = GPIO_NOPULL;
 
-    cfg.Pin = GPIO_PIN_All & ~(GPIO_PIN_13 | GPIO_PIN_14);
+    cfg.Pin = GPIO_PIN_ALL & ~(GPIO_PIN_13 | GPIO_PIN_14);
     HAL_GPIO_Init(GPIOA, &cfg);
 
-    cfg.Pin = GPIO_PIN_All;
+    cfg.Pin = GPIO_PIN_ALL;
     HAL_GPIO_Init(GPIOB, &cfg);
     HAL_GPIO_Init(GPIOC, &cfg);
     HAL_GPIO_Init(GPIOD, &cfg);
