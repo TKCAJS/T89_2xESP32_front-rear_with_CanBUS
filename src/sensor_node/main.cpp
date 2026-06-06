@@ -1,35 +1,11 @@
+#define SOFTWARE_VERSION  100   // v1.0.0
+
 #include <Arduino.h>
-#include <SPI.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7735.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include "can_ids.h"
-
-// ── Display (ST7735 128×160, SPI2) ────────────────────────────────────────────
-// Module pins: RST=PC7, CS=PB12, DC=PC6, DIN=PB15, CLK=PB13, VCC=3.3V, BL=3.3V, GND
-// Confirmed working: INITR_REDTAB, patchOffset(0,1), setRotation(3) → 160×128 landscape
-#define TFT_CS   PB12
-#define TFT_DC   PC6
-#define TFT_RST  PC7
-
-// INITR_REDTAB == INITR_144GREENTAB == 0x01 causes setRotation to set _width=128.
-// Override fixes dimensions. patchOffset exposes protected setColRowStart() to
-// shift the panel window (rowstart=1 eliminates edge garbage in this module).
-class ST7735Patched : public Adafruit_ST7735 {
-public:
-    ST7735Patched(SPIClass *spi, int8_t cs, int8_t dc, int8_t rst)
-        : Adafruit_ST7735(spi, cs, dc, rst) {}
-    void patchOffset(int8_t col, int8_t row) { setColRowStart(col, row); }
-    void setRotation(uint8_t m) override {
-        Adafruit_ST7735::setRotation(m);
-        if (m & 1) { _width = 160; _height = 128; }
-        else        { _width = 128; _height = 160; }
-    }
-};
-
-SPIClass SPI_2(PB15, PB14, PB13);   // MOSI=DIN, MISO(NC), SCK=CLK
-ST7735Patched tft(&SPI_2, TFT_CS, TFT_DC, TFT_RST);
+#include "SensorDisplay.h"
+#include "SensorCan.h"
 
 // ── One-wire / Dallas temperature ─────────────────────────────────────────────
 // TODO: assign final pin
@@ -50,14 +26,32 @@ DallasTemperature dallas(&oneWire);
 // Hardware pull-down on gate holds it LOW from power-on through the boot window.
 #define PIN_PUMP_PWM  PB0   // TIM3_CH3
 
-// ── State ─────────────────────────────────────────────────────────────────────
-static float   g_oilPressure = 0.0f;
-static float   g_tps         = 0.0f;
-static float   g_fuel1       = 0.0f;
-static float   g_fuel2       = 0.0f;
-static float   g_waterTempC  = 0.0f;
-static float   g_dallasTemp  = 0.0f;
-static uint8_t g_pumpDuty    = 0;
+// ── Shared state (extern'd by SensorCan.h) ────────────────────────────────────
+uint8_t   g_nodeStatus = NODE_STATUS_OK;
+bool      g_canReady   = false;
+CanHealth g_canHealth  = CAN_HEALTH_FAULT;
+uint8_t   g_pumpDuty   = 0;
+
+// ── Sensor readings ───────────────────────────────────────────────────────────
+static float g_oilPressure = 0.0f;
+static float g_tps         = 0.0f;
+static float g_fuel1       = 0.0f;
+static float g_fuel2       = 0.0f;
+static float g_waterTempC  = 0.0f;
+static float g_dallasTemp  = 0.0f;
+
+// ── Timing ────────────────────────────────────────────────────────────────────
+static uint32_t g_lastSensorRead  = 0;
+static uint32_t g_lastSensorTx    = 0;
+static uint32_t g_lastCanHealth   = 0;
+static uint32_t g_lastStatusTx    = 0;
+static uint32_t g_lastDallasReq   = 0;
+
+#define SENSOR_READ_MS    50
+#define SENSOR_TX_MS     100
+#define CAN_HEALTH_MS    500
+#define STATUS_TX_MS    1000
+#define DALLAS_PERIOD_MS 1000   // request once per second
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GPIO init — blanket analog pass FIRST, peripheral configs follow in setup()
@@ -96,39 +90,77 @@ void setup() {
     analogWrite(PIN_PUMP_PWM, 0);
 
     Serial.begin(115200);
+    delay(500);
+    Serial.println("[SENSOR NODE] v" + String(SOFTWARE_VERSION) + " Booting...");
 
-    // Display
-    tft.initR(INITR_REDTAB);
-    tft.patchOffset(0, 1);  // rowstart=1 for this module's panel window
-    tft.setRotation(0);     // portrait 128×160 — clean edges, rotate module 90° on mount
-    tft.fillScreen(ST7735_BLACK);
-    tft.setTextColor(ST7735_WHITE);
-    tft.setTextSize(2);
-    tft.setCursor(0, 0);
-    tft.println("Sensor Node");
-    tft.println("Init OK");
+    displayBegin();
+    displayUpdate(0, 0, 0, 0, 0, 0, 0, CAN_HEALTH_FAULT);
 
+    g_canReady = canInit();
+    if (!g_canReady) {
+        g_canHealth   = CAN_HEALTH_FAULT;
+        g_nodeStatus |= NODE_STATUS_CAN_ERR;
+        Serial.println("[SENSOR NODE] WARNING: CAN init failed");
+    }
+
+    dallas.setWaitForConversion(false);
     dallas.begin();
+    dallas.requestTemperatures();
+    g_lastDallasReq = millis();
 
-    // TODO: initialise FDCAN1 at 500 Kbps, 29-bit extended frames (PB7=TX, PB8=RX)
+    Serial.println("[SENSOR NODE] Ready");
 }
 
 void loop() {
-    g_oilPressure = analogRead(PIN_OIL_PRESSURE);
-    g_tps         = analogRead(PIN_TPS);
-    g_fuel1       = analogRead(PIN_FUEL_1);
-    g_fuel2       = analogRead(PIN_FUEL_2);
-    g_waterTempC  = analogRead(PIN_WATER_TEMP);
+    uint32_t now = millis();
 
-    dallas.requestTemperatures();
-    g_dallasTemp = dallas.getTempCByIndex(0);
+    // ── Read sensors ──────────────────────────────────────────────────────────
+    if (now - g_lastSensorRead >= SENSOR_READ_MS) {
+        g_lastSensorRead = now;
 
-    analogWrite(PIN_PUMP_PWM, g_pumpDuty);
+        g_oilPressure = analogRead(PIN_OIL_PRESSURE);
+        g_tps         = analogRead(PIN_TPS);
+        g_fuel1       = analogRead(PIN_FUEL_1);
+        g_fuel2       = analogRead(PIN_FUEL_2);
+        g_waterTempC  = analogRead(PIN_WATER_TEMP);
 
-    // TODO: send CAN frames — CAN_SENS_OIL_PRESSURE, CAN_SENS_WATER_TEMP,
-    //       CAN_SENS_TPS, CAN_SENS_SPEED, CAN_SENS_FUEL_1, CAN_SENS_FUEL_2
+        analogWrite(PIN_PUMP_PWM, g_pumpDuty);
 
-    // TODO: render live sensor readings to ST7735
+        displayUpdate(g_oilPressure, g_tps, g_fuel1, g_fuel2,
+                      g_waterTempC, g_dallasTemp, g_pumpDuty, g_canHealth);
+    }
 
-    delay(50);
+    // ── Dallas temperature (non-blocking, 1 Hz) ───────────────────────────────
+    if (now - g_lastDallasReq >= DALLAS_PERIOD_MS) {
+        g_dallasTemp    = dallas.getTempCByIndex(0);   // read result of last request
+        dallas.requestTemperatures();                  // start next conversion
+        g_lastDallasReq = now;
+    }
+
+    // ── CAN receive + health ──────────────────────────────────────────────────
+    if (now - g_lastCanHealth >= CAN_HEALTH_MS) {
+        g_lastCanHealth = now;
+        canReceivePoll();
+        canHealthPoll();
+    }
+
+    // ── Transmit sensor data ──────────────────────────────────────────────────
+    if (g_canReady && now - g_lastSensorTx >= SENSOR_TX_MS) {
+        g_lastSensorTx = now;
+        sendOilPressure(g_oilPressure);
+        sendWaterTemp(g_waterTempC);
+        sendTPS(g_tps);
+        sendFuel1(g_fuel1);
+        sendFuel2(g_fuel2);
+    }
+
+    // ── Transmit status + heartbeat (1 Hz) ───────────────────────────────────
+    if (now - g_lastStatusTx >= STATUS_TX_MS) {
+        g_lastStatusTx = now;
+        if (g_canReady) {
+            sendPumpStatus(g_pumpDuty);
+            sendSensStatus();
+            sendHeartbeat();
+        }
+    }
 }
