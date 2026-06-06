@@ -1,0 +1,27 @@
+{
+  "build": {
+    "core": "stm32",
+    "cpu": "cortex-m33",
+    "extra_flags": "-DSTM32H562xx",
+    "f_cpu": "250000000L",
+    "mcu": "stm32h562rgtx",
+    "product_line": "STM32H562xx",
+    "variant": "STM32H5xx/H562RGTx"
+  },
+  "connectivity": ["usb"],
+  "debug": {
+    "default_tool": "stlink",
+    "onboard_tools": [],
+    "protocols": ["stlink", "jlink", "cmsis-dap"]
+  },
+  "frameworks": ["arduino", "stm32cube"],
+  "name": "WeAct Studio STM32H562RGT6",
+  "upload": {
+    "maximum_ram_size": 655360,
+    "maximum_size": 2097152,
+    "protocol": "stlink",
+    "protocols": ["stlink", "dfu", "jlink"]
+  },
+  "url": "https://github.com/WeActStudio/WeAct_STM32H562",
+  "vendor": "WeAct Studio"
+}
