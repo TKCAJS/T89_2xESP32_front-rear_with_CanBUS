@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
+#include "can_ids.h"
 
 // Module pins: RST=PC7, CS=PB12, DC=PC6, DIN=PB15, CLK=PB13
 #define TFT_CS   PB12
@@ -44,7 +45,7 @@ static SPIClass      s_spi2(PB15, PB14, PB13);   // MOSI=DIN, MISO(NC), SCK=CLK
 static ST7735Patched s_tft(&s_spi2, TFT_CS, TFT_DC, TFT_RST);
 
 static const int DISP_W     = 128;
-static const int DISP_ROW_H = 20;
+static const int DISP_ROW_H = 16;   // 10 rows × 16px = 160px — header + 9 data rows
 
 // Cached values — initialised out-of-range to force first draw
 static float     s_d_oil    = -99.0f;
@@ -54,6 +55,8 @@ static float     s_d_fuel2  = -99.0f;
 static float     s_d_water  = -99.0f;
 static float     s_d_dallas = -99.0f;
 static uint8_t   s_d_pump   = 0xFF;
+static uint16_t  s_d_rpm    = 0xFFFF;
+static uint8_t   s_d_gear   = GEAR_UNKNOWN;
 static CanHealth s_d_can    = (CanHealth)0xFF;
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -67,6 +70,31 @@ static void _dispRow(int row, float val, const char* unit = "") {
     s_tft.setTextColor(COL_WHITE, COL_BLACK);
     s_tft.setCursor(52, y + 6);
     s_tft.print(buf);
+}
+
+static void _dispRowU16(int row, uint16_t val) {
+    int y = DISP_ROW_H + row * DISP_ROW_H;
+    s_tft.fillRect(50, y, DISP_W - 50, DISP_ROW_H, COL_BLACK);
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%u", val);
+    s_tft.setTextSize(1);
+    s_tft.setTextColor(COL_WHITE, COL_BLACK);
+    s_tft.setCursor(52, y + 6);
+    s_tft.print(buf);
+}
+
+static void _dispGear(int row, uint8_t gear) {
+    int y = DISP_ROW_H + row * DISP_ROW_H;
+    s_tft.fillRect(50, y, DISP_W - 50, DISP_ROW_H, COL_BLACK);
+    char c;
+    if      (gear == GEAR_NEUTRAL)                      c = 'N';
+    else if (gear >= GEAR_1 && gear <= GEAR_6)          c = '0' + gear;
+    else if (gear == GEAR_BETWEEN)                      c = '-';
+    else                                                c = '?';
+    s_tft.setTextSize(1);
+    s_tft.setTextColor(COL_WHITE, COL_BLACK);
+    s_tft.setCursor(52, y + 6);
+    s_tft.print(c);
 }
 
 static void _dispCan(CanHealth h) {
@@ -103,15 +131,16 @@ void displayBegin() {
     s_tft.print("SENSOR NODE");
 
     s_tft.setTextColor(COL_LIGHTGREY, COL_BLACK);
-    const char* labels[] = { "OIL:", "TPS:", "FUEL1:", "FUEL2:", "WATER:", "DALL:", "PUMP:" };
-    for (int i = 0; i < 7; i++) {
+    const char* labels[] = { "OIL:", "TPS:", "FUEL1:", "FUEL2:", "WATER:", "DALL:", "PUMP:", "RPM:", "GEAR:" };
+    for (int i = 0; i < 9; i++) {
         s_tft.setCursor(2, DISP_ROW_H + i * DISP_ROW_H + 6);
         s_tft.print(labels[i]);
     }
 }
 
 void displayUpdate(float oilPressure, float tps, float fuel1, float fuel2,
-                   float waterTempC, float dallasTemp, uint8_t pumpDuty, CanHealth canHealth) {
+                   float waterTempC, float dallasTemp, uint8_t pumpDuty,
+                   uint16_t rpm, uint8_t gear, CanHealth canHealth) {
     if (canHealth    != s_d_can)    { s_d_can    = canHealth;    _dispCan(canHealth);             }
     if (oilPressure  != s_d_oil)    { s_d_oil    = oilPressure;  _dispRow(0, oilPressure);        }
     if (tps          != s_d_tps)    { s_d_tps    = tps;          _dispRow(1, tps);                }
@@ -119,6 +148,8 @@ void displayUpdate(float oilPressure, float tps, float fuel1, float fuel2,
     if (fuel2        != s_d_fuel2)  { s_d_fuel2  = fuel2;        _dispRow(3, fuel2);              }
     if (waterTempC   != s_d_water)  { s_d_water  = waterTempC;   _dispRow(4, waterTempC,  "C");   }
     if (dallasTemp   != s_d_dallas) { s_d_dallas = dallasTemp;   _dispRow(5, dallasTemp,  "C");   }
+    if (rpm          != s_d_rpm)    { s_d_rpm    = rpm;          _dispRowU16(7, rpm);             }
+    if (gear         != s_d_gear)   { s_d_gear   = gear;         _dispGear(8, gear);              }
     if (pumpDuty     != s_d_pump) {
         s_d_pump = pumpDuty;
         int y = DISP_ROW_H + 6 * DISP_ROW_H;

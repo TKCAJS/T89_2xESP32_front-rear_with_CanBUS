@@ -17,6 +17,8 @@ extern uint8_t   g_nodeStatus;
 extern bool      g_canReady;
 extern CanHealth g_canHealth;
 extern uint8_t   g_pumpDuty;
+extern uint16_t  g_rpm;
+extern uint8_t   g_gear;
 
 static FDCAN_HandleTypeDef s_hfdcan;
 
@@ -41,6 +43,17 @@ bool canInit() {
     gpio.Alternate = GPIO_AF9_FDCAN1;
     HAL_GPIO_Init(GPIOB, &gpio);
 
+    // FDCANSEL resets to HSE, which this board never enables — FDCAN1 would be
+    // left with no functional kernel clock. Route it from PLL1Q (50 MHz), already
+    // active and used for SDMMC1/SPI on this board.
+    RCC_PeriphCLKInitTypeDef pclk = {};
+    pclk.PeriphClockSelection = RCC_PERIPHCLK_FDCAN;
+    pclk.FdcanClockSelection  = RCC_FDCANCLKSOURCE_PLL1Q;
+    if (HAL_RCCEx_PeriphCLKConfig(&pclk) != HAL_OK) {
+        Serial.println("[CAN] FDCAN clock select failed");
+        return false;
+    }
+
     __HAL_RCC_FDCAN_CLK_ENABLE();
 
     s_hfdcan.Instance                  = FDCAN1;
@@ -50,11 +63,11 @@ bool canInit() {
     s_hfdcan.Init.AutoRetransmission   = ENABLE;
     s_hfdcan.Init.TransmitPause        = DISABLE;
     s_hfdcan.Init.ProtocolException    = DISABLE;
-    // 500 kbps @ 64 MHz FDCAN kernel clock:
-    //   prescaler=8 → 8 MHz, 16 TQ/bit (seg1=11, seg2=4), sample point 75%
-    s_hfdcan.Init.NominalPrescaler     = 8;
+    // 500 kbps @ 50 MHz FDCAN kernel clock (PLL1Q):
+    //   prescaler=5 → 10 MHz, 20 TQ/bit (seg1=15, seg2=4), sample point 80%
+    s_hfdcan.Init.NominalPrescaler     = 5;
     s_hfdcan.Init.NominalSyncJumpWidth = 4;
-    s_hfdcan.Init.NominalTimeSeg1      = 11;
+    s_hfdcan.Init.NominalTimeSeg1      = 15;
     s_hfdcan.Init.NominalTimeSeg2      = 4;
 
     if (HAL_FDCAN_Init(&s_hfdcan) != HAL_OK) {
@@ -131,6 +144,26 @@ void canReceivePoll() {
             g_pumpDuty = duty;
             Serial.printf("[CAN] Pump override: %u%%\n", duty);
         }
+        else if (hdr.Identifier == CAN_MAIN_RPM) {
+            g_rpm = data[2] | ((uint16_t)data[3] << 8);
+        }
+        else if (hdr.Identifier == CAN_REAR_GEAR_POS) {
+            g_gear = data[2];
+        }
+    }
+}
+
+static const char* _fdcanErrName(uint32_t code) {
+    switch (code) {
+        case FDCAN_PROTOCOL_ERROR_NONE:      return "none";
+        case FDCAN_PROTOCOL_ERROR_STUFF:     return "stuff";
+        case FDCAN_PROTOCOL_ERROR_FORM:      return "form";
+        case FDCAN_PROTOCOL_ERROR_ACK:       return "ack";
+        case FDCAN_PROTOCOL_ERROR_BIT1:      return "bit1";
+        case FDCAN_PROTOCOL_ERROR_BIT0:      return "bit0";
+        case FDCAN_PROTOCOL_ERROR_CRC:       return "crc";
+        case FDCAN_PROTOCOL_ERROR_NO_CHANGE: return "unchanged";
+        default:                             return "?";
     }
 }
 
@@ -142,8 +175,16 @@ void canHealthPoll() {
         s_cleanPolls  = 0;
         g_canHealth   = CAN_HEALTH_FAULT;
         g_canReady    = false;
+        Serial.println("[CAN] GetProtocolStatus failed");
         return;
     }
+
+    FDCAN_ErrorCountersTypeDef ec;
+    HAL_FDCAN_GetErrorCounters(&s_hfdcan, &ec);
+    Serial.printf("[CAN] err=%-9s act=%lu busoff=%d errpass=%d warn=%d  tec=%lu rec=%lu rxPassive=%d\n",
+                  _fdcanErrName(ps.LastErrorCode), (unsigned long)ps.Activity,
+                  ps.BusOff, ps.ErrorPassive, ps.Warning,
+                  (unsigned long)ec.TxErrorCnt, (unsigned long)ec.RxErrorCnt, ec.RxErrorPassive);
 
     if (ps.BusOff) {
         s_cleanPolls  = 0;

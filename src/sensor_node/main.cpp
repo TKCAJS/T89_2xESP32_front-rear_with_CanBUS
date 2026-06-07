@@ -31,6 +31,8 @@ uint8_t   g_nodeStatus = NODE_STATUS_OK;
 bool      g_canReady   = false;
 CanHealth g_canHealth  = CAN_HEALTH_FAULT;
 uint8_t   g_pumpDuty   = 0;
+uint16_t  g_rpm        = 0;
+uint8_t   g_gear       = GEAR_UNKNOWN;
 
 // ── Sensor readings ───────────────────────────────────────────────────────────
 static float g_oilPressure = 0.0f;
@@ -94,7 +96,7 @@ void setup() {
     Serial.println("[SENSOR NODE] v" + String(SOFTWARE_VERSION) + " Booting...");
 
     displayBegin();
-    displayUpdate(0, 0, 0, 0, 0, 0, 0, CAN_HEALTH_FAULT);
+    displayUpdate(0, 0, 0, 0, 0, 0, 0, g_rpm, g_gear, CAN_HEALTH_FAULT);
 
     g_canReady = canInit();
     if (!g_canReady) {
@@ -127,7 +129,8 @@ void loop() {
         analogWrite(PIN_PUMP_PWM, g_pumpDuty);
 
         displayUpdate(g_oilPressure, g_tps, g_fuel1, g_fuel2,
-                      g_waterTempC, g_dallasTemp, g_pumpDuty, g_canHealth);
+                      g_waterTempC, g_dallasTemp, g_pumpDuty,
+                      g_rpm, g_gear, g_canHealth);
     }
 
     // ── Dallas temperature (non-blocking, 1 Hz) ───────────────────────────────
@@ -137,10 +140,14 @@ void loop() {
         g_lastDallasReq = now;
     }
 
-    // ── CAN receive + health ──────────────────────────────────────────────────
+    // ── CAN receive (every loop — RX FIFO only holds 3 frames and RPM alone
+    //    arrives at ~20ms cadence, so draining at 500ms would let low-rate
+    //    messages like gear position get evicted before they're read) ────────
+    canReceivePoll();
+
+    // ── CAN health (slow cadence — protocol status doesn't change quickly) ───
     if (now - g_lastCanHealth >= CAN_HEALTH_MS) {
         g_lastCanHealth = now;
-        canReceivePoll();
         canHealthPoll();
     }
 
