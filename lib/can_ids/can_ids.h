@@ -129,6 +129,7 @@
 #define MSGTYPE_SENS_FUEL_2         0x06    // data[2:3] = uint16_t 0–10000 (0.01 % resolution)
 #define MSGTYPE_SENS_PUMP_STATUS    0x07    // data[2]   = uint8_t  0–100 % PWM duty (outbound status)
 #define MSGTYPE_SENS_STATUS         0x08    // node health flags
+#define MSGTYPE_SENS_RADIATOR_TEMP  0x09    // data[2:3] = int16_t  °C×10 (Dallas DS18B20)
 
 // Commands TO sensor node (0x40-0x5F)
 #define MSGTYPE_SENS_CMD_PUMP       0x40    // data[2] = uint8_t 0–100 % PWM duty override
@@ -239,6 +240,7 @@
 #define CAN_SENS_FUEL_2             CAN_ID(CAN_PRIO_LOW,      NODE_SENSOR,  MSGTYPE_SENS_FUEL_2,        0)
 #define CAN_SENS_PUMP_STATUS        CAN_ID(CAN_PRIO_INFO,     NODE_SENSOR,  MSGTYPE_SENS_PUMP_STATUS,   0)
 #define CAN_SENS_STATUS             CAN_ID(CAN_PRIO_INFO,     NODE_SENSOR,  MSGTYPE_SENS_STATUS,        0)
+#define CAN_SENS_RADIATOR_TEMP      CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_RADIATOR_TEMP, 0)
 #define CAN_SENS_CMD_PUMP           CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_CMD_PUMP,      0)
 
 // --- COOLING NODE (future) ---

@@ -156,6 +156,7 @@ void loop() {
         g_lastSensorTx = now;
         sendOilPressure(g_oilPressure);
         sendWaterTemp(g_waterTempC);
+        sendRadiatorTemp(g_dallasTemp);
         sendTPS(g_tps);
         sendFuel1(g_fuel1);
         sendFuel2(g_fuel2);

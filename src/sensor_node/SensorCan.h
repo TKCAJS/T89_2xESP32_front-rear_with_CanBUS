@@ -30,6 +30,7 @@ static uint8_t s_seqFuel2       = 0;
 static uint8_t s_seqPumpStatus  = 0;
 static uint8_t s_seqStatus      = 0;
 static uint8_t s_seqHeartbeat   = 0;
+static uint8_t s_seqRadiator    = 0;
 
 // =============================================================================
 
@@ -215,6 +216,12 @@ void sendWaterTemp(float degC) {
     int16_t v = (int16_t)(degC * 10.0f);
     uint8_t p[6] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
     canSend(CAN_SENS_WATER_TEMP, s_seqWaterTemp++, p, 6);
+}
+
+void sendRadiatorTemp(float degC) {
+    int16_t v = (int16_t)(degC * 10.0f);
+    uint8_t p[6] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
+    canSend(CAN_SENS_RADIATOR_TEMP, s_seqRadiator++, p, 6);
 }
 
 void sendTPS(float pct) {
