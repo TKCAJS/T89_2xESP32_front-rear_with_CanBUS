@@ -184,6 +184,7 @@ void engageClutch() { clutchServo.write(clutchEngagePos); }
 void releaseClutch() { clutchServo.write(clutchIdlePos); }
 void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter); }
 String getGearStatusForWeb() { return mainCan.getGearName(); }
+float getRadiatorTempForWeb() { return mainCan.getRadiatorTemp(); }
 String getHallCurveTypeName() { return hallSensor.getCurveTypeName(); }
 void saveHallCurveConfig() { /* Handled by HallSensorControl */ }
 

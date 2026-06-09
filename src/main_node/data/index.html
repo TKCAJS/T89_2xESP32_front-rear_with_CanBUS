@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset='UTF-8'>
     <title>T89 Gearbox Control</title>
     <meta name='viewport' content='width=device-width, initial-scale=1'>
     <style>
@@ -203,7 +204,7 @@
                 </div>
                 <div class='gauge-item'>
                     <canvas id='tempGauge' width='200' height='200'></canvas>
-                    <div class='gauge-label'>Temperature (°C)</div>
+                    <div class='gauge-label'>Radiator Temp (°C)</div>
                 </div>
             </div>
             <div class='gauge-row'>
@@ -348,7 +349,7 @@ function updateStatus() {
                     lastValues.rpm = d.currentRpm;
                 }
                 if(lastValues.temp !== d.currentTemp) {
-                    drawGauge('tempGauge', d.currentTemp, 120, 'Temperature', '#FF9800', '°');
+                    drawGauge('tempGauge', d.currentTemp, 130, 'Temperature', '#FF9800', '°');
                     lastValues.temp = d.currentTemp;
                 }
                 if(lastValues.hall !== d.hallValue) {

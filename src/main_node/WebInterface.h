@@ -174,6 +174,7 @@ extern void displayShiftLetter(char letter);
 extern void saveConfig();
 extern void loadConfig();
 extern String getGearStatusForWeb();
+extern float getRadiatorTempForWeb();
 extern String getHallCurveTypeName();
 extern void saveHallCurveConfig();
 extern void saveHallRangeConfig();
@@ -443,6 +444,7 @@ void WebInterface::handleSensorData() {
     json += "\"clutchJustEngaged\":" + String(clutchJustEngaged ? "true" : "false") + ",";
     
     json += "\"currentRpm\":" + String(rpmSensor.getRpm(), 1) + ",";
+    json += "\"currentTemp\":" + String(getRadiatorTempForWeb(), 1) + ",";
     json += "\"currentMph\":0,";
     json += "\"shiftTimingActive\":" + String(shiftLogger.isTimingActive() ? "true" : "false") + ",";
     json += "\"hallCurveName\":\"" + getHallCurveTypeName() + "\",";
