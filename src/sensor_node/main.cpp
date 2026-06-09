@@ -6,6 +6,7 @@
 #include "can_ids.h"
 #include "SensorDisplay.h"
 #include "SensorCan.h"
+#include "PumpControl.h"
 
 // ── One-wire / Dallas temperature ─────────────────────────────────────────────
 // TODO: assign final pin
@@ -138,6 +139,7 @@ void loop() {
         g_dallasTemp    = dallas.getTempCByIndex(0);   // read result of last request
         dallas.requestTemperatures();                  // start next conversion
         g_lastDallasReq = now;
+        g_pumpDuty      = pumpDutyForTemp(g_dallasTemp);  // temperature-scheduled pump duty
     }
 
     // ── CAN receive (every loop — RX FIFO only holds 3 frames and RPM alone
