@@ -68,45 +68,45 @@ void runMatrixStartupAnimation(Adafruit_NeoMatrix* matrix) {
         delay(25);
     }
 
-    // Phase 5: red dot spirals outward from centre, leaving a dim trail (3000ms)
-    // ~6 full revolutions while radius grows 0 → edge
-    {
-        const float cx = 3.5f, cy = 3.5f;
-        const float ANGLE_STEP  = 0.50f;   // radians per frame
-        const float RADIUS_STEP = 0.08f;   // pixels per frame → ~6.0 at frame 75
-        const int   TOTAL_FRAMES = 75;     // 75 × 40ms = 3000ms
+    // // Phase 5: red dot spirals outward from centre, leaving a dim trail (3000ms)
+    // // ~6 full revolutions while radius grows 0 → edge
+    // {
+    //     const float cx = 3.5f, cy = 3.5f;
+    //     const float ANGLE_STEP  = 0.50f;   // radians per frame
+    //     const float RADIUS_STEP = 0.08f;   // pixels per frame → ~6.0 at frame 75
+    //     const int   TOTAL_FRAMES = 75;     // 75 × 40ms = 3000ms
 
-        bool trail[8][8] = {};
-        float angle  = 0.0f;
-        float radius = 0.0f;
+    //     bool trail[8][8] = {};
+    //     float angle  = 0.0f;
+    //     float radius = 0.0f;
 
-        for (int frame = 0; frame < TOTAL_FRAMES; frame++) {
+    //     for (int frame = 0; frame < TOTAL_FRAMES; frame++) {
 
-            // Draw trail pixels (dim red)
-            matrix->fillScreen(0);
-            for (int x = 0; x < 8; x++)
-                for (int y = 0; y < 8; y++)
-                    if (trail[x][y])
-                        matrix->drawPixel(x, y, matrix->Color(120, 0, 0));
+    //         // Draw trail pixels (dim red)
+    //         matrix->fillScreen(0);
+    //         for (int x = 0; x < 8; x++)
+    //             for (int y = 0; y < 8; y++)
+    //                 if (trail[x][y])
+    //                     matrix->drawPixel(x, y, matrix->Color(120, 0, 0));
 
-            // Compute dot position and mark trail
-            int dx = (int)roundf(cx + cosf(angle) * radius);
-            int dy = (int)roundf(cy + sinf(angle) * radius);
-            if (dx >= 0 && dx < 8 && dy >= 0 && dy < 8) {
-                trail[dx][dy] = true;
-                matrix->drawPixel(dx, dy, matrix->Color(255, 0, 0)); // bright red dot
-            }
+    //         // Compute dot position and mark trail
+    //         int dx = (int)roundf(cx + cosf(angle) * radius);
+    //         int dy = (int)roundf(cy + sinf(angle) * radius);
+    //         if (dx >= 0 && dx < 8 && dy >= 0 && dy < 8) {
+    //             trail[dx][dy] = true;
+    //             matrix->drawPixel(dx, dy, matrix->Color(255, 0, 0)); // bright red dot
+    //         }
 
-            angle  += ANGLE_STEP;
-            radius += RADIUS_STEP;
+    //         angle  += ANGLE_STEP;
+    //         radius += RADIUS_STEP;
 
-            matrix->show();
-            delay(40);
-        }
+    //         matrix->show();
+    //         delay(40);
+    //     }
 
-        matrix->fillScreen(0);
-        matrix->show();
-    }
+    //     matrix->fillScreen(0);
+    //     matrix->show();
+    // }
 
     // Phase 6: T  8  9 in blue, one at a time
     {
@@ -119,7 +119,7 @@ void runMatrixStartupAnimation(Adafruit_NeoMatrix* matrix) {
             matrix->setCursor(1, 0);
             matrix->print(letters[i]);
             matrix->show();
-            delay(600);
+            delay(100);
 
             // Brief black gap between characters
             matrix->fillScreen(0);
