@@ -16,6 +16,8 @@ private:
     uint8_t txSeq;
     uint8_t _gear;
     bool    _gearValid;
+    bool    _busLive;   // false until ≥1 frame received — gates periodic TX so
+                        // main never floods (and bus-offs) into a not-yet-ready bus
 
     bool install() {
         twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
@@ -34,9 +36,12 @@ private:
             info.state == TWAI_STATE_RECOVERING ||
             info.state == TWAI_STATE_STOPPED) {
             Serial.printf("CAN: state=%d — restarting\n", info.state);
+            _busLive = false;   // re-confirm the bus is alive before resuming TX
             twai_stop();
             twai_driver_uninstall();
+            delay(100);
             if (install()) {
+                initialized = true;
                 Serial.println("CAN: recovery OK");
             } else {
                 Serial.println("CAN: recovery failed");
@@ -46,7 +51,7 @@ private:
     }
 
 public:
-    MainCan() : initialized(false), txSeq(0), _gear(GEAR_UNKNOWN), _gearValid(false) {}
+    MainCan() : initialized(false), txSeq(0), _gear(GEAR_UNKNOWN), _gearValid(false), _busLive(false) {}
 
     uint8_t getGear() const { return _gear; }
     bool    isGearValid() const { return _gearValid; }
@@ -115,7 +120,7 @@ public:
     }
 
     void sendRpm(uint16_t rpm) {
-        if (!initialized) return;
+        if (!initialized || !_busLive) return;
         twai_message_t msg = {};
         msg.extd             = 1;
         msg.identifier       = CAN_MAIN_RPM;
@@ -144,7 +149,7 @@ public:
     }
 
     void sendShiftStatus(bool manualModeActive) {
-        if (!initialized) return;
+        if (!initialized || !_busLive) return;
         twai_message_t msg = {};
         msg.extd             = 1;
         msg.identifier       = CAN_MAIN_SHIFT_STATUS;
@@ -164,11 +169,11 @@ public:
         static unsigned long lastHealthCheck = 0;
         static unsigned long lastHeartbeat   = 0;
         unsigned long now = millis();
-        if (now - lastHealthCheck >= 1000) {
+        if (now - lastHealthCheck >= 1000 && now >= 2000) {
             checkAndRecover();
             lastHealthCheck = now;
         }
-        if (now - lastHeartbeat >= 1000) {
+        if (_busLive && now - lastHeartbeat >= 1000) {
             twai_message_t hb = {};
             hb.extd             = 1;
             hb.identifier       = CAN_HB_MAIN;
@@ -185,18 +190,17 @@ public:
         twai_message_t msg;
         while (twai_receive(&msg, 0) == ESP_OK) {
             if (!msg.extd) continue;
-            uint8_t msgType = CAN_ID_MSGTYPE(msg.identifier);
-            switch (msgType) {
-                case MSGTYPE_REAR_GEAR_POS:
-                    _gear      = msg.data[2];
-                    _gearValid = (_gear <= GEAR_6 || _gear == GEAR_NEUTRAL);
-                    break;
-                case MSGTYPE_REAR_ACK_COMPLETE:
-                    Serial.printf("CAN ACK_COMPLETE: dir=%d expected=%d actual=%d ok=%d\n",
-                        msg.data[2], msg.data[3], msg.data[4], msg.data[5]);
-                    break;
-                default:
-                    break;
+            _busLive = true;   // heard a frame → bus is up and ACKing, TX is safe
+            // Match on the FULL identifier (node + msgtype). Matching on msgtype
+            // alone collides across nodes — e.g. CAN_SENS_OIL_PRESSURE shares
+            // msgtype 0x01 with CAN_REAR_GEAR_POS and would corrupt the gear.
+            if (msg.identifier == CAN_REAR_GEAR_POS) {
+                _gear      = msg.data[2];
+                _gearValid = (_gear <= GEAR_6 || _gear == GEAR_NEUTRAL);
+            }
+            else if (msg.identifier == CAN_REAR_ACK_COMPLETE) {
+                Serial.printf("CAN ACK_COMPLETE: dir=%d expected=%d actual=%d ok=%d\n",
+                    msg.data[2], msg.data[3], msg.data[4], msg.data[5]);
             }
         }
     }

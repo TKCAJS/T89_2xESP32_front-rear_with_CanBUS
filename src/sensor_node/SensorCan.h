@@ -153,20 +153,6 @@ void canReceivePoll() {
     }
 }
 
-static const char* _fdcanErrName(uint32_t code) {
-    switch (code) {
-        case FDCAN_PROTOCOL_ERROR_NONE:      return "none";
-        case FDCAN_PROTOCOL_ERROR_STUFF:     return "stuff";
-        case FDCAN_PROTOCOL_ERROR_FORM:      return "form";
-        case FDCAN_PROTOCOL_ERROR_ACK:       return "ack";
-        case FDCAN_PROTOCOL_ERROR_BIT1:      return "bit1";
-        case FDCAN_PROTOCOL_ERROR_BIT0:      return "bit0";
-        case FDCAN_PROTOCOL_ERROR_CRC:       return "crc";
-        case FDCAN_PROTOCOL_ERROR_NO_CHANGE: return "unchanged";
-        default:                             return "?";
-    }
-}
-
 void canHealthPoll() {
     static uint8_t s_cleanPolls = 0;
     FDCAN_ProtocolStatusTypeDef ps;
@@ -175,16 +161,8 @@ void canHealthPoll() {
         s_cleanPolls  = 0;
         g_canHealth   = CAN_HEALTH_FAULT;
         g_canReady    = false;
-        Serial.println("[CAN] GetProtocolStatus failed");
         return;
     }
-
-    FDCAN_ErrorCountersTypeDef ec;
-    HAL_FDCAN_GetErrorCounters(&s_hfdcan, &ec);
-    Serial.printf("[CAN] err=%-9s act=%lu busoff=%d errpass=%d warn=%d  tec=%lu rec=%lu rxPassive=%d\n",
-                  _fdcanErrName(ps.LastErrorCode), (unsigned long)ps.Activity,
-                  ps.BusOff, ps.ErrorPassive, ps.Warning,
-                  (unsigned long)ec.TxErrorCnt, (unsigned long)ec.RxErrorCnt, ec.RxErrorPassive);
 
     if (ps.BusOff) {
         s_cleanPolls  = 0;
