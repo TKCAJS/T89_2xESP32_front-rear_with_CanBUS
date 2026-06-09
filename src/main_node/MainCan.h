@@ -19,6 +19,7 @@ private:
     bool    _busLive;   // false until ≥1 frame received — gates periodic TX so
                         // main never floods (and bus-offs) into a not-yet-ready bus
     int16_t _radiatorTemp;   // °C × 10, from sensor node Dallas (CAN_SENS_RADIATOR_TEMP)
+    uint8_t _pumpDuty;       // 0-100 %, from sensor node (CAN_SENS_PUMP_STATUS)
 
     bool install() {
         twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
@@ -52,11 +53,12 @@ private:
     }
 
 public:
-    MainCan() : initialized(false), txSeq(0), _gear(GEAR_UNKNOWN), _gearValid(false), _busLive(false), _radiatorTemp(0) {}
+    MainCan() : initialized(false), txSeq(0), _gear(GEAR_UNKNOWN), _gearValid(false), _busLive(false), _radiatorTemp(0), _pumpDuty(0) {}
 
     uint8_t getGear() const { return _gear; }
     bool    isGearValid() const { return _gearValid; }
     float   getRadiatorTemp() const { return _radiatorTemp / 10.0f; }
+    uint8_t getPumpDuty() const { return _pumpDuty; }
 
     String getGearName() const {
         if (!_gearValid) return "?";
@@ -202,6 +204,9 @@ public:
             }
             else if (msg.identifier == CAN_SENS_RADIATOR_TEMP) {
                 _radiatorTemp = msg.data[2] | ((int16_t)msg.data[3] << 8);
+            }
+            else if (msg.identifier == CAN_SENS_PUMP_STATUS) {
+                _pumpDuty = msg.data[2];
             }
             else if (msg.identifier == CAN_REAR_ACK_COMPLETE) {
                 Serial.printf("CAN ACK_COMPLETE: dir=%d expected=%d actual=%d ok=%d\n",

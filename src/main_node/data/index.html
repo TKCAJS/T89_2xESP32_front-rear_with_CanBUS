@@ -204,7 +204,7 @@
                 </div>
                 <div class='gauge-item'>
                     <canvas id='tempGauge' width='200' height='200'></canvas>
-                    <div class='gauge-label'>Radiator Temp (°C)</div>
+                    <div class='gauge-label'>Radiator °C / Pump %</div>
                 </div>
             </div>
             <div class='gauge-row'>
@@ -331,6 +331,44 @@
             ctx.fillText('Max: ' + maxValue + unit, centerX, centerY + 60);
         }
         
+        // Temp gauge with a concentric inner ring for pump PWM %.
+        // Outer arc = radiator temp (orange), inner arc = pump duty (cyan).
+        function drawTempPumpGauge(canvasId, temp, tempMax, pump) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const cx = canvas.width / 2, cy = canvas.height / 2;
+            const startAngle = -Math.PI * 0.75, endAngle = Math.PI * 0.75;
+            const total = endAngle - startAngle;
+            temp = (typeof temp === 'number') ? temp : 0;
+            pump = (typeof pump === 'number') ? pump : 0;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Outer ring — radiator temperature
+            const rOuter = 80;
+            ctx.lineWidth = 10;
+            ctx.beginPath(); ctx.arc(cx, cy, rOuter, startAngle, endAngle);
+            ctx.strokeStyle = '#555'; ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(cx, cy, rOuter, startAngle, startAngle + Math.min(temp / tempMax, 1) * total);
+            ctx.strokeStyle = '#FF9800'; ctx.stroke();
+
+            // Inner ring — pump PWM %
+            const rInner = 60;
+            ctx.beginPath(); ctx.arc(cx, cy, rInner, startAngle, endAngle);
+            ctx.strokeStyle = '#555'; ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(cx, cy, rInner, startAngle, startAngle + Math.min(pump / 100, 1) * total);
+            ctx.strokeStyle = '#00BCD4'; ctx.stroke();
+
+            // Center readouts
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#FF9800'; ctx.font = 'bold 22px Arial';
+            ctx.fillText(temp.toFixed(1) + '°', cx, cy + 2);
+            ctx.fillStyle = '#00BCD4'; ctx.font = 'bold 14px Arial';
+            ctx.fillText('Pump ' + pump + '%', cx, cy + 24);
+        }
+
         function sendCmd(action) {
             fetch('/cmd?action=' + action).then(r => r.text()).then(d => {
                 if(d.includes('BLOCKED')) alert('Command blocked: ' + d);
@@ -348,9 +386,10 @@ function updateStatus() {
                     drawGauge('rpmGauge', d.currentRpm, 14000, 'RPM', '#2196F3', '');
                     lastValues.rpm = d.currentRpm;
                 }
-                if(lastValues.temp !== d.currentTemp) {
-                    drawGauge('tempGauge', d.currentTemp, 130, 'Temperature', '#FF9800', '°');
+                if(lastValues.temp !== d.currentTemp || lastValues.pump !== d.pumpDuty) {
+                    drawTempPumpGauge('tempGauge', d.currentTemp, 130, d.pumpDuty);
                     lastValues.temp = d.currentTemp;
+                    lastValues.pump = d.pumpDuty;
                 }
                 if(lastValues.hall !== d.hallValue) {
                     drawGauge('hallGauge', d.hallValue, 4095, 'Hall', '#9C27B0', '');

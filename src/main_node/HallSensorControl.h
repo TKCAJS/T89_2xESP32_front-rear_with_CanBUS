@@ -61,7 +61,7 @@ public:
         if (!isIdle) return;
         
         int hallValue = max((int)analogRead(hallPin), pin2Scaled());
-        int servoPos;
+        float servoPos;
 
         if (curveType == HALL_PIECEWISE) {
             servoPos = hallToPiecewise(hallValue);
@@ -71,7 +71,7 @@ public:
                                            curveType, curveStrength);
         }
 
-        clutchServo->write(servoPos);
+        clutchServo->writeFloat(servoPos);
     }
     
     int getRawValue() {
@@ -181,14 +181,14 @@ public:
         while (!Serial.available()) {
             int hallValue = max((int)analogRead(hallPin), pin2Scaled());
             
-            int linearServo = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
-            int curvedServo = (curveType == HALL_PIECEWISE)
+            float linearServo = mapf(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
+            float curvedServo = (curveType == HALL_PIECEWISE)
                 ? hallToPiecewise(hallValue)
                 : hallToServoNonLinear(hallValue, hallMin, hallMax,
                                       clutchIdlePos, clutchEngagePos,
                                       curveType, curveStrength);
 
-            Serial.printf("%4d | %3d° | %3d° | %3d°\n",
+            Serial.printf("%4d | %5.1f° | %5.1f° | %5.1f°\n",
                           hallValue, linearServo, curvedServo, curvedServo);
             
             delay(100);
@@ -226,14 +226,21 @@ private:
         return constrain(map(raw, pin2RawMin, pin2RawMax, hallMin, hallMax), hallMin, hallMax);
     }
 
-    int hallToPiecewise(int hallValue) {
+    // Floating-point map — Arduino's map() is integer-only, which quantised the
+    // servo to whole degrees. This preserves sub-degree resolution.
+    static float mapf(float x, float inMin, float inMax, float outMin, float outMax) {
+        if (inMax == inMin) return outMin;
+        return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+    }
+
+    float hallToPiecewise(int hallValue) {
         hallValue = constrain(hallValue, hallMin, hallMax);
         if (hallValue <= hallBiteStart) {
-            return map(hallValue, hallMin, hallBiteStart, clutchIdlePos, servoBiteStart);
+            return mapf(hallValue, hallMin, hallBiteStart, clutchIdlePos, servoBiteStart);
         } else if (hallValue <= hallBiteEnd) {
-            return map(hallValue, hallBiteStart, hallBiteEnd, servoBiteStart, servoBiteEnd);
+            return mapf(hallValue, hallBiteStart, hallBiteEnd, servoBiteStart, servoBiteEnd);
         } else {
-            return map(hallValue, hallBiteEnd, hallMax, servoBiteEnd, clutchEngagePos);
+            return mapf(hallValue, hallBiteEnd, hallMax, servoBiteEnd, clutchEngagePos);
         }
     }
 
@@ -281,19 +288,19 @@ private:
     /**
      * Convert hall sensor reading to servo position with non-linear response
      */
-    int hallToServoNonLinear(int hallValue, int hallMin, int hallMax, int servoMin, int servoMax, 
+    float hallToServoNonLinear(int hallValue, int hallMin, int hallMax, int servoMin, int servoMax,
                             HallResponseCurve curveType, float curveStrength) {
         // Constrain hall value to expected range
         hallValue = constrain(hallValue, hallMin, hallMax);
-        
+
         // Normalize hall value to 0.0 - 1.0 range
         float normalized = (float)(hallValue - hallMin) / (float)(hallMax - hallMin);
-        
+
         // Apply non-linear curve
         float curved = applyHallCurve(normalized, curveType, curveStrength);
-        
-        // Scale to servo range and return as integer
-        return (int)(servoMin + curved * (servoMax - servoMin));
+
+        // Scale to servo range (sub-degree resolution preserved)
+        return servoMin + curved * (servoMax - servoMin);
     }
     
     void saveConfiguration() {

@@ -175,6 +175,7 @@ extern void saveConfig();
 extern void loadConfig();
 extern String getGearStatusForWeb();
 extern float getRadiatorTempForWeb();
+extern uint8_t getPumpDutyForWeb();
 extern String getHallCurveTypeName();
 extern void saveHallCurveConfig();
 extern void saveHallRangeConfig();
@@ -436,15 +437,15 @@ void WebInterface::handleSensorData() {
     json += "\"currentGear\":\"" + getGearStatusForWeb() + "\",";
     json += "\"softwareVersion\":" + String(SOFTWARE_VERSION) + ",";
 
-    int servoPosition = map(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
-    servoPosition = constrain(servoPosition, 0, 180);
-    json += "\"servoPosition\":" + String(servoPosition) + ",";
+    // Actual last-commanded servo angle (whatever path wrote it), not a re-estimate
+    json += "\"servoPosition\":" + String(clutchServo.getAngle(), 1) + ",";
     json += "\"clutchDisengageV\":" + String(clutchDisengageV, 3) + ",";
     json += "\"clutchJustEngagedV\":" + String(clutchJustEngagedV, 3) + ",";
     json += "\"clutchJustEngaged\":" + String(clutchJustEngaged ? "true" : "false") + ",";
     
     json += "\"currentRpm\":" + String(rpmSensor.getRpm(), 1) + ",";
     json += "\"currentTemp\":" + String(getRadiatorTempForWeb(), 1) + ",";
+    json += "\"pumpDuty\":" + String(getPumpDutyForWeb()) + ",";
     json += "\"currentMph\":0,";
     json += "\"shiftTimingActive\":" + String(shiftLogger.isTimingActive() ? "true" : "false") + ",";
     json += "\"hallCurveName\":\"" + getHallCurveTypeName() + "\",";
