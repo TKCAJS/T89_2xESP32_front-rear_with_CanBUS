@@ -1,19 +1,11 @@
 #define SOFTWARE_VERSION  100   // v1.0.0
 
 #include <Arduino.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include "can_ids.h"
 #include "SensorDisplay.h"
 #include "SensorCan.h"
+#include "DallasTemp.h"
 #include "PumpControl.h"
-
-// ── One-wire / Dallas temperature ─────────────────────────────────────────────
-// TODO: assign final pin
-#define ONEWIRE_PIN  PC0
-
-OneWire oneWire(ONEWIRE_PIN);
-DallasTemperature dallas(&oneWire);
 
 // ── Analogue inputs ───────────────────────────────────────────────────────────
 // TODO: assign final ADC pins
@@ -41,20 +33,17 @@ static float g_tps         = 0.0f;
 static float g_fuel1       = 0.0f;
 static float g_fuel2       = 0.0f;
 static float g_waterTempC  = 0.0f;
-static float g_dallasTemp  = 0.0f;
 
 // ── Timing ────────────────────────────────────────────────────────────────────
 static uint32_t g_lastSensorRead  = 0;
 static uint32_t g_lastSensorTx    = 0;
 static uint32_t g_lastCanHealth   = 0;
 static uint32_t g_lastStatusTx    = 0;
-static uint32_t g_lastDallasReq   = 0;
 
 #define SENSOR_READ_MS    50
 #define SENSOR_TX_MS     100
 #define CAN_HEALTH_MS    500
 #define STATUS_TX_MS    1000
-#define DALLAS_PERIOD_MS 1000   // request once per second
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GPIO init — blanket analog pass FIRST, peripheral configs follow in setup()
@@ -106,10 +95,7 @@ void setup() {
         Serial.println("[SENSOR NODE] WARNING: CAN init failed");
     }
 
-    dallas.setWaitForConversion(false);
-    dallas.begin();
-    dallas.requestTemperatures();
-    g_lastDallasReq = millis();
+    dallasBegin();
 
     Serial.println("[SENSOR NODE] Ready");
 }
@@ -130,16 +116,13 @@ void loop() {
         analogWrite(PIN_PUMP_PWM, g_pumpDuty);
 
         displayUpdate(g_oilPressure, g_tps, g_fuel1, g_fuel2,
-                      g_waterTempC, g_dallasTemp, g_pumpDuty,
+                      g_waterTempC, dallasTempC(), g_pumpDuty,
                       g_rpm, g_gear, g_canHealth);
     }
 
-    // ── Dallas temperature (non-blocking, 1 Hz) ───────────────────────────────
-    if (now - g_lastDallasReq >= DALLAS_PERIOD_MS) {
-        g_dallasTemp    = dallas.getTempCByIndex(0);   // read result of last request
-        dallas.requestTemperatures();                  // start next conversion
-        g_lastDallasReq = now;
-        g_pumpDuty      = pumpDutyForTemp(g_dallasTemp);  // temperature-scheduled pump duty
+    // ── Dallas temperature → pump duty (non-blocking, 1 Hz) ───────────────────
+    if (dallasUpdate(now)) {
+        g_pumpDuty = pumpDutyForTemp(dallasTempC());   // temperature-scheduled pump duty
     }
 
     // ── CAN receive (every loop — RX FIFO only holds 3 frames and RPM alone
@@ -158,7 +141,7 @@ void loop() {
         g_lastSensorTx = now;
         sendOilPressure(g_oilPressure);
         sendWaterTemp(g_waterTempC);
-        sendRadiatorTemp(g_dallasTemp);
+        sendRadiatorTemp(dallasTempC());
         sendTPS(g_tps);
         sendFuel1(g_fuel1);
         sendFuel2(g_fuel2);
