@@ -1042,7 +1042,7 @@
                 .then(r => r.text())
                 .then(v => {
                     document.getElementById('disengResult').innerHTML =
-                        '<span style="color:#4CAF50;">Saved: ' + (3.3 - parseFloat(v)).toFixed(3) + ' V (displayed)</span>';
+                        '<span style="color:#4CAF50;">Saved: ' + parseFloat(v).toFixed(3) + ' V</span>';
                 })
                 .catch(() => {
                     document.getElementById('disengResult').innerHTML = '<span style="color:#F44336;">Capture failed</span>';
@@ -1054,7 +1054,7 @@
                 .then(r => r.text())
                 .then(v => {
                     document.getElementById('biteResult').innerHTML =
-                        '<span style="color:#4CAF50;">Saved: ' + (3.3 - parseFloat(v)).toFixed(3) + ' V (displayed)</span>';
+                        '<span style="color:#4CAF50;">Saved: ' + parseFloat(v).toFixed(3) + ' V</span>';
                 })
                 .catch(() => {
                     document.getElementById('biteResult').innerHTML = '<span style="color:#F44336;">Capture failed</span>';

@@ -214,11 +214,11 @@
                 </div>
                 <div class='gauge-item'>
                     <canvas id='voltageGauge' width='200' height='200'></canvas>
-                    <div class='gauge-label'>Clutch Position</div>
+                    <div class='gauge-label'>Servo Reported Position</div>
                 </div>
                 <div class='gauge-item'>
                     <canvas id='positionGauge' width='200' height='200'></canvas>
-                    <div class='gauge-label'>Servo Position</div>
+                    <div class='gauge-label'>Servo Position Commanded</div>
                 </div>
             </div>
         </div>
@@ -275,7 +275,7 @@
     <script>
         let lastValues = {};
         
-        function drawGauge(canvasId, value, maxValue, label, color, unit) {
+        function drawGauge(canvasId, value, maxValue, label, color, unit, decimals = 1, reverseArc = false) {
             const canvas = document.getElementById(canvasId);
             const ctx = canvas.getContext('2d');
             const centerX = canvas.width / 2;
@@ -295,7 +295,8 @@
             const startAngle = -Math.PI * 0.75;
             const endAngle = Math.PI * 0.75;
             const totalAngle = endAngle - startAngle;
-            const valueAngle = startAngle + (value / maxValue) * totalAngle;
+            const frac = reverseArc ? (1 - value / maxValue) : (value / maxValue);
+            const valueAngle = startAngle + frac * totalAngle;
             
             ctx.beginPath();
             ctx.arc(centerX, centerY, radius, startAngle, valueAngle);
@@ -325,7 +326,7 @@
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(value.toFixed(1) + unit, centerX, centerY + 40);
+            ctx.fillText(value.toFixed(decimals) + unit, centerX, centerY + 40);
             
             ctx.font = '12px Arial';
             ctx.fillText('Max: ' + maxValue + unit, centerX, centerY + 60);
@@ -396,7 +397,9 @@ function updateStatus() {
                     lastValues.hall = d.hallValue;
                 }
                 if(lastValues.voltage !== d.clutchVoltage) {
-                    drawGauge('voltageGauge', d.clutchVoltage, 3.3, 'Position', '#F44336', 'V');
+                    // Raw voltage shown, arc reversed: feedback is electrically inverted
+                    // vs commanded angle, so the reversed sweep aligns with it.
+                    drawGauge('voltageGauge', d.clutchVoltage, 3.3, 'Position', '#F44336', 'V', 2, true);
                     lastValues.voltage = d.clutchVoltage;
                 }
                 if(lastValues.position !== d.servoPosition) {
