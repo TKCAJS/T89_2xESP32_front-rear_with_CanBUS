@@ -18,6 +18,9 @@
 // ── Pump PWM (via MOSFET, 12 V) ───────────────────────────────────────────────
 // Hardware pull-down on gate holds it LOW from power-on through the boot window.
 #define PIN_PUMP_PWM  PB0   // TIM3_CH3
+// PWM carrier frequency. 25 kHz suits the 4-wire PC fan used for bench testing;
+// the real pump wants 100 Hz — change back to 100 when driving the pump.
+#define PUMP_PWM_FREQ_HZ  25000
 
 // ── Shared state (extern'd by SensorCan.h) ────────────────────────────────────
 uint8_t   g_nodeStatus = NODE_STATUS_OK;
@@ -79,6 +82,7 @@ void setup() {
     gpio_blanket_init();
 
     pinMode(PIN_PUMP_PWM, OUTPUT);
+    analogWriteFrequency(PUMP_PWM_FREQ_HZ);
     analogWrite(PIN_PUMP_PWM, 0);
 
     Serial.begin(115200);
