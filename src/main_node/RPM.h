@@ -13,6 +13,7 @@ private:
 
     unsigned long lastCalcTime;
     unsigned long lastPulseTime;
+    int16_t       lastSeenCount = 0;            // last peeked PCNT value (liveness)
     const unsigned long calcInterval = 100;     // ms
     const unsigned long pulseTimeout = 2000;    // ms
 
@@ -61,12 +62,27 @@ public:
 
     void update() {
         unsigned long now = millis();
+
+        // Liveness, checked every call: peek the hardware counter (a cheap,
+        // non-blocking register read). If it has advanced since last look, the
+        // engine is turning — refresh the timeout. This is independent of the
+        // calc interval and immune to loop stalls (WiFi / handleClient / etc.),
+        // so a busy loop can never starve the RPM into a false zero.
+        int16_t count = 0;
+        pcnt_get_counter_value(pcntUnit, &count);
+        if (count != lastSeenCount) {
+            lastPulseTime = now;
+            lastSeenCount = count;
+        }
+
         if (now - lastCalcTime >= calcInterval) {
-            calculateRpm(now - lastCalcTime);
+            calculateRpm(now - lastCalcTime);   // reads and clears the counter
+            lastSeenCount = 0;                  // counter was just cleared
             lastCalcTime = now;
         }
 
-        // Timeout: no pulses received recently
+        // Engine considered stopped only if the hardware counter has been
+        // genuinely static for the whole timeout window.
         if (now - lastPulseTime > pulseTimeout) {
             currentRpm = 0;
         }
