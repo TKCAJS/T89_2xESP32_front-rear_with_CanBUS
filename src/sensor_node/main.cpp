@@ -23,12 +23,12 @@
 #define PUMP_PWM_FREQ_HZ  25000
 
 // ── Shared state (extern'd by SensorCan.h) ────────────────────────────────────
-uint8_t   g_nodeStatus = NODE_STATUS_OK;
-bool      g_canReady   = false;
-CanHealth g_canHealth  = CAN_HEALTH_FAULT;
-uint8_t   g_pumpDuty   = 0;
-uint16_t  g_rpm        = 0;
-uint8_t   g_gear       = GEAR_UNKNOWN;
+uint8_t            g_nodeStatus = NODE_STATUS_OK;
+volatile bool      g_canReady   = false;
+volatile CanHealth g_canHealth  = CAN_HEALTH_FAULT;
+volatile uint8_t   g_pumpDuty   = 0;
+volatile uint16_t  g_rpm        = 0;
+volatile uint8_t   g_gear       = GEAR_UNKNOWN;
 
 // ── Sensor readings ───────────────────────────────────────────────────────────
 static float g_oilPressure = 0.0f;
@@ -39,14 +39,16 @@ static float g_waterTempC  = 0.0f;
 
 // ── Timing ────────────────────────────────────────────────────────────────────
 static uint32_t g_lastSensorRead  = 0;
+static uint32_t g_lastDisplay     = 0;
 static uint32_t g_lastSensorTx    = 0;
 static uint32_t g_lastCanHealth   = 0;
 static uint32_t g_lastStatusTx    = 0;
 
-#define SENSOR_READ_MS    50
-#define SENSOR_TX_MS     100
-#define CAN_HEALTH_MS    500
-#define STATUS_TX_MS    1000
+#define SENSOR_READ_MS   200
+#define DISPLAY_MS       200   // 5 fps — plenty for this readout
+#define SENSOR_TX_MS     200
+#define CAN_HEALTH_MS    200
+#define STATUS_TX_MS     200
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GPIO init — blanket analog pass FIRST, peripheral configs follow in setup()
@@ -118,7 +120,11 @@ void loop() {
         g_waterTempC  = analogRead(PIN_WATER_TEMP);
 
         analogWrite(PIN_PUMP_PWM, g_pumpDuty);
+    }
 
+    // ── Refresh display (5 fps — decoupled from the faster sensor read) ───────
+    if (now - g_lastDisplay >= DISPLAY_MS) {
+        g_lastDisplay = now;
         displayUpdate(g_oilPressure, g_tps, g_fuel1, g_fuel2,
                       g_waterTempC, dallasTempC(), g_pumpDuty,
                       g_rpm, g_gear, g_canHealth);
@@ -129,10 +135,10 @@ void loop() {
         g_pumpDuty = pumpDutyForTemp(dallasTempC());   // temperature-scheduled pump duty
     }
 
-    // ── CAN receive (every loop — RX FIFO only holds 3 frames and RPM alone
-    //    arrives at ~20ms cadence, so draining at 500ms would let low-rate
-    //    messages like gear position get evicted before they're read) ────────
-    canReceivePoll();
+    // ── CAN receive is interrupt-driven (FDCAN1_IT0 → canReceivePoll). The RX
+    //    FIFO only holds 3 frames and the loop blocks tens of ms on the SPI
+    //    display write; polling here let that window overrun the FIFO and drop
+    //    the low-rate (on-change) gear frame. Draining in the ISR fixes that. ─
 
     // ── CAN health (slow cadence — protocol status doesn't change quickly) ───
     if (now - g_lastCanHealth >= CAN_HEALTH_MS) {
@@ -151,7 +157,7 @@ void loop() {
         sendFuel2(g_fuel2);
     }
 
-    // ── Transmit status + heartbeat (1 Hz) ───────────────────────────────────
+    // ── Transmit status + heartbeat (5 Hz) ───────────────────────────────────
     if (now - g_lastStatusTx >= STATUS_TX_MS) {
         g_lastStatusTx = now;
         if (g_canReady) {

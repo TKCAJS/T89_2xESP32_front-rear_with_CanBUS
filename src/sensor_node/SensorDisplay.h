@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_ST7735.h>
+#include <Adafruit_ST7789.h>
 #include "can_ids.h"
 
 // Module pins: RST=PC7, CS=PB12, DC=PC6, DIN=PB15, CLK=PB13
@@ -26,26 +26,16 @@ enum CanHealth {
     CAN_HEALTH_FAULT
 };
 
-// INITR_REDTAB causes setRotation to set _width=128 regardless of orientation.
-// Override fixes dimensions. patchOffset exposes protected setColRowStart() to
-// shift the panel window (rowstart=1 eliminates edge garbage in this module).
-class ST7735Patched : public Adafruit_ST7735 {
-public:
-    ST7735Patched(SPIClass *spi, int8_t cs, int8_t dc, int8_t rst)
-        : Adafruit_ST7735(spi, cs, dc, rst) {}
-    void patchOffset(int8_t col, int8_t row) { setColRowStart(col, row); }
-    void setRotation(uint8_t m) override {
-        Adafruit_ST7735::setRotation(m);
-        if (m & 1) { _width = 160; _height = 128; }
-        else        { _width = 128; _height = 160; }
-    }
-};
+static SPIClass        s_spi2(PB15, PB14, PB13);   // MOSI=DIN, MISO(NC), SCK=CLK
+static Adafruit_ST7789 s_tft(&s_spi2, TFT_CS, TFT_DC, TFT_RST);
 
-static SPIClass      s_spi2(PB15, PB14, PB13);   // MOSI=DIN, MISO(NC), SCK=CLK
-static ST7735Patched s_tft(&s_spi2, TFT_CS, TFT_DC, TFT_RST);
-
-static const int DISP_W     = 128;
-static const int DISP_ROW_H = 16;   // 10 rows × 16px = 160px — header + 9 data rows
+// 2.4" ST7789, 240x320 portrait. Header + 9 data rows × 32px = 320px.
+static const int DISP_W     = 240;
+static const int HEADER_H   = 32;
+static const int DISP_ROW_H = 32;
+static const int VAL_X      = 120;   // value column start; labels live left of this
+static const int TXT_SZ     = 2;     // 12x16 px glyphs
+static const int TXT_Y_OFF  = (DISP_ROW_H - 16) / 2;   // vertical centre within row
 
 // Cached values — initialised out-of-range to force first draw
 static float     s_d_oil    = -99.0f;
@@ -62,38 +52,38 @@ static CanHealth s_d_can    = (CanHealth)0xFF;
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 static void _dispRow(int row, float val, const char* unit = "") {
-    int y = DISP_ROW_H + row * DISP_ROW_H;
-    s_tft.fillRect(50, y, DISP_W - 50, DISP_ROW_H, COL_BLACK);
+    int y = HEADER_H + row * DISP_ROW_H;
+    s_tft.fillRect(VAL_X, y, DISP_W - VAL_X, DISP_ROW_H, COL_BLACK);
     char buf[16];
     snprintf(buf, sizeof(buf), "%.1f%s", val, unit);
-    s_tft.setTextSize(1);
+    s_tft.setTextSize(TXT_SZ);
     s_tft.setTextColor(COL_WHITE, COL_BLACK);
-    s_tft.setCursor(52, y + 6);
+    s_tft.setCursor(VAL_X + 2, y + TXT_Y_OFF);
     s_tft.print(buf);
 }
 
 static void _dispRowU16(int row, uint16_t val) {
-    int y = DISP_ROW_H + row * DISP_ROW_H;
-    s_tft.fillRect(50, y, DISP_W - 50, DISP_ROW_H, COL_BLACK);
+    int y = HEADER_H + row * DISP_ROW_H;
+    s_tft.fillRect(VAL_X, y, DISP_W - VAL_X, DISP_ROW_H, COL_BLACK);
     char buf[8];
     snprintf(buf, sizeof(buf), "%u", val);
-    s_tft.setTextSize(1);
+    s_tft.setTextSize(TXT_SZ);
     s_tft.setTextColor(COL_WHITE, COL_BLACK);
-    s_tft.setCursor(52, y + 6);
+    s_tft.setCursor(VAL_X + 2, y + TXT_Y_OFF);
     s_tft.print(buf);
 }
 
 static void _dispGear(int row, uint8_t gear) {
-    int y = DISP_ROW_H + row * DISP_ROW_H;
-    s_tft.fillRect(50, y, DISP_W - 50, DISP_ROW_H, COL_BLACK);
+    int y = HEADER_H + row * DISP_ROW_H;
+    s_tft.fillRect(VAL_X, y, DISP_W - VAL_X, DISP_ROW_H, COL_BLACK);
     char c;
     if      (gear == GEAR_NEUTRAL)                      c = 'N';
     else if (gear >= GEAR_1 && gear <= GEAR_6)          c = '0' + gear;
     else if (gear == GEAR_BETWEEN)                      c = '-';
     else                                                c = '?';
-    s_tft.setTextSize(1);
+    s_tft.setTextSize(TXT_SZ);
     s_tft.setTextColor(COL_WHITE, COL_BLACK);
-    s_tft.setCursor(52, y + 6);
+    s_tft.setCursor(VAL_X + 2, y + TXT_Y_OFF);
     s_tft.print(c);
 }
 
@@ -107,10 +97,10 @@ static void _dispCan(CanHealth h) {
         case CAN_HEALTH_BUS_OFF: txt = "BO"; col = COL_RED;       break;
         default:                 txt = "--"; col = COL_LIGHTGREY;  break;
     }
-    s_tft.fillRect(90, 0, DISP_W - 90, DISP_ROW_H, COL_DARKGREY);
-    s_tft.setTextSize(1);
+    s_tft.fillRect(150, 0, DISP_W - 150, HEADER_H, COL_DARKGREY);
+    s_tft.setTextSize(TXT_SZ);
     s_tft.setTextColor(COL_LIGHTGREY, COL_DARKGREY);
-    s_tft.setCursor(90, 7);
+    s_tft.setCursor(156, TXT_Y_OFF);
     s_tft.print("CAN:");
     s_tft.setTextColor(col, COL_DARKGREY);
     s_tft.print(txt);
@@ -119,21 +109,21 @@ static void _dispCan(CanHealth h) {
 // ── Public interface ──────────────────────────────────────────────────────────
 
 void displayBegin() {
-    s_tft.initR(INITR_REDTAB);
-    s_tft.patchOffset(0, 1);
-    s_tft.setRotation(0);   // portrait 128x160 — rotate module 90° on mount
+    s_tft.init(240, 320);   // ST7789 240x320
+    s_tft.setRotation(2);   // portrait, flipped 180° — rotate module on mount for preferred orientation
     s_tft.fillScreen(COL_BLACK);
 
-    s_tft.fillRect(0, 0, DISP_W, DISP_ROW_H, COL_DARKGREY);
-    s_tft.setTextSize(1);
+    s_tft.fillRect(0, 0, DISP_W, HEADER_H, COL_DARKGREY);
+    s_tft.setTextSize(TXT_SZ);
     s_tft.setTextColor(COL_WHITE, COL_DARKGREY);
-    s_tft.setCursor(14, 7);
+    s_tft.setCursor(4, TXT_Y_OFF);
     s_tft.print("SENSOR NODE");
 
+    s_tft.setTextSize(TXT_SZ);
     s_tft.setTextColor(COL_LIGHTGREY, COL_BLACK);
     const char* labels[] = { "OIL:", "TPS:", "FUEL1:", "FUEL2:", "WATER:", "DALL:", "PUMP:", "RPM:", "GEAR:" };
     for (int i = 0; i < 9; i++) {
-        s_tft.setCursor(2, DISP_ROW_H + i * DISP_ROW_H + 6);
+        s_tft.setCursor(4, HEADER_H + i * DISP_ROW_H + TXT_Y_OFF);
         s_tft.print(labels[i]);
     }
 }
@@ -152,13 +142,13 @@ void displayUpdate(float oilPressure, float tps, float fuel1, float fuel2,
     if (gear         != s_d_gear)   { s_d_gear   = gear;         _dispGear(8, gear);              }
     if (pumpDuty     != s_d_pump) {
         s_d_pump = pumpDuty;
-        int y = DISP_ROW_H + 6 * DISP_ROW_H;
-        s_tft.fillRect(50, y, DISP_W - 50, DISP_ROW_H, COL_BLACK);
+        int y = HEADER_H + 6 * DISP_ROW_H;
+        s_tft.fillRect(VAL_X, y, DISP_W - VAL_X, DISP_ROW_H, COL_BLACK);
         char buf[8];
         snprintf(buf, sizeof(buf), "%u%%", pumpDuty);
-        s_tft.setTextSize(1);
+        s_tft.setTextSize(TXT_SZ);
         s_tft.setTextColor(COL_WHITE, COL_BLACK);
-        s_tft.setCursor(52, y + 6);
+        s_tft.setCursor(VAL_X + 2, y + TXT_Y_OFF);
         s_tft.print(buf);
     }
 }

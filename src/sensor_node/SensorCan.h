@@ -12,13 +12,15 @@
 #define FDCAN_TX_PIN  GPIO_PIN_7
 #define FDCAN_RX_PIN  GPIO_PIN_8
 
-// Shared state — defined in main.cpp
-extern uint8_t   g_nodeStatus;
-extern bool      g_canReady;
-extern CanHealth g_canHealth;
-extern uint8_t   g_pumpDuty;
-extern uint16_t  g_rpm;
-extern uint8_t   g_gear;
+// Shared state — defined in main.cpp.
+// Fields touched by the RX ISR (canReceivePoll) are volatile so the main loop
+// always observes fresh values.
+extern uint8_t            g_nodeStatus;
+extern volatile bool      g_canReady;
+extern volatile CanHealth g_canHealth;
+extern volatile uint8_t   g_pumpDuty;
+extern volatile uint16_t  g_rpm;
+extern volatile uint8_t   g_gear;
 
 static FDCAN_HandleTypeDef s_hfdcan;
 
@@ -94,6 +96,18 @@ bool canInit() {
         return false;
     }
 
+    // Drain RX in the FIFO0 new-message interrupt rather than polling. The RX
+    // FIFO0 is fixed at 3 elements on the H5, and the main loop blocks for tens
+    // of ms on the SPI display write; at 50 Hz RPM the FIFO overruns inside that
+    // window and the low-rate (on-change) gear frame is the casualty. The ISR
+    // drains every frame the instant it arrives, independent of loop timing.
+    if (HAL_FDCAN_ActivateNotification(&s_hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
+        Serial.println("[CAN] RX notify failed");
+        return false;
+    }
+    HAL_NVIC_SetPriority(FDCAN1_IT0_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(FDCAN1_IT0_IRQn);
+
     Serial.println("[CAN] FDCAN1 500 Kbps OK");
     return true;
 }
@@ -124,6 +138,9 @@ static bool canSend(uint32_t can_id, uint8_t seq, const uint8_t *payload, uint8_
     return true;
 }
 
+// Drains RX FIFO0. Runs in ISR context (FDCAN1_IT0) — keep it allocation-free
+// and Serial-free, and avoid read-modify-write on state the loop also writes
+// (e.g. g_nodeStatus), which would race the TX path.
 void canReceivePoll() {
     while (HAL_FDCAN_GetRxFifoFillLevel(&s_hfdcan, FDCAN_RX_FIFO0) > 0) {
         FDCAN_RxHeaderTypeDef hdr;
@@ -133,17 +150,14 @@ void canReceivePoll() {
 
         // Any received message proves the bus is live
         if (!g_canReady && g_canHealth == CAN_HEALTH_NO_BUS) {
-            g_canReady    = true;
-            g_canHealth   = CAN_HEALTH_OK;
-            g_nodeStatus &= ~NODE_STATUS_CAN_ERR;
-            Serial.println("[CAN] Bus recovered");
+            g_canReady  = true;
+            g_canHealth = CAN_HEALTH_OK;
         }
 
         if (hdr.Identifier == CAN_SENS_CMD_PUMP) {
             uint8_t duty = data[2];
             if (duty > 100) duty = 100;
             g_pumpDuty = duty;
-            Serial.printf("[CAN] Pump override: %u%%\n", duty);
         }
         else if (hdr.Identifier == CAN_MAIN_RPM) {
             g_rpm = data[2] | ((uint16_t)data[3] << 8);
@@ -152,6 +166,15 @@ void canReceivePoll() {
             g_gear = data[2];
         }
     }
+}
+
+// FDCAN1 interrupt line 0 → HAL dispatch → RxFifo0 callback below.
+extern "C" void FDCAN1_IT0_IRQHandler(void) {
+    HAL_FDCAN_IRQHandler(&s_hfdcan);
+}
+
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs) {
+    if (RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) canReceivePoll();
 }
 
 void canHealthPoll() {
