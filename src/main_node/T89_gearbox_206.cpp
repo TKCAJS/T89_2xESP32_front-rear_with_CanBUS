@@ -1,3 +1,7 @@
+// 213    HARDWARE: clutch position now read via ADS1115 (16-bit, differential A0-A1) over
+//        I2C SDA8/SCL14 @0x48, 2:1 divider on servo feedback; ~0.003V jitter vs noisy GPIO15.
+//        Falls back to legacy GPIO15 analogRead if ADS absent. Hall pin 4 moved to central
+//        pin map (PIN_HALL_SENSOR_2) and injected like pin 5.
 // 212    NVS config web UI; dual hall calibration (per-paddle idle/pulled capture)
 // 211    Hall pin 4 rescaling to match pin 5 range; left/right/result shown on web page
 // 210    Stacked downshift, piecewise clutch mapping, dual hall sensor, CAN bus recovery,
@@ -19,17 +23,24 @@
 #include <driver/gpio.h>
 
 // Version tracking
-#define SOFTWARE_VERSION 212.0
+#define SOFTWARE_VERSION 213.0
 
 // Pin definitions for ESP32-S3 - FIXED PIN ASSIGNMENTS
 #define PIN_MANUAL_TOGGLE   10   // Switch 1 - Long press to toggle manual mode
 #define PIN_NEUTRAL         11   // Switch 2 - Neutral (auto direction by gear)
 #define PIN_SHIFT_DOWN      12   // Switch 3 - Shift Down
 #define PIN_SHIFT_UP        13   // Switch 4 - Shift Up
-#define PIN_HALL_SENSOR     5    // Hall sensor analog input
+#define PIN_HALL_SENSOR     5    // Clutch paddle hall (left)
+#define PIN_HALL_SENSOR_2   4    // Clutch paddle hall (right)
 #define PIN_CLUTCH_SERVO    6    // Servo output
 #define PIN_WIFI_SWITCH     21   // WiFi toggle switch input (momentary)
-#define PIN_CLUTCH_POSITION 15   // Analog voltage input for clutch position monitoring
+#define PIN_CLUTCH_POSITION 15   // Legacy analog clutch position input (fallback if ADS1115 absent)
+#define PIN_ADS_SDA         8    // ADS1115 I2C data
+#define PIN_ADS_SCL         14   // ADS1115 I2C clock (not GPIO9 — see board notes)
+// 2:1 divider (10k/10k) on servo feedback into ADS A0, return ref on A1 (differential).
+// Not safety-critical: bite-point thresholds are captured live, so a slightly off ratio
+// is absorbed at capture time. Set to match your actual divider for honest voltage readout.
+#define CLUTCH_FB_DIVIDER   2.0f
 
 // Clutch servo travel limits — physically measured, never exceed these
 #define CLUTCH_SERVO_MIN  42
@@ -45,6 +56,8 @@ float clutchJustEngagedV = 1.8f;  // raw ADC voltage: rising through this = biti
 #include <WebServer.h>
 #include <Preferences.h>
 #include <Adafruit_NeoPixel.h>
+#include <Wire.h>
+#include <Adafruit_ADS1X15.h>
 
 // Project includes - MODULAR COMPONENTS (Order matters for dependencies)
 #include "RPM.h"
@@ -85,7 +98,7 @@ WebInterface webInterface(&server);
 
 // NEW: Modular components - MOVED AFTER INCLUDES
 MatrixDisplay matrixDisplay;
-HallSensorControl hallSensor(PIN_HALL_SENSOR);
+HallSensorControl hallSensor(PIN_HALL_SENSOR, PIN_HALL_SENSOR_2);
 SerialCommands serialCommands;
 
 // NEW: Manual mode controller
@@ -114,6 +127,10 @@ void IRAM_ATTR wifiSwitchISR() {
 bool clutchPulled = false;
 bool clutchJustEngaged = false;  // biting point zone: voltage between justEngagedV and disengageV
 float clutchVoltage = 0.0;
+
+// ADS1115 — clutch position feedback (16-bit, differential A0–A1 for EMI rejection)
+Adafruit_ADS1115 ads;
+bool adsReady = false;
 
 // Hall sensor range mirrors (synced from hallSensor each loop)
 int hallMin = 780;
@@ -502,7 +519,19 @@ void setupPins() {
 
     // Configure analog inputs
     pinMode(PIN_HALL_SENSOR, INPUT);
-    pinMode(PIN_CLUTCH_POSITION, INPUT);
+    pinMode(PIN_CLUTCH_POSITION, INPUT);   // legacy fallback input
+
+    // ADS1115 — clutch position feedback, differential A0–A1 (rejects ground bounce)
+    Wire.begin(PIN_ADS_SDA, PIN_ADS_SCL);
+    adsReady = ads.begin(0x48);
+    if (adsReady) {
+        ads.setGain(GAIN_ONE);                  // ±4.096V FSR — fits divided 0–2.5V
+        ads.setDataRate(RATE_ADS1115_128SPS);
+        ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
+        Serial.println("ADS1115: clutch position OK (diff A0-A1 @0x48)");
+    } else {
+        Serial.println("ADS1115: NOT FOUND — falling back to GPIO15 analogRead");
+    }
 
     clutchServo.attach(PIN_CLUTCH_SERVO);
     clutchServo.setLimits(CLUTCH_SERVO_MIN, CLUTCH_SERVO_MAX);
@@ -565,8 +594,16 @@ void checkWiFiToggleSwitch() {
 }
 
 void checkServoPosition() {
-    int analogValue = analogRead(PIN_CLUTCH_POSITION);
-    clutchVoltage = (analogValue * 3.3) / 4095.0;
+    if (adsReady) {
+        int16_t counts = ads.getLastConversionResults();   // differential A0-A1, 16-bit
+        if (counts < 0) counts = 0;                         // clamp tiny negative at rest
+        // computeVolts() gives volts at the ADS input (post-divider); scale back to the
+        // true servo feedback voltage so thresholds stay in real-world volts.
+        clutchVoltage = ads.computeVolts(counts) * CLUTCH_FB_DIVIDER;
+    } else {
+        int analogValue = analogRead(PIN_CLUTCH_POSITION);  // fallback: legacy GPIO15
+        clutchVoltage = (analogValue * 3.3) / 4095.0;
+    }
     bool newClutchPulled  = (clutchVoltage < clutchDisengageV);
     clutchJustEngaged = (clutchVoltage >= clutchJustEngagedV && clutchVoltage < clutchDisengageV);
     

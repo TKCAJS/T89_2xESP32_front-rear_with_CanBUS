@@ -426,7 +426,7 @@ void WebInterface::handleSensorData() {
     json += "\"wifiEnabled\":" + String(wifiEnabled ? "true" : "false") + ",";
     json += "\"apIP\":\"" + WiFi.softAPIP().toString() + "\",";
     int hallLeft   = analogRead(PIN_HALL_SENSOR);
-    int hallRight  = analogRead(HALL_PIN_2);          // raw — for display only
+    int hallRight  = hallSensor.getPin2Raw();          // raw — for display only
     int hallValue  = max(hallLeft, hallSensor.getPin2Scaled()); // scaled max — drives servo
     json += "\"hallLeft\":"  + String(hallLeft)  + ",";
     json += "\"hallRight\":" + String(hallRight) + ",";
