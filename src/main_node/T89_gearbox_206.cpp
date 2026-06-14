@@ -37,10 +37,11 @@
 #define PIN_CLUTCH_POSITION 15   // Legacy analog clutch position input (fallback if ADS1115 absent)
 #define PIN_ADS_SDA         8    // ADS1115 I2C data
 #define PIN_ADS_SCL         14   // ADS1115 I2C clock (not GPIO9 — see board notes)
-// 2:1 divider (10k/10k) on servo feedback into ADS A0, return ref on A1 (differential).
+// 0.591 divider (4.7k top / 6.8k bottom) on servo feedback into ADS A0, return ref on A1
+// (differential), 0.1uF across A0-A1. 5V -> ~2.96V, safely under 3.3V VDD at GAIN_ONE.
 // Not safety-critical: bite-point thresholds are captured live, so a slightly off ratio
 // is absorbed at capture time. Set to match your actual divider for honest voltage readout.
-#define CLUTCH_FB_DIVIDER   2.0f
+#define CLUTCH_FB_DIVIDER   1.691f   // 4.7k (top) / 6.8k (bottom): (4.7+6.8)/6.8
 
 // Clutch servo travel limits — physically measured, never exceed these
 #define CLUTCH_SERVO_MIN  42
