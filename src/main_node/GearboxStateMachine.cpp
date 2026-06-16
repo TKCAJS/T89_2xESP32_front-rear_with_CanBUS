@@ -123,7 +123,7 @@ void GearboxStateMachine::setConfiguration(int nDownMs, int nUpMs, int sDownMs, 
     shiftDownMs = sDownMs;
     shiftUpMs = sUpMs;
     clutchIdlePos = cIdlePos;
-    clutchEngagePos = cEngagePos;
+    clutchFullyPull = cEngagePos;
 }
 
 void GearboxStateMachine::update() {
@@ -519,7 +519,7 @@ void GearboxStateMachine::updateRelayControl() {
 }
 
 void GearboxStateMachine::engageClutch() {
-    clutchServo->write(clutchEngagePos);
+    clutchServo->write(clutchFullyPull);
     Serial.println("Clutch engaged");
 }
 

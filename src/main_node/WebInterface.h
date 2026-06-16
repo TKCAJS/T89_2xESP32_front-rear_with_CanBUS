@@ -132,7 +132,7 @@ extern int neutralUpMs;
 extern int shiftDownMs;
 extern int shiftUpMs;
 extern int clutchIdlePos;
-extern int clutchEngagePos;
+extern int clutchFullyPull;
 extern bool shiftInProgress;
 extern bool waitingForClutch;
 extern bool wifiEnabled;
@@ -185,28 +185,28 @@ extern HallSensorControl hallSensor;
 void WebInterface::handleUpdate() {
     if (server->hasArg("neutralDownMs") && server->hasArg("neutralUpMs") && 
         server->hasArg("shiftDownMs") && server->hasArg("shiftUpMs") &&
-        server->hasArg("clutchIdlePos") && server->hasArg("clutchEngagePos")) {
+        server->hasArg("clutchIdlePos") && server->hasArg("clutchFullyPull")) {
 
         int newNeutralDownMs = server->arg("neutralDownMs").toInt();
         int newNeutralUpMs = server->arg("neutralUpMs").toInt();
         int newShiftDownMs = server->arg("shiftDownMs").toInt();
         int newShiftUpMs = server->arg("shiftUpMs").toInt();
         int newClutchIdlePos = server->arg("clutchIdlePos").toInt();
-        int newClutchEngagePos = server->arg("clutchEngagePos").toInt();
+        int newClutchFullyPull = server->arg("clutchFullyPull").toInt();
 
         if (newNeutralDownMs > 0 && newNeutralDownMs < 5000 &&
             newNeutralUpMs > 0 && newNeutralUpMs < 5000 &&
             newShiftDownMs > 0 && newShiftDownMs < 5000 &&
             newShiftUpMs > 0 && newShiftUpMs < 5000 &&
             newClutchIdlePos >= 0 && newClutchIdlePos <= 180 &&
-            newClutchEngagePos >= 0 && newClutchEngagePos <= 180) {
+            newClutchFullyPull >= 0 && newClutchFullyPull <= 180) {
 
             neutralDownMs = newNeutralDownMs;
             neutralUpMs = newNeutralUpMs;
             shiftDownMs = newShiftDownMs;
             shiftUpMs = newShiftUpMs;
             clutchIdlePos = newClutchIdlePos;
-            clutchEngagePos = newClutchEngagePos;
+            clutchFullyPull = newClutchFullyPull;
         
             saveConfig();
         
@@ -261,7 +261,7 @@ void WebInterface::handleCommand() {
         server->send(200, "text/plain", "Clutch moved to idle position");
         return;
     } else if (action == "clutchEngage") {
-        clutchServo.write(clutchEngagePos);
+        clutchServo.write(clutchFullyPull);
         server->send(200, "text/plain", "Clutch moved to engage position");
         return;
     } else if (action == "testDownshift") {
@@ -305,7 +305,7 @@ void WebInterface::handleCommand() {
         return;
     } else if (action == "saveClutchEngage") {
         int pos = constrain(server->arg("pos").toInt(), 0, 180);
-        clutchEngagePos = pos;
+        clutchFullyPull = pos;
         saveConfig();
         server->send(200, "text/plain", "Engage saved: " + String(pos) + "\xC2\xB0");
         Serial.println("Clutch engage calibrated: " + String(pos) + "°");
@@ -463,7 +463,7 @@ void WebInterface::handleConfigData() {
     json += "\"shiftDownMs\":" + String(shiftDownMs) + ",";
     json += "\"shiftUpMs\":" + String(shiftUpMs) + ",";
     json += "\"clutchIdlePos\":" + String(clutchIdlePos) + ",";
-    json += "\"clutchEngagePos\":" + String(clutchEngagePos) + ",";
+    json += "\"clutchFullyPull\":" + String(clutchFullyPull) + ",";
     json += "\"hallCurveType\":" + String((int)hallCurveType) + ",";
     json += "\"hallCurveStrength\":" + String(hallCurveStrength, 2) + ",";
     json += "\"hallMin\":" + String(hallMin) + ",";
@@ -562,7 +562,7 @@ void WebInterface::handleApiPostConfig() {
     shiftUpMs       = stored.shiftUpMs;
     shiftDownMs     = stored.shiftDownMs;
     clutchIdlePos   = stored.clutchIdlePos;
-    clutchEngagePos = stored.clutchEngagePos;
+    clutchFullyPull = stored.clutchFullyPull;
     saveConfig();
     if (!shiftInProgress && shiftSequenceState == 0) {
         clutchServo.write(clutchIdlePos);
@@ -597,7 +597,7 @@ void WebInterface::handleApiDefaults() {
     shiftUpMs       = stored.shiftUpMs;
     shiftDownMs     = stored.shiftDownMs;
     clutchIdlePos   = stored.clutchIdlePos;
-    clutchEngagePos = stored.clutchEngagePos;
+    clutchFullyPull = stored.clutchFullyPull;
     saveConfig();
     if (!shiftInProgress && shiftSequenceState == 0) {
         clutchServo.write(clutchIdlePos);

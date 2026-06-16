@@ -187,7 +187,7 @@
         <div class="field">
             <label>Engage Angle (°) &mdash; lever pulled, clutch disengaged</label>
             <div class="input-row">
-                <input type="number" id="clutchEngagePos" min="0" max="180" step="1">
+                <input type="number" id="clutchFullyPull" min="0" max="180" step="1">
                 <span class="unit">°</span>
             </div>
             <div class="bounds">Range: 0 – 180</div>
@@ -207,14 +207,14 @@
     // Mirrors the firmware bounds in CalConfig.h — client validation is convenience only,
     // the firmware always validates and rejects bad writes with a reason.
     const FIELDS = ['neutralDownMs', 'neutralUpMs', 'shiftDownMs', 'shiftUpMs',
-                    'clutchIdlePos', 'clutchEngagePos'];
+                    'clutchIdlePos', 'clutchFullyPull'];
     const BOUNDS = {
         neutralDownMs:   { min: 20,  max: 1000 },
         neutralUpMs:     { min: 20,  max: 1000 },
         shiftDownMs:     { min: 20,  max: 1000 },
         shiftUpMs:       { min: 20,  max: 1000 },
         clutchIdlePos:   { min: 0,   max: 180  },
-        clutchEngagePos: { min: 0,   max: 180  }
+        clutchFullyPull: { min: 0,   max: 180  }
     };
 
     function showFeedback(msg, isErr) {

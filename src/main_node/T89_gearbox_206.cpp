@@ -112,7 +112,7 @@ int neutralUpMs = 40;
 int shiftDownMs = 150;
 int shiftUpMs = 150;
 int clutchIdlePos = 0;
-int clutchEngagePos = 185;
+int clutchFullyPull = 185;
 
 // WiFi state
 bool wifiEnabled = false;
@@ -198,7 +198,7 @@ void startDownshiftWithClutchCheck(int durationMs) {
     gearbox.processEvent(EVENT_NEUTRAL_DOWN_PRESSED); 
 }
 
-void engageClutch() { clutchServo.write(clutchEngagePos); }
+void engageClutch() { clutchServo.write(clutchFullyPull); }
 void releaseClutch() { clutchServo.write(clutchIdlePos); }
 void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter); }
 String getGearStatusForWeb() { return mainCan.getGearName(); }
@@ -371,7 +371,7 @@ void setup() {
     gearbox.begin(&shiftLogger, &rpmSensor, &clutchServo);
 
     hallSensor.begin(&clutchServo);
-    hallSensor.setConfiguration(clutchIdlePos, clutchEngagePos);
+    hallSensor.setConfiguration(clutchIdlePos, clutchFullyPull);
 
     matrixDisplay.begin(&wifiEnabled, &pcf8575Connected, &manualModeActive);
 
@@ -382,12 +382,12 @@ void setup() {
     loadConfig();
 
     // Seed the CalConfig NVS blob from live globals (first boot) or load it.
-    calInit(neutralDownMs, neutralUpMs, shiftUpMs, shiftDownMs, clutchIdlePos, clutchEngagePos);
+    calInit(neutralDownMs, neutralUpMs, shiftUpMs, shiftDownMs, clutchIdlePos, clutchFullyPull);
 
     // Update configurations
     gearbox.setConfiguration(neutralDownMs, neutralUpMs, shiftDownMs, shiftUpMs,
-                            clutchIdlePos, clutchEngagePos);
-    hallSensor.setConfiguration(clutchIdlePos, clutchEngagePos);
+                            clutchIdlePos, clutchFullyPull);
+    hallSensor.setConfiguration(clutchIdlePos, clutchFullyPull);
     
     // Initialize WiFi (starts disabled)
     if (wifiEnabled) {
@@ -666,7 +666,7 @@ void loadConfig() {
     shiftDownMs      = prefs.getInt("shiftDownMs", 150);
     shiftUpMs        = prefs.getInt("shiftUpMs", 150);
     clutchIdlePos    = prefs.getInt("clutchIdlePos", 0);
-    clutchEngagePos  = prefs.getInt("clutchEngagePos", 180);
+    clutchFullyPull  = prefs.getInt("clutchFullyPull", 180);
     clutchDisengageV   = prefs.getFloat("clutchDisengV", 1.8f);
     clutchJustEngagedV = prefs.getFloat("clutchBiteV",   1.8f);
     prefs.end();
@@ -677,7 +677,7 @@ void loadConfig() {
     Serial.println("  Shift Down: " + String(shiftDownMs) + "ms");
     Serial.println("  Shift Up: " + String(shiftUpMs) + "ms");
     Serial.println("  Clutch Idle: " + String(clutchIdlePos) + "°");
-    Serial.println("  Clutch Engage: " + String(clutchEngagePos) + "°");
+    Serial.println("  Clutch Engage: " + String(clutchFullyPull) + "°");
 }
 
 void saveConfig() {
@@ -688,13 +688,13 @@ void saveConfig() {
     prefs.putInt("shiftDownMs", shiftDownMs);
     prefs.putInt("shiftUpMs", shiftUpMs);
     prefs.putInt("clutchIdlePos", clutchIdlePos);
-    prefs.putInt("clutchEngagePos", clutchEngagePos);
+    prefs.putInt("clutchFullyPull", clutchFullyPull);
     prefs.putFloat("clutchDisengV", clutchDisengageV);
     prefs.putFloat("clutchBiteV",   clutchJustEngagedV);
     prefs.end();
 
     gearbox.setConfiguration(neutralDownMs, neutralUpMs, shiftDownMs, shiftUpMs,
-                            clutchIdlePos, clutchEngagePos);
+                            clutchIdlePos, clutchFullyPull);
     
     Serial.println("Configuration saved to preferences");
 }

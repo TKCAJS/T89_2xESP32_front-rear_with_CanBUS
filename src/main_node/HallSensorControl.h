@@ -14,7 +14,7 @@ private:
     float curveStrength;
     SimpleServo* clutchServo;
     int clutchIdlePos;
-    int clutchEngagePos;
+    int clutchFullyPull;
     int hallMin;
     int hallMax;
     int pin2RawMin;   // pin4 raw ADC at idle (lever released) — calibrated
@@ -33,7 +33,7 @@ private:
 public:
     HallSensorControl(int pin, int pin2) : hallPin(pin), hallPin2(pin2), curveType(HALL_LOGARITHMIC),
                                 curveStrength(2.0), clutchServo(nullptr),
-                                clutchIdlePos(0), clutchEngagePos(180),
+                                clutchIdlePos(0), clutchFullyPull(180),
                                 hallMin(780), hallMax(3330),
                                 pin2RawMin(1000), pin2RawMax(3600), servoOverride(false),
                                 hallBiteStart(1000), hallBiteEnd(3000),
@@ -53,7 +53,7 @@ public:
     
     void setConfiguration(int idlePos, int engagePos) {
         clutchIdlePos = idlePos;
-        clutchEngagePos = engagePos;
+        clutchFullyPull = engagePos;
     }
     
     void setServoOverride(bool active) { servoOverride = active; }
@@ -70,7 +70,7 @@ public:
             servoPos = hallToPiecewise(hallValue);
         } else {
             servoPos = hallToServoNonLinear(hallValue, hallMin, hallMax,
-                                           clutchIdlePos, clutchEngagePos,
+                                           clutchIdlePos, clutchFullyPull,
                                            curveType, curveStrength);
         }
 
@@ -185,11 +185,11 @@ public:
         while (!Serial.available()) {
             int hallValue = max((int)analogRead(hallPin), pin2Scaled());
             
-            float linearServo = mapf(hallValue, hallMin, hallMax, clutchIdlePos, clutchEngagePos);
+            float linearServo = mapf(hallValue, hallMin, hallMax, clutchIdlePos, clutchFullyPull);
             float curvedServo = (curveType == HALL_PIECEWISE)
                 ? hallToPiecewise(hallValue)
                 : hallToServoNonLinear(hallValue, hallMin, hallMax,
-                                      clutchIdlePos, clutchEngagePos,
+                                      clutchIdlePos, clutchFullyPull,
                                       curveType, curveStrength);
 
             Serial.printf("%4d | %5.1f° | %5.1f° | %5.1f°\n",
@@ -244,7 +244,7 @@ private:
         } else if (hallValue <= hallBiteEnd) {
             return mapf(hallValue, hallBiteStart, hallBiteEnd, servoBiteStart, servoBiteEnd);
         } else {
-            return mapf(hallValue, hallBiteEnd, hallMax, servoBiteEnd, clutchEngagePos);
+            return mapf(hallValue, hallBiteEnd, hallMax, servoBiteEnd, clutchFullyPull);
         }
     }
 

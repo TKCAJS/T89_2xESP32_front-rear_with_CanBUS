@@ -25,7 +25,7 @@ struct CalConfig {
 
     // --- clutch servo angles ---
     uint16_t clutchIdlePos;    // lever released / clutch fully engaged (0-180 °)
-    uint16_t clutchEngagePos;  // lever pulled / clutch disengaged (0-180 °)
+    uint16_t clutchFullyPull;  // lever pulled / clutch disengaged (0-180 °)
 
     // --- integrity (MUST remain last member) ---
     uint32_t crc;
@@ -38,7 +38,7 @@ static void calLoadDefaults(CalConfig &c) {
     c.shiftUpMs      = 150;
     c.shiftDownMs    = 150;
     c.clutchIdlePos  = 0;
-    c.clutchEngagePos = 180;
+    c.clutchFullyPull = 180;
     c.crc            = 0;
 }
 
@@ -50,7 +50,7 @@ static String calValidate(const CalConfig &c) {
     if (c.shiftUpMs      < 20 || c.shiftUpMs      > 1000) return "shiftUpMs out of range (20-1000)";
     if (c.shiftDownMs    < 20 || c.shiftDownMs    > 1000) return "shiftDownMs out of range (20-1000)";
     if (c.clutchIdlePos  > 180)                           return "clutchIdlePos out of range (0-180)";
-    if (c.clutchEngagePos > 180)                          return "clutchEngagePos out of range (0-180)";
+    if (c.clutchFullyPull > 180)                          return "clutchFullyPull out of range (0-180)";
     return "";
 }
 
@@ -113,7 +113,7 @@ static void calToJson(const CalConfig &c, JsonDocument &doc) {
     doc["shiftUpMs"]      = c.shiftUpMs;
     doc["shiftDownMs"]    = c.shiftDownMs;
     doc["clutchIdlePos"]  = c.clutchIdlePos;
-    doc["clutchEngagePos"] = c.clutchEngagePos;
+    doc["clutchFullyPull"] = c.clutchFullyPull;
 }
 
 // Overlay only keys present in the JSON doc onto an existing config.
@@ -124,7 +124,7 @@ static void calJsonOverlay(const JsonDocument &doc, CalConfig &c) {
     if (doc["shiftUpMs"].is<int>())       c.shiftUpMs      = doc["shiftUpMs"].as<int>();
     if (doc["shiftDownMs"].is<int>())     c.shiftDownMs    = doc["shiftDownMs"].as<int>();
     if (doc["clutchIdlePos"].is<int>())   c.clutchIdlePos  = doc["clutchIdlePos"].as<int>();
-    if (doc["clutchEngagePos"].is<int>()) c.clutchEngagePos = doc["clutchEngagePos"].as<int>();
+    if (doc["clutchFullyPull"].is<int>()) c.clutchFullyPull = doc["clutchFullyPull"].as<int>();
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ static SemaphoreHandle_t gCalMutex = nullptr;
 // so the first-boot NVS seed reflects real calibration rather than zeroes.
 static void calInit(int liveNeutralDownMs, int liveNeutralUpMs,
                     int liveShiftUpMs, int liveShiftDownMs,
-                    int liveClutchIdlePos, int liveClutchEngagePos) {
+                    int liveClutchIdlePos, int liveClutchFullyPull) {
     gCalMutex = xSemaphoreCreateMutex();
     CalConfig boot;
     if (!calNvsRead(boot)) {
@@ -147,7 +147,7 @@ static void calInit(int liveNeutralDownMs, int liveNeutralUpMs,
         boot.shiftUpMs      = (uint16_t)liveShiftUpMs;
         boot.shiftDownMs    = (uint16_t)liveShiftDownMs;
         boot.clutchIdlePos  = (uint16_t)liveClutchIdlePos;
-        boot.clutchEngagePos = (uint16_t)liveClutchEngagePos;
+        boot.clutchFullyPull = (uint16_t)liveClutchFullyPull;
         calSeal(boot);
         calNvsWrite(boot);
         Serial.println("CalConfig: NVS empty/invalid — seeded from live config");

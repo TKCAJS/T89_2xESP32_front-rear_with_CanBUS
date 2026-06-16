@@ -94,7 +94,7 @@ private:
     int shiftDownMs;
     int shiftUpMs;
     int clutchIdlePos;
-    int clutchEngagePos;
+    int clutchFullyPull;
     
     // Hardware references
     ShiftLogger* shiftLogger;
@@ -133,7 +133,7 @@ public:
         : currentState(IDLE_NEUTRAL), previousState(IDLE_NEUTRAL),
           stateStartTime(0), lastStateChange(0),
           neutralDownMs(40), neutralUpMs(40), shiftDownMs(150), shiftUpMs(150),
-          clutchIdlePos(0), clutchEngagePos(180),
+          clutchIdlePos(0), clutchFullyPull(180),
           shiftLogger(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
           pinHallSensor(hallPin),
           relayActive(false), relayStartTime(0), relayDuration(0), activeShiftIsUp(false),

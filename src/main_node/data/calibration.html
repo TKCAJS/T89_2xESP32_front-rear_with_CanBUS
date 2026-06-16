@@ -718,13 +718,13 @@
                     document.getElementById('shiftDownMs').textContent = config.shiftDownMs || 'N/A';
                     document.getElementById('shiftUpMs').textContent = config.shiftUpMs || 'N/A';
                     document.getElementById('clutchIdle').textContent = (config.clutchIdlePos != null ? config.clutchIdlePos : 'N/A');
-                    document.getElementById('clutchEngage').textContent = (config.clutchEngagePos != null ? config.clutchEngagePos : 'N/A');
+                    document.getElementById('clutchEngage').textContent = (config.clutchFullyPull != null ? config.clutchFullyPull : 'N/A');
                     document.getElementById('hallMinDisplay').textContent = (config.hallMin != null ? config.hallMin : 'N/A');
                     document.getElementById('hallMaxDisplay').textContent = (config.hallMax != null ? config.hallMax : 'N/A');
 
                     // Update calibration data
                     calibrationData.clutchPositions.idle   = config.clutchIdlePos  || 0;
-                    calibrationData.clutchPositions.engage = config.clutchEngagePos || 180;
+                    calibrationData.clutchPositions.engage = config.clutchFullyPull || 180;
                     if (config.hallMin != null) calibrationData.hallRange.min = config.hallMin;
                     if (config.hallMax != null) calibrationData.hallRange.max = config.hallMax;
                     if (config.clutchServoMin != null && config.clutchServoMax != null) {

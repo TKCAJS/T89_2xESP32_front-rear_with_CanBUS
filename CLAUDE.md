@@ -21,7 +21,7 @@ All three pages share the same 3-button flex row at the top:
 Current page button is muted (`opacity:0.5; pointer-events:none;`).
 
 ### Save authority — nvsconfig.html
-Uses `POST /api/config` (JSON) + firmware read-back. Fields: `neutralDownMs`, `neutralUpMs`, `shiftDownMs`, `shiftUpMs`, `clutchIdlePos`, `clutchEngagePos`. Stored as a CRC-sealed `CalConfig` blob in NVS namespace `t89cfg`.
+Uses `POST /api/config` (JSON) + firmware read-back. Fields: `neutralDownMs`, `neutralUpMs`, `shiftDownMs`, `shiftUpMs`, `clutchIdlePos`, `clutchFullyPull`. Stored as a CRC-sealed `CalConfig` blob in NVS namespace `t89cfg`.
 
 Hall calibration uses capture buttons hitting `/cmd?action=captureHall*` while live-polling `/sensorData`.
 
