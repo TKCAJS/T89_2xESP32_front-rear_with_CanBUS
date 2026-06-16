@@ -25,7 +25,11 @@ private:
     int hallBiteEnd;     // ADC value where biting zone input ends
     int servoBiteStart;  // servo angle at start of biting zone (just-engaged)
     int servoBiteEnd;    // servo angle at end of biting zone (just-disengaged)
-    
+
+    // Added to the captured idle reading so sensor noise at rest can't push
+    // hallValue above hallMin/pin2RawMin and twitch the servo off idle.
+    static const int HALL_IDLE_DEADBAND = 30;
+
 public:
     HallSensorControl(int pin, int pin2) : hallPin(pin), hallPin2(pin2), curveType(HALL_LOGARITHMIC),
                                 curveStrength(2.0), clutchServo(nullptr),
@@ -167,9 +171,9 @@ public:
     int getPin2RawMax()  const { return pin2RawMax; }
 
     // One-shot capture: hold paddle in position, click. Saves immediately.
-    String capturePin1Idle()   { hallMin    = analogRead(hallPin);    saveConfiguration(); return String(hallMin); }
+    String capturePin1Idle()   { hallMin    = constrain(analogRead(hallPin)  + HALL_IDLE_DEADBAND, 0, 4095); saveConfiguration(); return String(hallMin); }
     String capturePin1Pulled() { hallMax    = analogRead(hallPin);    saveConfiguration(); return String(hallMax); }
-    String capturePin2Idle()   { pin2RawMin = analogRead(hallPin2); saveConfiguration(); return String(pin2RawMin); }
+    String capturePin2Idle()   { pin2RawMin = constrain(analogRead(hallPin2) + HALL_IDLE_DEADBAND, 0, 4095); saveConfiguration(); return String(pin2RawMin); }
     String capturePin2Pulled() { pin2RawMax = analogRead(hallPin2); saveConfiguration(); return String(pin2RawMax); }
 
     void runTest() {

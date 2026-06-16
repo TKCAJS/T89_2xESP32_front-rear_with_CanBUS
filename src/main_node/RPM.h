@@ -45,7 +45,7 @@ public:
         pcntConfig.counter_l_lim = 0;
 
         pcnt_unit_config(&pcntConfig);
-        pcnt_set_filter_value(pcntUnit, 100);  // Debounce pulses ~1us
+        pcnt_set_filter_value(pcntUnit, 1023);  // ~12.8 µs at 80 MHz APB — max HW filter, stays well below min tooth period at redline
         pcnt_filter_enable(pcntUnit);
 
         pcnt_counter_pause(pcntUnit);
