@@ -25,6 +25,7 @@ private:
     int hallBiteEnd;     // ADC value where biting zone input ends
     int servoBiteStart;  // servo angle at start of biting zone (just-engaged)
     int servoBiteEnd;    // servo angle at end of biting zone (just-disengaged)
+    int pwBlend;         // smoothstep blend half-width (hall counts) at the breakpoints; 0 = sharp corners
 
     // Added to the captured idle reading so sensor noise at rest can't push
     // hallValue above hallMin/pin2RawMin and twitch the servo off idle.
@@ -37,7 +38,7 @@ public:
                                 hallMin(780), hallMax(3330),
                                 pin2RawMin(1000), pin2RawMax(3600), servoOverride(false),
                                 hallBiteStart(1000), hallBiteEnd(3000),
-                                servoBiteStart(98), servoBiteEnd(115) {}
+                                servoBiteStart(98), servoBiteEnd(115), pwBlend(120) {}
     
     void begin(SimpleServo* servo) {
         clutchServo = servo;
@@ -149,20 +150,23 @@ public:
     int getHallMin() const { return hallMin; }
     int getHallMax() const { return hallMax; }
 
-    void setPiecewiseZone(int hBiteStart, int hBiteEnd, int sBiteStart, int sBiteEnd) {
+    void setPiecewiseZone(int hBiteStart, int hBiteEnd, int sBiteStart, int sBiteEnd, int blend) {
         hallBiteStart  = constrain(hBiteStart, 0, 4095);
         hallBiteEnd    = constrain(hBiteEnd,   0, 4095);
         servoBiteStart = constrain(sBiteStart, 0, 180);
         servoBiteEnd   = constrain(sBiteEnd,   0, 180);
+        pwBlend        = constrain(blend,      0, 2000);
         saveConfiguration();
         Serial.println("Piecewise zone: hall " + String(hallBiteStart) + "-" + String(hallBiteEnd) +
-                       " -> servo " + String(servoBiteStart) + "-" + String(servoBiteEnd) + "deg");
+                       " -> servo " + String(servoBiteStart) + "-" + String(servoBiteEnd) +
+                       "deg, blend " + String(pwBlend));
     }
 
     int getHallBiteStart()  const { return hallBiteStart; }
     int getHallBiteEnd()    const { return hallBiteEnd; }
     int getServoBiteStart() const { return servoBiteStart; }
     int getServoBiteEnd()   const { return servoBiteEnd; }
+    int getPwBlend()        const { return pwBlend; }
 
     // Pin4 (right paddle) getters
     int getPin2Raw()     const { return analogRead(hallPin2); }
@@ -237,15 +241,40 @@ private:
         return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
     }
 
+    // Quadratic-Bezier corner: control point on the breakpoint, endpoints w counts
+    // out along each segment. C1-continuous AND monotonic (dy/dtau = 2w[(1-t)m1+t*m2],
+    // both slopes positive), so it never reverses the way a two-line weighted blend can.
     float hallToPiecewise(int hallValue) {
         hallValue = constrain(hallValue, hallMin, hallMax);
-        if (hallValue <= hallBiteStart) {
-            return mapf(hallValue, hallMin, hallBiteStart, clutchIdlePos, servoBiteStart);
-        } else if (hallValue <= hallBiteEnd) {
-            return mapf(hallValue, hallBiteStart, hallBiteEnd, servoBiteStart, servoBiteEnd);
-        } else {
-            return mapf(hallValue, hallBiteEnd, hallMax, servoBiteEnd, clutchFullyPull);
+
+        if (pwBlend > 0) {
+            int midLen = hallBiteEnd - hallBiteStart;
+            // Clamp the band per breakpoint so the two corners can't cross each other,
+            // the far breakpoint, or run past hallMin/hallMax.
+            int wS = min(pwBlend, min(hallBiteStart - hallMin, midLen / 2));
+            int wE = min(pwBlend, min(hallMax - hallBiteEnd,   midLen / 2));
+
+            // Segment slopes (servo deg per hall count); denominators guaranteed > 0
+            // inside each branch by the wS/wE clamps above.
+            if (wS > 0 && hallValue > hallBiteStart - wS && hallValue < hallBiteStart + wS) {
+                float mLo  = (float)(servoBiteStart - clutchIdlePos) / (float)(hallBiteStart - hallMin);
+                float mMid = (float)(servoBiteEnd - servoBiteStart)  / (float)(hallBiteEnd - hallBiteStart);
+                float tau  = (float)(hallValue - (hallBiteStart - wS)) / (2.0f * wS);
+                float omt  = 1.0f - tau;
+                return servoBiteStart + wS * (mMid * tau * tau - mLo * omt * omt);
+            }
+            if (wE > 0 && hallValue > hallBiteEnd - wE && hallValue < hallBiteEnd + wE) {
+                float mMid = (float)(servoBiteEnd - servoBiteStart)  / (float)(hallBiteEnd - hallBiteStart);
+                float mHi  = (float)(clutchFullyPull - servoBiteEnd) / (float)(hallMax - hallBiteEnd);
+                float tau  = (float)(hallValue - (hallBiteEnd - wE)) / (2.0f * wE);
+                float omt  = 1.0f - tau;
+                return servoBiteEnd + wE * (mHi * tau * tau - mMid * omt * omt);
+            }
         }
+
+        if (hallValue <= hallBiteStart) return mapf(hallValue, hallMin,       hallBiteStart, clutchIdlePos,  servoBiteStart);
+        if (hallValue <= hallBiteEnd)   return mapf(hallValue, hallBiteStart, hallBiteEnd,   servoBiteStart, servoBiteEnd);
+        return mapf(hallValue, hallBiteEnd, hallMax, servoBiteEnd, clutchFullyPull);
     }
 
     /**
@@ -318,6 +347,7 @@ private:
         prefs.putInt("hallBiteEnd",    hallBiteEnd);
         prefs.putInt("servoBiteStart", servoBiteStart);
         prefs.putInt("servoBiteEnd",   servoBiteEnd);
+        prefs.putInt("pwBlend",        pwBlend);
         prefs.putInt("pin2RawMin",     pin2RawMin);
         prefs.putInt("pin2RawMax",     pin2RawMax);
         prefs.end();
@@ -335,6 +365,7 @@ private:
         hallBiteEnd   = prefs.getInt("hallBiteEnd",   3000);
         servoBiteStart= prefs.getInt("servoBiteStart",98);
         servoBiteEnd  = prefs.getInt("servoBiteEnd",  115);
+        pwBlend       = prefs.getInt("pwBlend",       120);
         pin2RawMin    = prefs.getInt("pin2RawMin",    1000);
         pin2RawMax    = prefs.getInt("pin2RawMax",    3600);
         prefs.end();

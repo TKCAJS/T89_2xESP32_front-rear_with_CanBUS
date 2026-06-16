@@ -315,8 +315,10 @@ void WebInterface::handleCommand() {
         int hbe = server->arg("hBiteEnd").toInt();
         int sbs = server->arg("sBiteStart").toInt();
         int sbe = server->arg("sBiteEnd").toInt();
-        if (hbs >= 0 && hbe <= 4095 && hbs < hbe && sbs >= 0 && sbe <= 180 && sbs < sbe) {
-            hallSensor.setPiecewiseZone(hbs, hbe, sbs, sbe);
+        int blend = server->arg("blend").toInt();
+        if (hbs >= 0 && hbe <= 4095 && hbs < hbe && sbs >= 0 && sbe <= 180 && sbs < sbe &&
+            blend >= 0 && blend <= 2000) {
+            hallSensor.setPiecewiseZone(hbs, hbe, sbs, sbe, blend);
             server->send(200, "text/plain", "Piecewise zone saved");
             Serial.println("Piecewise zone saved via web");
         } else {
@@ -476,6 +478,7 @@ void WebInterface::handleConfigData() {
     json += "\"hallBiteEnd\":"    + String(hallSensor.getHallBiteEnd())    + ",";
     json += "\"servoBiteStart\":" + String(hallSensor.getServoBiteStart()) + ",";
     json += "\"servoBiteEnd\":"   + String(hallSensor.getServoBiteEnd())   + ",";
+    json += "\"pwBlend\":"        + String(hallSensor.getPwBlend())        + ",";
     json += "\"pin2RawMin\":"     + String(hallSensor.getPin2RawMin())     + ",";
     json += "\"pin2RawMax\":"     + String(hallSensor.getPin2RawMax());
     json += "}";

@@ -327,6 +327,10 @@
                                        style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
                             </label>
                         </div>
+                        <label style="font-size:12px;display:block;margin:8px 0;">Corner smoothing &mdash; blend half-width (ADC counts), 0 = sharp<br>
+                            <input id="pwBlend" type="number" min="0" max="2000" value="120"
+                                   style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                        </label>
                         <button class="btn" onclick="savePiecewiseZone()">Save Piecewise Zone</button>
                         <button class="btn btn-secondary" id="activatePiecewiseBtn"
                                 onclick="activatePiecewiseMapping()"
@@ -730,13 +734,14 @@
                     if (config.clutchServoMin != null && config.clutchServoMax != null) {
                         updateSliderTrack(config.clutchServoMin, config.clutchServoMax);
                     }
-                    const piecewiseIds = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd'];
+                    const piecewiseIds = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd','pwBlend'];
                     const piecewiseFocused = piecewiseIds.some(id => document.activeElement === document.getElementById(id));
                     if (!piecewiseFocused) {
                         if (config.hallBiteStart != null) document.getElementById('hBiteStart').value = config.hallBiteStart;
                         if (config.hallBiteEnd   != null) document.getElementById('hBiteEnd').value   = config.hallBiteEnd;
                         if (config.servoBiteStart != null) document.getElementById('sBiteStart').value = config.servoBiteStart;
                         if (config.servoBiteEnd   != null) document.getElementById('sBiteEnd').value   = config.servoBiteEnd;
+                        if (config.pwBlend       != null) document.getElementById('pwBlend').value    = config.pwBlend;
                     }
                     calibrationData.relayTimings.neutralDown = config.neutralDownMs || 40;
                     calibrationData.relayTimings.neutralUp = config.neutralUpMs || 40;
@@ -969,8 +974,8 @@
 
 
         function savePiecewiseZone() {
-            const ids = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd'];
-            const [hBiteStart, hBiteEnd, sBiteStart, sBiteEnd] =
+            const ids = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd','pwBlend'];
+            const [hBiteStart, hBiteEnd, sBiteStart, sBiteEnd, pwBlend] =
                 ids.map(id => parseInt(document.getElementById(id).value));
             const resultEl = document.getElementById('piecewiseSaveResult');
 
@@ -979,13 +984,15 @@
 
             const hallOk  = v => !isNaN(v) && v >= 0 && v <= 4095;
             const servoOk = v => !isNaN(v) && v >= 0 && v <= 180;
+            const blendOk = v => !isNaN(v) && v >= 0 && v <= 2000;
             const errors = [];
             if (!hallOk(hBiteStart))  { errors.push('hBiteStart'); document.getElementById('hBiteStart').style.borderColor = '#F44336'; }
             if (!hallOk(hBiteEnd))    { errors.push('hBiteEnd');   document.getElementById('hBiteEnd').style.borderColor   = '#F44336'; }
             if (!servoOk(sBiteStart)) { errors.push('sBiteStart'); document.getElementById('sBiteStart').style.borderColor = '#F44336'; }
             if (!servoOk(sBiteEnd))   { errors.push('sBiteEnd');   document.getElementById('sBiteEnd').style.borderColor   = '#F44336'; }
+            if (!blendOk(pwBlend))    { errors.push('pwBlend');    document.getElementById('pwBlend').style.borderColor    = '#F44336'; }
             if (errors.length) {
-                resultEl.innerHTML = '<span style="color:#F44336;">Out of bounds — Hall: 0–4095, Servo: 0–180.</span>';
+                resultEl.innerHTML = '<span style="color:#F44336;">Out of bounds — Hall: 0–4095, Servo: 0–180, Blend: 0–2000.</span>';
                 return;
             }
             if (hBiteStart >= hBiteEnd) {
@@ -1002,7 +1009,8 @@
                 + '&hBiteStart=' + hBiteStart
                 + '&hBiteEnd='   + hBiteEnd
                 + '&sBiteStart=' + sBiteStart
-                + '&sBiteEnd='   + sBiteEnd)
+                + '&sBiteEnd='   + sBiteEnd
+                + '&blend='      + pwBlend)
                 .then(r => { if (!r.ok) throw new Error('rejected'); return r.text(); })
                 .then(() => fetch('/configData'))
                 .then(r => r.json())
@@ -1010,7 +1018,8 @@
                     if (cfg.hallBiteStart === hBiteStart &&
                         cfg.hallBiteEnd   === hBiteEnd   &&
                         cfg.servoBiteStart === sBiteStart &&
-                        cfg.servoBiteEnd   === sBiteEnd) {
+                        cfg.servoBiteEnd   === sBiteEnd   &&
+                        cfg.pwBlend       === pwBlend) {
                         resultEl.innerHTML = '<span style="color:#4CAF50;">Saved — confirmed from read-back.</span>';
                     } else {
                         resultEl.innerHTML = '<span style="color:#FF9800;">Sent but read-back mismatch — check firmware.</span>';
