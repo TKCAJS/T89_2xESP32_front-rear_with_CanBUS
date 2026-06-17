@@ -116,13 +116,7 @@ int clutchFullyPull = 185;
 
 // WiFi state
 bool wifiEnabled = false;
-volatile bool wifiTogglePending = false;
-unsigned long lastWifiButtonPress = 0;
-#define WIFI_DEBOUNCE_DELAY 300
-
-void IRAM_ATTR wifiSwitchISR() {
-    wifiTogglePending = true;
-}
+#define WIFI_LONGPRESS_MS 1000   // hold the WiFi switch this long (ms) to toggle on/off
 
 // Clutch monitoring
 bool clutchPulled = false;
@@ -516,7 +510,7 @@ void setupPins() {
     pinMode(PIN_WIFI_SWITCH, INPUT_PULLUP);
     gpio_pulldown_dis((gpio_num_t)PIN_WIFI_SWITCH);
     gpio_pullup_en((gpio_num_t)PIN_WIFI_SWITCH);
-    attachInterrupt(digitalPinToInterrupt(PIN_WIFI_SWITCH), wifiSwitchISR, FALLING);
+    // No interrupt: WiFi switch is polled as a non-blocking long-press in checkWiFiToggleSwitch()
 
     // Configure analog inputs
     pinMode(PIN_HALL_SENSOR, INPUT);
@@ -584,13 +578,25 @@ void toggleWiFi() {
 }
 
 void checkWiFiToggleSwitch() {
-    if (!wifiTogglePending) return;
-    wifiTogglePending = false;
+    // Non-blocking long-press detect: read the pin once per call, time the hold
+    // with millis() across loop passes. Switch is active-LOW (INPUT_PULLUP).
+    static bool holding = false;
+    static unsigned long holdStart = 0;
+    static bool toggledThisHold = false;
 
-    unsigned long currentTime = millis();
-    if (currentTime - lastWifiButtonPress > WIFI_DEBOUNCE_DELAY) {
-        lastWifiButtonPress = currentTime;
-        toggleWiFi();
+    bool pressed = (digitalRead(PIN_WIFI_SWITCH) == LOW);
+
+    if (pressed) {
+        if (!holding) {
+            holding = true;
+            holdStart = millis();
+            toggledThisHold = false;
+        } else if (!toggledThisHold && (millis() - holdStart >= WIFI_LONGPRESS_MS)) {
+            toggleWiFi();            // fires once per continuous hold
+            toggledThisHold = true;
+        }
+    } else {
+        holding = false;            // released; require a fresh 2s hold next time
     }
 }
 
