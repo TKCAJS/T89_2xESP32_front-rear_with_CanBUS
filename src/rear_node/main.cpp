@@ -208,9 +208,9 @@ void taskHeartbeat(uint32_t now) {
                  (t > FLASH_DURATION_MS + FLASH_GAP_MS &&
                   t < FLASH_DURATION_MS * 2 + FLASH_GAP_MS);
     if (flash) {
-        g_pixel.setPixelColor(0, g_pixel.Color(255, 0, 0));
+        g_pixel.setPixelColor(0, g_pixel.Color(255, 0, 0));  // red
     } else {
-        g_pixel.setPixelColor(0, g_pixel.Color(80, 0, 80));  // purple
+        g_pixel.setPixelColor(0, g_pixel.Color(0, 20, 0));  // purple
     }
     g_pixel.show();
 }
