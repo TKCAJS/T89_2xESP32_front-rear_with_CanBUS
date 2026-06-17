@@ -334,7 +334,34 @@ void SerialCommands::printHelp() {
 }
 
 
+// ---- Dedicated clutch-servo control task ----
+// Pinned to core 0 (Arduino loop() runs on core 1) at high priority so the paddle->servo
+// path tracks at a steady 200 Hz regardless of loop() load (web server, CAN, matrix).
+// It only drives the servo when idle or in manual mode; during shift sequences the state
+// machine (gearbox.update() in loop) owns the servo, so this task stands off whenever
+// gearbox.isIdle() is false.
+static void clutchControlTask(void* param) {
+    const TickType_t period = pdMS_TO_TICKS(5);   // 200 Hz — plenty for clutch tracking
+    for (;;) {
+        if (manualMode.isManualModeEnabled()) {
+            manualMode.updateClutch();              // direct paddle->servo (no limits)
+        } else if (gearbox.isIdle()) {
+            hallSensor.updateClutchControl(true);   // curve paddle->servo (respects servoOverride)
+        }
+        vTaskDelay(period);
+    }
+}
+
 void setup() {
+    // Emit valid idle PWM the instant we're out of reset, before anything else. The
+    // ASME-MR servo needs ~2s to re-acquire its signal after the pulse stream drops
+    // (which happens on every MCU reset), so starting it here instead of mid-setup
+    // shaves that acquisition window. clutchIdlePos is still default here; loadConfig()
+    // + clutchControlTask refine it once NVS is read.
+    clutchServo.attach(PIN_CLUTCH_SERVO);
+    clutchServo.setLimits(CLUTCH_SERVO_MIN, CLUTCH_SERVO_MAX);
+    clutchServo.write(clutchIdlePos);
+
     Serial.begin(115200);
     Serial.println();
     Serial.println("========================================");
@@ -348,9 +375,9 @@ void setup() {
         Serial.println("LittleFS Mount Failed");
         return;
     }
-    
+
     setupPins();
-    
+
     // Initialize CAN bus
     mainCan.begin();
 
@@ -372,7 +399,7 @@ void setup() {
     serialCommands.begin(&hallSensor, &gearbox, &shiftLogger);
 
     manualMode.begin(&hallSensor, &clutchServo);
-    
+
     loadConfig();
 
     // Seed the CalConfig NVS blob from live globals (first boot) or load it.
@@ -382,7 +409,11 @@ void setup() {
     gearbox.setConfiguration(neutralDownMs, neutralUpMs, shiftDownMs, shiftUpMs,
                             clutchIdlePos, clutchFullyPull);
     hallSensor.setConfiguration(clutchIdlePos, clutchFullyPull);
-    
+
+    // Dedicated clutch control on core 0: steady high-rate paddle->servo tracking,
+    // independent of loop() load (web/CAN/matrix).
+    xTaskCreatePinnedToCore(clutchControlTask, "ClutchCtl", 4096, nullptr, 5, nullptr, 0);
+
     // Initialize WiFi (starts disabled)
     if (wifiEnabled) {
         setupWiFiAP();
@@ -394,10 +425,10 @@ void setup() {
     // Initialize LED
     pixels.begin();
     pixels.show();
-    
+
     // Initialize clutch servo
     clutchServo.write(clutchIdlePos);
-    
+
     Serial.println("========================================");
     Serial.println("System initialized successfully!");
     Serial.println("State Machine Active: " + gearbox.getStateName());
@@ -425,9 +456,8 @@ void loop() {
                         "V, Threshold: 1.8V, Pulled: " + String(clutchPulled ? "YES" : "NO"));
         }
         
-        // Update modular components
-        hallSensor.updateClutchControl(gearbox.isIdle());
-        
+        // Clutch paddle->servo is handled by clutchControlTask (core 0)
+
         // Update other systems
         shiftLogger.update();
         
@@ -528,8 +558,7 @@ void setupPins() {
         Serial.println("ADS1115: NOT FOUND — falling back to GPIO15 analogRead");
     }
 
-    clutchServo.attach(PIN_CLUTCH_SERVO);
-    clutchServo.setLimits(CLUTCH_SERVO_MIN, CLUTCH_SERVO_MAX);
+    // Clutch servo is attached first thing in setup() so its idle PWM starts ASAP.
 
     Serial.println("CAN TX: GPIO" + String(CAN_TX_PIN) + "  RX: GPIO" + String(CAN_RX_PIN));
 }

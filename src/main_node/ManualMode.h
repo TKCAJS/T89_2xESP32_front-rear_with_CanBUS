@@ -73,17 +73,22 @@ public:
     void update() {
         // Check for manual mode toggle
         checkModeToggle();
-        
+
         if (manualModeEnabled) {
-            // Manual mode - direct input/output control
-            updateManualMode();
+            // Buttons/relay only — clutch is driven by the dedicated clutchControlTask
+            updateDirectButtonControl();
         }
-        
+
         // Update relay control (works in both modes)
         updateRelayControl();
-        
+
         // Periodic status update
         updateStatus();
+    }
+
+    // Called from the dedicated high-priority clutch task (not from loop()).
+    void updateClutch() {
+        if (manualModeEnabled) updateDirectClutchControl();
     }
     
     bool isManualModeEnabled() const {
@@ -145,14 +150,6 @@ private:
                 lastToggleCheck = 0;
             }
         }
-    }
-    
-    void updateManualMode() {
-        // Direct hall sensor to clutch control
-        updateDirectClutchControl();
-        
-        // Direct button to relay control
-        updateDirectButtonControl();
     }
     
     void updateDirectClutchControl() {
