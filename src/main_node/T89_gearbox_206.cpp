@@ -39,9 +39,9 @@
 #define PIN_ADS_SCL         14   // ADS1115 I2C clock (not GPIO9 — see board notes)
 // 0.591 divider (4.7k top / 6.8k bottom) on servo feedback into ADS A0, return ref on A1
 // (differential), 0.1uF across A0-A1. 5V -> ~2.96V, safely under 3.3V VDD at GAIN_ONE.
-// Not safety-critical: bite-point thresholds are captured live, so a slightly off ratio
-// is absorbed at capture time. Set to match your actual divider for honest voltage readout.
-#define CLUTCH_FB_DIVIDER   1.691f   // 4.7k (top) / 6.8k (bottom): (4.7+6.8)/6.8
+// The divider exists only to keep the pin under 3.3V; we read the divided voltage as-is and
+// do NOT scale it back to the source. Bite-point thresholds are captured live in these same
+// (post-divider) volts, so the absolute scale is irrelevant — only relative position matters.
 
 // Clutch servo travel limits — physically measured, never exceed these
 #define CLUTCH_SERVO_MIN  42
@@ -604,9 +604,9 @@ void checkServoPosition() {
     if (adsReady) {
         int16_t counts = ads.getLastConversionResults();   // differential A0-A1, 16-bit
         if (counts < 0) counts = 0;                         // clamp tiny negative at rest
-        // computeVolts() gives volts at the ADS input (post-divider); scale back to the
-        // true servo feedback voltage so thresholds stay in real-world volts.
-        clutchVoltage = ads.computeVolts(counts) * CLUTCH_FB_DIVIDER;
+        // Report the divided voltage at the ADS input directly — no back-scaling. Thresholds
+        // are captured live in these same post-divider volts, so absolute scale doesn't matter.
+        clutchVoltage = ads.computeVolts(counts);
     } else {
         int analogValue = analogRead(PIN_CLUTCH_POSITION);  // fallback: legacy GPIO15
         clutchVoltage = (analogValue * 3.3) / 4095.0;
