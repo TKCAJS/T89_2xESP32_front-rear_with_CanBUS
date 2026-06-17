@@ -514,7 +514,7 @@ void setupPins() {
 
     // Configure analog inputs
     pinMode(PIN_HALL_SENSOR, INPUT);
-    pinMode(PIN_CLUTCH_POSITION, INPUT);   // legacy fallback input
+    pinMode(PIN_CLUTCH_POSITION, INPUT_PULLDOWN);   // legacy fallback input, no longer wired — pin held defined
 
     // ADS1115 — clutch position feedback, differential A0–A1 (rejects ground bounce)
     Wire.begin(PIN_ADS_SDA, PIN_ADS_SCL);
