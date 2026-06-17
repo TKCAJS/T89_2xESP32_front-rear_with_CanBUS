@@ -120,7 +120,10 @@ public:
             
             // ADD HEARTBEAT TO TOP-RIGHT PIXEL (position 7,0)
             addHeartbeat(currentMillis);
-            
+
+            // ADD WIFI INDICATOR - flash the other three corners blue when WiFi on
+            addWifiCornerFlash(currentMillis);
+
             matrix->show();
         }
     }
@@ -188,7 +191,10 @@ public:
             
             // ADD HEARTBEAT TO TOP-RIGHT PIXEL (position 7,0)
             addHeartbeat(currentMillis);
-            
+
+            // ADD WIFI INDICATOR - flash the other three corners blue when WiFi on
+            addWifiCornerFlash(currentMillis);
+
             matrix->show();
         }
     }
@@ -285,6 +291,18 @@ private:
             // Heartbeat background - blue intensity based on WiFi status
             int blueLevel = (*wifiEnabled) ? 255 : 5;  // Bright blue if WiFi on, dim if off
             matrix->drawPixel(7, 0, matrix->Color(0, 10, blueLevel));
+        }
+    }
+
+    void addWifiCornerFlash(unsigned long currentMillis) {
+        // Top-right (7,0) is the steady blue WiFi/heartbeat pixel. When WiFi is on,
+        // flash the other three corners blue in sync so status reads from any corner.
+        // Drawn only on the "on" phase so tach/gear content shows through between blinks.
+        if (wifiEnabled && *wifiEnabled && ((currentMillis / 500) % 2)) {
+            uint32_t blue = matrix->Color(0, 10, 255);
+            matrix->drawPixel(0, 0, blue);  // top-left
+            matrix->drawPixel(0, 7, blue);  // bottom-left
+            matrix->drawPixel(7, 7, blue);  // bottom-right
         }
     }
     
