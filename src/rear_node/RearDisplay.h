@@ -82,9 +82,15 @@ public:
         if (gear != _gear) {
             _gear = gear;
             _gearDirty = true;
-            // Clear target once the actual gear settles
+            // Clear target + shift indicator once the actual gear settles. A completed
+            // shift makes the UP/DOWN box stale, so drop it now instead of waiting out
+            // the 3s timeout — regardless of which direction was shown.
             if (gear != GEAR_BETWEEN && gear != GEAR_UNKNOWN) {
                 _targetGear = GEAR_UNKNOWN;
+                if (_lastShift != SHIFT_NONE) {
+                    _lastShift  = SHIFT_NONE;
+                    _shiftDirty = true;
+                }
             }
         }
     }
