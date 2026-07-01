@@ -17,10 +17,11 @@
 
 // ── Pump PWM (via MOSFET, 12 V) ───────────────────────────────────────────────
 // Hardware pull-down on gate holds it LOW from power-on through the boot window.
-#define PIN_PUMP_PWM  PB0   // TIM3_CH3
+#define PIN_PUMP_PWM  PB1   // TIM3_CH4
+#define PIN_PUMP_POT  PA1   // TEST: pot wiper → pump duty 0-100% (ADC, 10-bit)
 // PWM carrier frequency. 25 kHz suits the 4-wire PC fan used for bench testing;
 // the real pump wants 100 Hz — change back to 100 when driving the pump.
-#define PUMP_PWM_FREQ_HZ  25000
+#define PUMP_PWM_FREQ_HZ  100
 
 // ── Shared state (extern'd by SensorCan.h) ────────────────────────────────────
 uint8_t            g_nodeStatus = NODE_STATUS_OK;
@@ -119,7 +120,9 @@ void loop() {
         g_fuel2       = analogRead(PIN_FUEL_2);
         g_waterTempC  = analogRead(PIN_WATER_TEMP);
 
-        analogWrite(PIN_PUMP_PWM, g_pumpDuty);
+        // TEST OVERRIDE: pot on PA1 sets pump duty 0-100% (ignores temp schedule / CAN cmd)
+        g_pumpDuty = map(analogRead(PIN_PUMP_POT), 0, 1023, 0, 100);   // percent, for display + CAN
+        analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));    // true 0-100% duty
     }
 
     // ── Refresh display (5 fps — decoupled from the faster sensor read) ───────
