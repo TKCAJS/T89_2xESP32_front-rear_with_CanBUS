@@ -24,16 +24,25 @@ or it will wipe pins that were just configured.
 
 ---
 
-## Boot-window safety
+## Boot-window safety — cooling pump
 
-Pins that drive external power or actuators (cooling pump PWM gate, any MOSFET gate)
-require a **hardware pull to the safe state** (pump off) so the pin is defined from
-power-on, before software init runs. Do not rely on software config alone — it leaves
-the pin floating through the reset/boot window.
+The cooling pump is a smart (Infineon-controlled) unit; the **PB1** line is a PWM
+**speed command**, not a motor / MOSFET-gate drive. Bench-measured behaviour:
 
-The software fault / safety-monitor state must command the same "off" condition that
-the hardware pull enforces, so faults, hangs, and watchdog resets all converge on the
-same safe state.
+- **0% duty / no PWM signal → controller FAILSAFE = 100% (full speed)**
+- **~10% duty → pump off**
+- **15–90% duty → proportional speed** (15 = min, 90 = max)
+
+The natural failsafe is therefore **loss of signal = full cooling**: a hung, reset,
+or dead MCU that stops driving the line converges the pump to 100%, which is
+thermally safe (the engine cannot overheat for lack of cooling). This supersedes the
+old "hardware pull to pump-off" model — with a smart pump, "off" is an *active* ~10%
+command, so off is **not** the failsafe and cannot be reached without live firmware.
+
+Keep the boot/idle line **defined** (not floating) so the pump reads a clean
+no-signal / 0% state and goes full. Expect a brief full-speed burst at cold power-on
+until firmware starts; once alive, firmware boots the command at ~10% (off) for fast
+warm-up, then modulates per `PumpControl.h` (target 82 °C).
 
 ---
 
@@ -67,10 +76,10 @@ same safe state.
 | Peripheral | Notes |
 |------------|-------|
 | ST7789 2.4" 240×320 TFT (SPI2) | DIN=PB15, CLK=PB13, CS=PB12, DC=PC6, RST=PC7, BL→3.3 V (always on). Init: `init(240,320)`, setRotation(2) → 240×320 portrait, flipped 180°. Module rotated on mount for preferred orientation. Layout: 32px header + 9 data rows × 32px, textSize 2. |
-| Dallas DS18B20 (OneWire) | Single GPIO, bit-bang |
+| Dallas DS18B20 (OneWire) | Single GPIO, bit-bang. **Engine water temp** — calibrated °C source that drives cooling-pump control (`PumpControl.h`, target 82 °C). |
 | Oil pressure sensor | ADC input |
 | Throttle position sensor (TPS) | ADC input |
 | Fuel level ×2 | ADC inputs |
 | Water temperature (analog NTC) | ADC input (separate from Dallas) |
-| Cooling pump PWM | TIMx PWM output, 12 V via MOSFET board; hardware pull-down on gate |
+| Cooling pump (PB1) | Smart pump **speed command**: PB1 PWM (TIM3_CH4, 100 Hz) → 6N137 opto → 2N2222 → controller PWM input. 0%/no-signal = full (failsafe), ~10% = off, 15–90% = proportional. Not a motor drive — no flyback needed. |
 | FDCAN1 | 500 Kbps, SN65HVD230 transceiver |

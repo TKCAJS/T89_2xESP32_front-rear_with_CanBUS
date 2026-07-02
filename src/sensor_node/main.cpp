@@ -15,13 +15,13 @@
 #define PIN_FUEL_2        PC4
 #define PIN_WATER_TEMP    PC5   // analog NTC
 
-// ── Pump PWM (via MOSFET, 12 V) ───────────────────────────────────────────────
-// Hardware pull-down on gate holds it LOW from power-on through the boot window.
+// ── Pump PWM speed command ────────────────────────────────────────────────────
+// PB1 PWM -> 6N137 opto -> 2N2222 -> smart pump controller's PWM input.
+// This is a SPEED COMMAND, not a motor drive. Measured pump band (see
+// PumpControl.h): 0% = failsafe full, ~10% = off, 15-90% = proportional.
+// NOTE: because 0% = full, a line held low commands FULL cooling, not off.
 #define PIN_PUMP_PWM  PB1   // TIM3_CH4
-#define PIN_PUMP_POT  PA1   // TEST: pot wiper → pump duty 0-100% (ADC, 10-bit)
-// PWM carrier frequency. 25 kHz suits the 4-wire PC fan used for bench testing;
-// the real pump wants 100 Hz — change back to 100 when driving the pump.
-#define PUMP_PWM_FREQ_HZ  100
+#define PUMP_PWM_FREQ_HZ  100   // inside the pump controller's expected window
 
 // ── Shared state (extern'd by SensorCan.h) ────────────────────────────────────
 uint8_t            g_nodeStatus = NODE_STATUS_OK;
@@ -86,7 +86,10 @@ void setup() {
 
     pinMode(PIN_PUMP_PWM, OUTPUT);
     analogWriteFrequency(PUMP_PWM_FREQ_HZ);
-    analogWrite(PIN_PUMP_PWM, 0);
+    // Boot at minimum flow (15%); the temp algorithm takes over at 1 Hz.
+    // Never command 0% — that's the controller's failsafe = full speed.
+    g_pumpDuty = PUMP_DUTY_MIN;
+    analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
 
     Serial.begin(115200);
     delay(500);
@@ -120,9 +123,9 @@ void loop() {
         g_fuel2       = analogRead(PIN_FUEL_2);
         g_waterTempC  = analogRead(PIN_WATER_TEMP);
 
-        // TEST OVERRIDE: pot on PA1 sets pump duty 0-100% (ignores temp schedule / CAN cmd)
-        g_pumpDuty = map(analogRead(PIN_PUMP_POT), 0, 1023, 0, 100);   // percent, for display + CAN
-        analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));    // true 0-100% duty
+        // g_pumpDuty (%) is set by the temperature algorithm at 1 Hz below.
+        // analogWrite is 8-bit here, so map the percent command to 0..255.
+        analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
     }
 
     // ── Refresh display (5 fps — decoupled from the faster sensor read) ───────
