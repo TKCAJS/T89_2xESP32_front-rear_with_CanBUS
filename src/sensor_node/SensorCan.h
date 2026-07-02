@@ -130,6 +130,19 @@ static bool canSend(uint32_t can_id, uint8_t seq, const uint8_t *payload, uint8_
     uint8_t len = (payloadLen > 6) ? 6 : payloadLen;
     memcpy(&frame[2], payload, len);
 
+    // The H5 FDCAN TX FIFO is only 3 elements deep. Each cycle the node queues
+    // 6-9 frames back-to-back — far faster than they drain (~0.3 ms/frame at
+    // 500 kbps) — so without waiting for space the overflow frames (pump status,
+    // TPS, fuel, heartbeat) are silently dropped. Wait for a free slot, bounded
+    // by a short guard so a stuck bus can't hang the loop.
+    uint32_t start = HAL_GetTick();
+    while (HAL_FDCAN_GetTxFifoFreeLevel(&s_hfdcan) == 0) {
+        if (HAL_GetTick() - start > 5) {
+            g_nodeStatus |= NODE_STATUS_CAN_ERR;
+            return false;
+        }
+    }
+
     if (HAL_FDCAN_AddMessageToTxFifoQ(&s_hfdcan, &hdr, frame) != HAL_OK) {
         g_nodeStatus |= NODE_STATUS_CAN_ERR;
         return false;
