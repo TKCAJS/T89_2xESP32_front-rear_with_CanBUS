@@ -1,4 +1,4 @@
-// GearboxStateMachine.cpp v19 - Fixed racing downshift sequence with immediate relay activation
+// GearboxStateMachine.cpp - racing sequential gearbox state machine
 
 #include "GearboxStateMachine.h"
 #include "MainCan.h"
@@ -11,112 +11,61 @@ extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGe
 extern void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear = GEAR_UNKNOWN);
 extern void canSendShiftStack(uint8_t targetGear);
 
-// Global state machine instance for condition functions
-GearboxStateMachine* g_stateMachine = nullptr;
-
 // State transition table for motorcycle-style sequential gearbox
 // Pattern: 1st ↔ N ↔ 2nd → 3rd → 4th → 5th → 6th
-// FIXED: Separate waiting states preserve original button press → correct relay action
-const StateTransition stateTransitions[] = {
-    // FROM NEUTRAL STATE
-    // Neutral is between 1st and 2nd - can go to either with full shifts
-    {IDLE_NEUTRAL, EVENT_SHIFT_DOWN_PRESSED, WAITING_FOR_CLUTCH_SHIFT_DOWN, nullptr},  // N → 1st (clutch required)
-    {IDLE_NEUTRAL, EVENT_SHIFT_UP_PRESSED, WAITING_FOR_CLUTCH_SHIFT_UP, nullptr},      // N → 2nd (clutch required)
-    // Neutral Down/Up buttons do nothing when already in neutral
-    
+// Shift completion is not in this table: updateRelayControl() transitions
+// straight to the idle state for the expected gear when the timing expires.
+static const StateTransition stateTransitions[] = {
+    // FROM NEUTRAL - between 1st and 2nd, full shift either way (clutch required)
+    {IDLE_NEUTRAL, EVENT_SHIFT_DOWN_PRESSED, WAITING_FOR_CLUTCH_SHIFT_DOWN},   // N → 1st
+    {IDLE_NEUTRAL, EVENT_SHIFT_UP_PRESSED,   WAITING_FOR_CLUTCH_SHIFT_UP},     // N → 2nd
+
     // FROM 1ST GEAR
-    // Can only go to neutral via neutral up button (clutch required) or shift up to 2nd
-    {IDLE_GEAR_1, EVENT_NEUTRAL_UP_PRESSED, NEUTRAL_UP_SHIFTING, nullptr},              // 1st → N (no clutch)
-    {IDLE_GEAR_1, EVENT_SHIFT_UP_PRESSED, UPSHIFTING, nullptr},                       // 1st → 2nd (ignition cut)
-    // All other buttons invalid from 1st gear                  
-    
-    // FROM 2ND GEAR  
-    // Can go to neutral (half shift down), or skip neutral to 1st (full shift down), or up to 3rd
-    {IDLE_GEAR_2, EVENT_NEUTRAL_DOWN_PRESSED, NEUTRAL_DOWN_SHIFTING, nullptr},           // 2nd → N (no clutch)
-    {IDLE_GEAR_2, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING, nullptr},         // 2nd → 1st (servo, skip N)
-    {IDLE_GEAR_2, EVENT_SHIFT_UP_PRESSED, UPSHIFTING, nullptr},                         // 2nd → 3rd (ignition cut)
-    // Neutral up invalid from 2nd gear
-    
-    // FROM 3RD GEAR
-    // Can only shift up/down, no neutral access
-    {IDLE_GEAR_3, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING, nullptr}, // 3rd → 2nd (servo)
-    {IDLE_GEAR_3, EVENT_SHIFT_UP_PRESSED, UPSHIFTING, nullptr},                 // 3rd → 4th (ignition cut)
-    // Neutral buttons invalid from 3rd gear
-    
-    // FROM 4TH GEAR
-    // Can only shift up/down, no neutral access
-    {IDLE_GEAR_4, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING, nullptr}, // 4th → 3rd (servo)
-    {IDLE_GEAR_4, EVENT_SHIFT_UP_PRESSED, UPSHIFTING, nullptr},                 // 4th → 5th (ignition cut)
-    // Neutral buttons invalid from 4th gear
-    
-    // FROM 5TH GEAR
-    // Can only shift up/down, no neutral access  
-    {IDLE_GEAR_5, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING, nullptr}, // 5th → 4th (servo)
-    {IDLE_GEAR_5, EVENT_SHIFT_UP_PRESSED, UPSHIFTING, nullptr},                 // 5th → 6th (ignition cut)
-    // Neutral buttons invalid from 5th gear
-    
-    // FROM 6TH GEAR
-    // Can only shift down, no neutral access, can't shift up (top gear)
-    {IDLE_GEAR_6, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING, nullptr}, // 6th → 5th (servo)
-    // All other buttons invalid from 6th gear
-    
-    // CLUTCH INTERLOCK HANDLING - FIXED: Each waiting state goes to correct shifting state
-    {WAITING_FOR_CLUTCH_NEUTRAL_DOWN, EVENT_CLUTCH_PULLED, NEUTRAL_DOWN_SHIFTING, nullptr},  // Use downshift relay
-    {WAITING_FOR_CLUTCH_NEUTRAL_DOWN, EVENT_TIMEOUT, IDLE_NEUTRAL, nullptr},                  
-    {WAITING_FOR_CLUTCH_NEUTRAL_UP, EVENT_CLUTCH_PULLED, NEUTRAL_UP_SHIFTING, nullptr},      // Use upshift relay
-    {WAITING_FOR_CLUTCH_NEUTRAL_UP, EVENT_TIMEOUT, IDLE_NEUTRAL, nullptr},                   
-    {WAITING_FOR_CLUTCH_SHIFT_DOWN, EVENT_CLUTCH_PULLED, NEUTRAL_DOWN_SHIFTING, nullptr},    // Use downshift relay
-    {WAITING_FOR_CLUTCH_SHIFT_DOWN, EVENT_TIMEOUT, IDLE_NEUTRAL, nullptr},                   
-    {WAITING_FOR_CLUTCH_SHIFT_UP, EVENT_CLUTCH_PULLED, NEUTRAL_UP_SHIFTING, nullptr},        // Use upshift relay  
-    {WAITING_FOR_CLUTCH_SHIFT_UP, EVENT_TIMEOUT, IDLE_NEUTRAL, nullptr},                     
-    
-    // DOWNSHIFT SEQUENCE STATES - RACING OPTIMIZED
-    // Complex downshift with servo clutch control - IMMEDIATE relay activation on clutch pull
-    {DOWNSHIFT_CLUTCH_ENGAGING, EVENT_CLUTCH_PULLED, DOWNSHIFT_SHIFTING, nullptr},           // RACING: Immediate relay on clutch pull
-    {DOWNSHIFT_SHIFTING, EVENT_RELAY_FINISHED, IDLE_NEUTRAL, nullptr},                       // Will update via gear change
-    
-    // SIMPLE SHIFT COMPLETIONS
-    {NEUTRAL_DOWN_SHIFTING, EVENT_RELAY_FINISHED, IDLE_NEUTRAL, nullptr},        // Will update via gear change
-    {NEUTRAL_UP_SHIFTING, EVENT_RELAY_FINISHED, IDLE_NEUTRAL, nullptr},          // Will update via gear change  
-    {UPSHIFTING, EVENT_RELAY_FINISHED, IDLE_NEUTRAL, nullptr},                   // Will update via gear change
-    
-    // GEAR CHANGE EVENT HANDLING
-    // This allows the state machine to update when the physical gear actually changes
-    {IDLE_NEUTRAL, EVENT_GEAR_CHANGED, IDLE_NEUTRAL, nullptr},                   // Handled specially in code
-    
-    // ERROR RECOVERY
-    {ERROR_SHIFT_TIMEOUT, EVENT_TIMEOUT, IDLE_NEUTRAL, nullptr},
-    {ERROR_SENSOR_DISCONNECTED, EVENT_SENSOR_CONNECTED, IDLE_NEUTRAL, nullptr},
+    {IDLE_GEAR_1, EVENT_NEUTRAL_UP_PRESSED, NEUTRAL_UP_SHIFTING},              // 1st → N (no clutch)
+    {IDLE_GEAR_1, EVENT_SHIFT_UP_PRESSED,   UPSHIFTING},                       // 1st → 2nd (ignition cut)
+
+    // FROM 2ND GEAR
+    {IDLE_GEAR_2, EVENT_NEUTRAL_DOWN_PRESSED, NEUTRAL_DOWN_SHIFTING},          // 2nd → N (no clutch)
+    {IDLE_GEAR_2, EVENT_SHIFT_DOWN_PRESSED,   DOWNSHIFT_CLUTCH_ENGAGING},      // 2nd → 1st (servo, skip N)
+    {IDLE_GEAR_2, EVENT_SHIFT_UP_PRESSED,     UPSHIFTING},                     // 2nd → 3rd (ignition cut)
+
+    // FROM 3RD-5TH GEAR - shift up/down only, no neutral access
+    {IDLE_GEAR_3, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING},        // 3rd → 2nd (servo)
+    {IDLE_GEAR_3, EVENT_SHIFT_UP_PRESSED,   UPSHIFTING},                       // 3rd → 4th (ignition cut)
+    {IDLE_GEAR_4, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING},        // 4th → 3rd (servo)
+    {IDLE_GEAR_4, EVENT_SHIFT_UP_PRESSED,   UPSHIFTING},                       // 4th → 5th (ignition cut)
+    {IDLE_GEAR_5, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING},        // 5th → 4th (servo)
+    {IDLE_GEAR_5, EVENT_SHIFT_UP_PRESSED,   UPSHIFTING},                       // 5th → 6th (ignition cut)
+
+    // FROM 6TH GEAR - top gear, shift down only
+    {IDLE_GEAR_6, EVENT_SHIFT_DOWN_PRESSED, DOWNSHIFT_CLUTCH_ENGAGING},        // 6th → 5th (servo)
+
+    // CLUTCH INTERLOCK - shifts out of neutral wait for the clutch (abort on timeout)
+    {WAITING_FOR_CLUTCH_SHIFT_DOWN, EVENT_CLUTCH_PULLED, NEUTRAL_DOWN_SHIFTING},  // Use downshift relay
+    {WAITING_FOR_CLUTCH_SHIFT_DOWN, EVENT_TIMEOUT,       IDLE_NEUTRAL},
+    {WAITING_FOR_CLUTCH_SHIFT_UP,   EVENT_CLUTCH_PULLED, NEUTRAL_UP_SHIFTING},    // Use upshift relay
+    {WAITING_FOR_CLUTCH_SHIFT_UP,   EVENT_TIMEOUT,       IDLE_NEUTRAL},
+
+    // RACING DOWNSHIFT - relay fires the moment the clutch is pulled
+    {DOWNSHIFT_CLUTCH_ENGAGING, EVENT_CLUTCH_PULLED, DOWNSHIFT_SHIFTING},
 };
 
-const int stateTransitionCount = sizeof(stateTransitions) / sizeof(StateTransition);
-
-const StateTransition* GearboxStateMachine::getTransitions() {
-    return stateTransitions;
-}
-
-const int GearboxStateMachine::getTransitionCount() {
-    return stateTransitionCount;
-}
+static const int stateTransitionCount = sizeof(stateTransitions) / sizeof(StateTransition);
 
 void GearboxStateMachine::begin(ShiftLogger* logger, RPM* rpm, SimpleServo* servo) {
     shiftLogger = logger;
     rpmSensor = rpm;
     clutchServo = servo;
-    
-    // Set global reference for condition functions
-    g_stateMachine = this;
-    
+
     // Initialize to idle state based on current gear
     currentState = getIdleStateForGear(currentGear);
     stateStartTime = millis();
-    lastStateChange = millis();
-    
+
     Serial.println("GearboxStateMachine initialized");
     Serial.println("Initial state: " + getStateName(currentState));
 }
 
-void GearboxStateMachine::setConfiguration(int nDownMs, int nUpMs, int sDownMs, int sUpMs, 
+void GearboxStateMachine::setConfiguration(int nDownMs, int nUpMs, int sDownMs, int sUpMs,
                                          int cIdlePos, int cEngagePos) {
     neutralDownMs = nDownMs;
     neutralUpMs = nUpMs;
@@ -129,10 +78,10 @@ void GearboxStateMachine::setConfiguration(int nDownMs, int nUpMs, int sDownMs, 
 void GearboxStateMachine::update() {
     // Update relay control
     updateRelayControl();
-    
+
     // Check for timeouts
     checkTimeouts();
-    
+
     // Execute current state logic
     executeStateUpdate();
 }
@@ -150,13 +99,10 @@ bool GearboxStateMachine::processEvent(GearboxEvent event) {
         return true;
     }
 
-    // Shift up always clears any pending stack
-    if (event == EVENT_SHIFT_UP_PRESSED) {
-        if (targetGear > 0) {
-            Serial.println("Stacked downshift cancelled by upshift");
-        }
-        targetGear = 0;
-        canSendShiftStack(0);
+    // Shift up always cancels any pending stack
+    if (event == EVENT_SHIFT_UP_PRESSED && targetGear > 0) {
+        Serial.println("Stacked downshift cancelled by upshift");
+        clearShiftStack();
     }
 
     // Special handling for gear change events
@@ -168,22 +114,15 @@ bool GearboxStateMachine::processEvent(GearboxEvent event) {
         }
         return true;
     }
-    
+
     // Look for valid transition
-    const StateTransition* transitions = getTransitions();
-    int transitionCount = getTransitionCount();
-    
-    for (int i = 0; i < transitionCount; i++) {
-        const StateTransition& trans = transitions[i];
-        
+    for (int i = 0; i < stateTransitionCount; i++) {
+        const StateTransition& trans = stateTransitions[i];
         if (trans.fromState == currentState && trans.event == event) {
-            // Check condition if present
-            if (trans.condition == nullptr || trans.condition()) {
-                return transitionToState(trans.toState);
-            }
+            return transitionToState(trans.toState);
         }
     }
-    
+
     // No valid transition found
     Serial.println("No transition for event in state " + getStateName(currentState));
     return false;
@@ -191,22 +130,16 @@ bool GearboxStateMachine::processEvent(GearboxEvent event) {
 
 bool GearboxStateMachine::transitionToState(GearboxState newState) {
     if (newState == currentState) return true;
-    
-    Serial.print("State transition: " + getStateName(currentState));
-    Serial.println(" -> " + getStateName(newState));
-    
-    // Execute exit logic for current state
-    executeStateExit();
-    
+
+    Serial.println("State transition: " + getStateName(currentState) + " -> " + getStateName(newState));
+
     // Update state
-    previousState = currentState;
     currentState = newState;
     stateStartTime = millis();
-    lastStateChange = millis();
-    
+
     // Execute entry logic for new state
     executeStateEntry();
-    
+
     return true;
 }
 
@@ -221,32 +154,24 @@ void GearboxStateMachine::executeStateEntry() {
         case IDLE_GEAR_6:
             enterIdleState();
             break;
-            
+
         case NEUTRAL_DOWN_SHIFTING:
         case NEUTRAL_UP_SHIFTING:
         case UPSHIFTING:
         case DOWNSHIFT_CLUTCH_ENGAGING:
-        case DOWNSHIFT_CLUTCH_ENGAGED:
         case DOWNSHIFT_SHIFTING:
             enterShiftingState();
             break;
-            
-        case WAITING_FOR_CLUTCH_NEUTRAL_DOWN:
-        case WAITING_FOR_CLUTCH_NEUTRAL_UP:
+
         case WAITING_FOR_CLUTCH_SHIFT_DOWN:
         case WAITING_FOR_CLUTCH_SHIFT_UP:
             enterWaitingState();
             break;
-            
-        case MANUAL_CLUTCH_CONTROL:
-            // No special entry action
-            break;
-            
+
         case ERROR_SHIFT_TIMEOUT:
-        case ERROR_SENSOR_DISCONNECTED:
             enterErrorState();
             break;
-            
+
         default:
             break;
     }
@@ -254,58 +179,21 @@ void GearboxStateMachine::executeStateEntry() {
 
 void GearboxStateMachine::executeStateUpdate() {
     switch (currentState) {
-        case IDLE_NEUTRAL:
-        case IDLE_GEAR_1:
-        case IDLE_GEAR_2:
-        case IDLE_GEAR_3:
-        case IDLE_GEAR_4:
-        case IDLE_GEAR_5:
-        case IDLE_GEAR_6:
-            updateIdleState();
-            break;
-            
-        case NEUTRAL_DOWN_SHIFTING:
-        case NEUTRAL_UP_SHIFTING:
-        case UPSHIFTING:
         case DOWNSHIFT_CLUTCH_ENGAGING:
-        case DOWNSHIFT_CLUTCH_ENGAGED:
-        case DOWNSHIFT_SHIFTING:
-            updateShiftingState();
+            updateDownshiftClutchWait();
             break;
-            
-        case WAITING_FOR_CLUTCH_NEUTRAL_DOWN:
-        case WAITING_FOR_CLUTCH_NEUTRAL_UP:
+
         case WAITING_FOR_CLUTCH_SHIFT_DOWN:
         case WAITING_FOR_CLUTCH_SHIFT_UP:
             updateWaitingState();
             break;
-            
-        case MANUAL_CLUTCH_CONTROL:
-            updateManualClutchControl();
-            break;
-            
+
         case ERROR_SHIFT_TIMEOUT:
-        case ERROR_SENSOR_DISCONNECTED:
             updateErrorState();
             break;
-            
-        default:
-            break;
-    }
-}
 
-void GearboxStateMachine::executeStateExit() {
-    switch (currentState) {
-        case NEUTRAL_DOWN_SHIFTING:
-        case NEUTRAL_UP_SHIFTING:
-        case UPSHIFTING:
-        case DOWNSHIFT_CLUTCH_ENGAGING:
-        case DOWNSHIFT_CLUTCH_ENGAGED:
-        case DOWNSHIFT_SHIFTING:
-            exitShiftingState();
-            break;
-            
         default:
+            // Idle states are event-driven; other shifting states complete via updateRelayControl()
             break;
     }
 }
@@ -313,10 +201,10 @@ void GearboxStateMachine::executeStateExit() {
 void GearboxStateMachine::enterIdleState() {
     // Release clutch to idle position
     releaseClutch();
-    
+
     // Ensure relays are off
     deactivateShift();
-    
+
     Serial.println("Entered idle state for gear: " + getCurrentGearName());
 }
 
@@ -324,87 +212,53 @@ void GearboxStateMachine::enterShiftingState() {
     Serial.println("Starting shift operation: " + getStateName(currentState));
 
     // Track expected gear so relay completion lands in the right idle state
+    int fromGear = currentGear;
     switch (currentState) {
-        case NEUTRAL_DOWN_SHIFTING:       expectedGear = (currentGear == 2) ? 0 : 1; break;
-        case NEUTRAL_UP_SHIFTING:         expectedGear = (currentGear == 1) ? 0 : 2; break;
-        case UPSHIFTING:                  expectedGear = currentGear + 1; break;
+        case NEUTRAL_DOWN_SHIFTING:       expectedGear = (fromGear == 2) ? 0 : 1; break;
+        case NEUTRAL_UP_SHIFTING:         expectedGear = (fromGear == 1) ? 0 : 2; break;
+        case UPSHIFTING:                  expectedGear = fromGear + 1; break;
         case DOWNSHIFT_CLUTCH_ENGAGING:
-        case DOWNSHIFT_SHIFTING:          expectedGear = currentGear - 1; break;
-        default:                          expectedGear = currentGear; break;
+        case DOWNSHIFT_SHIFTING:          expectedGear = fromGear - 1; break;
+        default:                          expectedGear = fromGear; break;
     }
 
-    // Start shift timing based on state and determine target gear
-    if (shiftLogger) {
-        uint8_t shiftType = 0; // upshift
-        int fromGear = currentGear;
-        int toGear = currentGear;
-        
-        switch (currentState) {
-            case NEUTRAL_DOWN_SHIFTING:
-                // Triggered by Neutral Down button - always use DOWNSHIFT relay
-                if (fromGear == 2) {
-                    // 2nd → N (half-shift)
-                    shiftType = 2; // neutral
-                    toGear = 0;
-                } else if (fromGear == 0) {
-                    // N → 1st (full shift)
-                    shiftType = 1; // downshift
-                    toGear = 1;
-                }
-                shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateShift(false, (fromGear == 0) ? shiftDownMs : neutralDownMs, 0, (uint8_t)toGear);
-                displayShiftLetter(toGear == 0 ? 'N' : 'D');
-                break;
+    switch (currentState) {
+        case NEUTRAL_DOWN_SHIFTING:
+            // Neutral Down button - downshift relay: 2nd → N (half-shift) or N → 1st (full shift)
+            logShiftStart(fromGear, expectedGear, (fromGear == 2) ? 2 : 1);
+            activateShift(false, (fromGear == 0) ? shiftDownMs : neutralDownMs, 0, (uint8_t)expectedGear);
+            displayShiftLetter(expectedGear == 0 ? 'N' : 'D');
+            break;
 
-            case NEUTRAL_UP_SHIFTING:
-                // Triggered by Neutral Up button - upshift CAN, no ignition cut for neutral moves
-                if (fromGear == 1) {
-                    // 1st → N (half-shift)
-                    shiftType = 2; // neutral
-                    toGear = 0;
-                } else if (fromGear == 0) {
-                    // N → 2nd (full shift)
-                    shiftType = 0; // upshift
-                    toGear = 2;
-                }
-                shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateShift(true, (fromGear == 0) ? shiftUpMs : neutralUpMs, 0, (uint8_t)toGear);
-                displayShiftLetter(toGear == 0 ? 'N' : 'U');
-                break;
+        case NEUTRAL_UP_SHIFTING:
+            // Neutral Up button - upshift relay, no ignition cut: 1st → N (half-shift) or N → 2nd (full shift)
+            logShiftStart(fromGear, expectedGear, (fromGear == 1) ? 2 : 0);
+            activateShift(true, (fromGear == 0) ? shiftUpMs : neutralUpMs, 0, (uint8_t)expectedGear);
+            displayShiftLetter(expectedGear == 0 ? 'N' : 'U');
+            break;
 
-            case UPSHIFTING:
-                // Triggered by Shift Up button - upshift with ignition cut
-                shiftType = 0; // upshift
-                toGear = fromGear + 1;
-                shiftLogger->startIgnitionCut();
-                shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                activateShift(true, shiftUpMs, IGN_CUT_DEFAULT_MS, (uint8_t)toGear);
-                displayShiftLetter('U');
-                break;
+        case UPSHIFTING:
+            // Shift Up button - upshift with ignition cut
+            if (shiftLogger) shiftLogger->startIgnitionCut();
+            logShiftStart(fromGear, expectedGear, 0);
+            activateShift(true, shiftUpMs, IGN_CUT_DEFAULT_MS, (uint8_t)expectedGear);
+            displayShiftLetter('U');
+            break;
 
-            case DOWNSHIFT_CLUTCH_ENGAGING:
-                // Triggered by Shift Down button - engage clutch, wait for pull detection
-                shiftType = 1; // downshift
-                toGear = fromGear - 1;
-                shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor->getRpm(), shiftType);
-                engageClutch();  // CRITICAL: Engage the clutch servo
-                displayShiftLetter('D');
-                break;
+        case DOWNSHIFT_CLUTCH_ENGAGING:
+            // Shift Down button - engage clutch servo, relay fires on pull detection
+            logShiftStart(fromGear, expectedGear, 1);
+            engageClutch();
+            displayShiftLetter('D');
+            break;
 
-            case DOWNSHIFT_CLUTCH_ENGAGED:
-                // Legacy state - should not be used in racing sequence
-                Serial.println("WARNING: DOWNSHIFT_CLUTCH_ENGAGED state entered - this should not happen in racing sequence");
-                break;
+        case DOWNSHIFT_SHIFTING:
+            // Clutch pulled (or timeout fallback) - send CAN shift command immediately
+            activateShift(false, shiftDownMs, 0, (uint8_t)expectedGear);
+            break;
 
-            case DOWNSHIFT_SHIFTING:
-                // Triggered when clutch is pulled - send CAN command immediately
-                Serial.println("RACING DOWNSHIFT: Clutch pulled detected - sending CAN shift command!");
-                activateShift(false, shiftDownMs, 0, (uint8_t)(currentGear - 1));
-                break;
-                
-            default:
-                break;
-        }
+        default:
+            break;
     }
 }
 
@@ -415,74 +269,36 @@ void GearboxStateMachine::enterWaitingState() {
 
 void GearboxStateMachine::enterErrorState() {
     Serial.println("Entered error state: " + getStateName(currentState));
-    
+
     // Ensure safe state
     deactivateShift();
     releaseClutch();
+    clearShiftStack();  // aborted shift - drop any queued downshifts
 }
 
-void GearboxStateMachine::updateIdleState() {
-    // In idle state, we don't actively do anything
-    // Events are handled by the main loop calling processEvent()
-}
-
-void GearboxStateMachine::updateShiftingState() {
-    switch (currentState) {
-        case DOWNSHIFT_CLUTCH_ENGAGING:
-            // Wait for clutch pull detection. If none within timeout, fire relay anyway
-            // (handles bench testing without clutch, and covers slow/missed clutch pulls)
-            if (clutchPulled) {
-                processEvent(EVENT_CLUTCH_PULLED);
-            } else if (getStateElapsedTime() >= CLUTCH_WAIT_TIMEOUT_MS) {
-                Serial.println("Downshift: no clutch detected, firing relay directly");
-                transitionToState(DOWNSHIFT_SHIFTING);
-            }
-            break;
-            
-        case DOWNSHIFT_CLUTCH_ENGAGED:
-            // Legacy state - should not be used in racing sequence
-            Serial.println("WARNING: updateShiftingState() - DOWNSHIFT_CLUTCH_ENGAGED should not be active");
-            // Failsafe: transition to shifting if we somehow get here
-            if (getStateElapsedTime() >= CLUTCH_ENGAGE_DELAY_MS) {
-                processEvent(EVENT_TIMEOUT);
-            }
-            break;
-            
-        default:
-            // Other shifting states are handled by relay completion
-            break;
+void GearboxStateMachine::updateDownshiftClutchWait() {
+    // Wait for clutch pull detection. If none within timeout, fire relay anyway
+    // (handles bench testing without clutch, and covers slow/missed clutch pulls)
+    if (clutchPulled) {
+        processEvent(EVENT_CLUTCH_PULLED);
+    } else if (getStateElapsedTime() >= CLUTCH_WAIT_TIMEOUT_MS) {
+        Serial.println("Downshift: no clutch detected, firing relay directly");
+        transitionToState(DOWNSHIFT_SHIFTING);
     }
 }
 
 void GearboxStateMachine::updateWaitingState() {
-    // Handle all clutch waiting states the same way
-    if (currentState == WAITING_FOR_CLUTCH_NEUTRAL_DOWN || 
-        currentState == WAITING_FOR_CLUTCH_NEUTRAL_UP ||
-        currentState == WAITING_FOR_CLUTCH_SHIFT_DOWN ||
-        currentState == WAITING_FOR_CLUTCH_SHIFT_UP) {
-        
-        if (clutchPulled) {
-            processEvent(EVENT_CLUTCH_PULLED);
-        } else if (getStateElapsedTime() >= CLUTCH_WAIT_TIMEOUT_MS) {
-            processEvent(EVENT_TIMEOUT);
-        }
+    if (clutchPulled) {
+        processEvent(EVENT_CLUTCH_PULLED);
+    } else if (getStateElapsedTime() >= CLUTCH_WAIT_TIMEOUT_MS) {
+        clearShiftStack();  // aborting without shifting - drop any queued downshifts
+        processEvent(EVENT_TIMEOUT);
     }
 }
 
 void GearboxStateMachine::updateErrorState() {
-    // RACING: Immediate recovery from error states
-    processEvent(EVENT_TIMEOUT);  // Return to idle immediately
-}
-
-void GearboxStateMachine::updateManualClutchControl() {
-    // Manual clutch control is now handled in the main loop
-    // This state is used as a placeholder and will return to idle quickly
-    processEvent(EVENT_TIMEOUT);
-}
-
-void GearboxStateMachine::exitShiftingState() {
-    // Clean up any shifting operations
-    Serial.println("Exiting shift state: " + getStateName(currentState));
+    // RACING: recover immediately, back to the idle state for the actual current gear
+    transitionToState(getIdleStateForGear(currentGear));
 }
 
 void GearboxStateMachine::activateShift(bool isUpshift, int duration, uint16_t ignCutMs, uint8_t targetGear) {
@@ -528,8 +344,21 @@ void GearboxStateMachine::releaseClutch() {
     Serial.println("Clutch released");
 }
 
+void GearboxStateMachine::clearShiftStack() {
+    if (targetGear > 0) {
+        targetGear = 0;
+        canSendShiftStack(0);
+    }
+}
+
+void GearboxStateMachine::logShiftStart(int fromGear, int toGear, uint8_t shiftType) {
+    if (shiftLogger) {
+        shiftLogger->startShiftTiming(fromGear, toGear, rpmSensor ? rpmSensor->getRpm() : 0, shiftType);
+    }
+}
+
 void GearboxStateMachine::checkTimeouts() {
-    // DOWNSHIFT_CLUTCH_ENGAGING has its own timeout logic in updateShiftingState
+    // DOWNSHIFT_CLUTCH_ENGAGING has its own timeout logic in updateDownshiftClutchWait
     if (currentState == DOWNSHIFT_CLUTCH_ENGAGING) return;
 
     if (isShiftingState(currentState) && getStateElapsedTime() >= STATE_SHIFT_TIMEOUT_MS) {
@@ -551,15 +380,10 @@ String GearboxStateMachine::getStateName(GearboxState state) const {
         case NEUTRAL_UP_SHIFTING: return "NEUTRAL_UP_SHIFTING";
         case UPSHIFTING: return "UPSHIFTING";
         case DOWNSHIFT_CLUTCH_ENGAGING: return "DOWNSHIFT_CLUTCH_ENGAGING";
-        case DOWNSHIFT_CLUTCH_ENGAGED: return "DOWNSHIFT_CLUTCH_ENGAGED";
         case DOWNSHIFT_SHIFTING: return "DOWNSHIFT_SHIFTING";
-        case MANUAL_CLUTCH_CONTROL: return "MANUAL_CLUTCH_CONTROL";
-        case WAITING_FOR_CLUTCH_NEUTRAL_DOWN: return "WAITING_FOR_CLUTCH_NEUTRAL_DOWN";
-        case WAITING_FOR_CLUTCH_NEUTRAL_UP: return "WAITING_FOR_CLUTCH_NEUTRAL_UP";
         case WAITING_FOR_CLUTCH_SHIFT_DOWN: return "WAITING_FOR_CLUTCH_SHIFT_DOWN";
         case WAITING_FOR_CLUTCH_SHIFT_UP: return "WAITING_FOR_CLUTCH_SHIFT_UP";
         case ERROR_SHIFT_TIMEOUT: return "ERROR_SHIFT_TIMEOUT";
-        case ERROR_SENSOR_DISCONNECTED: return "ERROR_SENSOR_DISCONNECTED";
         default: return "UNKNOWN_STATE";
     }
 }
@@ -576,17 +400,13 @@ bool GearboxStateMachine::canAcceptShiftCommand() const {
     return isIdleState(currentState);
 }
 
-bool GearboxStateMachine::isShiftInProgress() const {
-    return isShifting();
-}
-
 void GearboxStateMachine::setCurrentGear(int gear) {
     if (gear >= 0 && gear <= 6 && gear != currentGear) {
         int oldGear = currentGear;
         currentGear = gear;
-        
+
         Serial.println("Gear changed from " + String(oldGear) + " to " + String(gear));
-        
+
         // Process gear change event to update state if needed
         processEvent(EVENT_GEAR_CHANGED);
 
@@ -602,8 +422,7 @@ void GearboxStateMachine::setCurrentGear(int gear) {
                 processEvent(EVENT_SHIFT_DOWN_PRESSED);
             } else {
                 // Reached target or shift failed — clear stack
-                targetGear = 0;
-                canSendShiftStack(0);
+                clearShiftStack();
             }
         }
     }
@@ -625,19 +444,6 @@ GearboxState GearboxStateMachine::getIdleStateForGear(int gear) const {
         case 5: return IDLE_GEAR_5;
         case 6: return IDLE_GEAR_6;
         default: return IDLE_NEUTRAL;
-    }
-}
-
-int GearboxStateMachine::getGearForIdleState(GearboxState state) const {
-    switch (state) {
-        case IDLE_NEUTRAL: return 0;
-        case IDLE_GEAR_1: return 1;
-        case IDLE_GEAR_2: return 2;
-        case IDLE_GEAR_3: return 3;
-        case IDLE_GEAR_4: return 4;
-        case IDLE_GEAR_5: return 5;
-        case IDLE_GEAR_6: return 6;
-        default: return 0;
     }
 }
 

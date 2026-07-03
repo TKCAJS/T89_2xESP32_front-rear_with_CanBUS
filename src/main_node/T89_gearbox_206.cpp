@@ -90,7 +90,7 @@ bool manualModeActive = false;  // NEW: Manual mode status for matrix
 // Create controller instances - MOVED AFTER INCLUDES TO ENSURE COMPLETE TYPES
 RPM rpmSensor(PIN_RPM_INPUT, 12.0, 0.3);
 ShiftLogger shiftLogger;
-GearboxStateMachine gearbox(PIN_HALL_SENSOR);
+GearboxStateMachine gearbox;
 MainCan mainCan;
 
 // Create web server and interface
@@ -643,17 +643,10 @@ void checkServoPosition() {
     bool newClutchPulled  = (clutchVoltage < clutchDisengageV);
     clutchJustEngaged = (clutchVoltage >= clutchJustEngagedV && clutchVoltage < clutchDisengageV);
     
-    // Detect clutch state change and send event
+    // Update clutch state - the state machine polls this in its clutch-wait states
     if (newClutchPulled != clutchPulled) {
         clutchPulled = newClutchPulled;
         gearbox.setClutchPulled(clutchPulled);
-        
-        // Send the appropriate event to the state machine
-        if (clutchPulled) {
-            gearbox.processEvent(EVENT_CLUTCH_PULLED);
-        } else {
-            gearbox.processEvent(EVENT_CLUTCH_RELEASED);
-        }
     }
 }
 
@@ -736,11 +729,10 @@ void saveConfig() {
 
 void updateCompatibilityVariables() {
     // Update compatibility variables for WebInterface.h
-    shiftInProgress = gearbox.isShiftInProgress();
+    shiftInProgress = gearbox.isShifting();
     waitingForClutch = gearbox.isWaitingForClutch();
     shiftSequenceState = gearbox.isShifting() ? 1 : 0;
-    autoDownshift = gearbox.getCurrentState() == DOWNSHIFT_CLUTCH_ENGAGING || 
-                    gearbox.getCurrentState() == DOWNSHIFT_CLUTCH_ENGAGED ||
+    autoDownshift = gearbox.getCurrentState() == DOWNSHIFT_CLUTCH_ENGAGING ||
                     gearbox.getCurrentState() == DOWNSHIFT_SHIFTING;
     
     // Update hall sensor globals for web interface

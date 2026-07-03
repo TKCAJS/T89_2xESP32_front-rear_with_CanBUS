@@ -10,38 +10,29 @@ class RPM;
 
 // State definitions
 enum GearboxState {
-    // Idle states - one for each gear
+    // Idle states - one for each gear (must stay contiguous — see isIdleState)
     IDLE_NEUTRAL = 0,
     IDLE_GEAR_1,
-    IDLE_GEAR_2, 
+    IDLE_GEAR_2,
     IDLE_GEAR_3,
     IDLE_GEAR_4,
     IDLE_GEAR_5,
     IDLE_GEAR_6,
-    
-    // Manual shifting states
+
+    // Shifting states (must stay contiguous — see isShiftingState)
     NEUTRAL_DOWN_SHIFTING,
     NEUTRAL_UP_SHIFTING,
     UPSHIFTING,
-    
-    // Complex downshift sequence states
     DOWNSHIFT_CLUTCH_ENGAGING,
-    DOWNSHIFT_CLUTCH_ENGAGED,
     DOWNSHIFT_SHIFTING,
-    
-    // Hall sensor manual control
-    MANUAL_CLUTCH_CONTROL,
-    
-    // Wait states - FIXED: Added separate waiting states for each button type
-    WAITING_FOR_CLUTCH_NEUTRAL_DOWN,
-    WAITING_FOR_CLUTCH_NEUTRAL_UP,
+
+    // Wait states - clutch interlock for shifts out of neutral
     WAITING_FOR_CLUTCH_SHIFT_DOWN,
     WAITING_FOR_CLUTCH_SHIFT_UP,
-    
+
     // Error states
     ERROR_SHIFT_TIMEOUT,
-    ERROR_SENSOR_DISCONNECTED,
-    
+
     // Total count
     STATE_COUNT
 };
@@ -51,22 +42,14 @@ enum GearboxEvent {
     // Button events
     EVENT_NEUTRAL_DOWN_PRESSED,
     EVENT_NEUTRAL_UP_PRESSED,
-    EVENT_SHIFT_DOWN_PRESSED,  
+    EVENT_SHIFT_DOWN_PRESSED,
     EVENT_SHIFT_UP_PRESSED,
-    
+
     // Hardware events
     EVENT_CLUTCH_PULLED,
-    EVENT_CLUTCH_RELEASED,
-    EVENT_RELAY_FINISHED,
-    EVENT_CLUTCH_ENGAGE_COMPLETE,
     EVENT_GEAR_CHANGED,
     EVENT_TIMEOUT,
-    EVENT_HALL_SENSOR_INPUT,
-    
-    // System events
-    EVENT_SENSOR_CONNECTED,
-    EVENT_SENSOR_DISCONNECTED,
-    
+
     EVENT_COUNT
 };
 
@@ -75,19 +58,16 @@ struct StateTransition {
     GearboxState fromState;
     GearboxEvent event;
     GearboxState toState;
-    bool (*condition)();  // Optional condition function
 };
 
 class GearboxStateMachine {
 private:
     // Current state
     GearboxState currentState;
-    GearboxState previousState;
-    
+
     // Timing for state operations
     unsigned long stateStartTime;
-    unsigned long lastStateChange;
-    
+
     // Configuration
     int neutralDownMs;
     int neutralUpMs;
@@ -95,60 +75,50 @@ private:
     int shiftUpMs;
     int clutchIdlePos;
     int clutchFullyPull;
-    
+
     // Hardware references
     ShiftLogger* shiftLogger;
     RPM* rpmSensor;
     SimpleServo* clutchServo;
-    
-    // Pin definitions
-    int pinHallSensor;
 
-    // Shift timing (mirrors old relay timing — fires EVENT_RELAY_FINISHED when done)
+    // Shift timing (mirrors old relay timing — completion returns to idle)
     bool relayActive;
     unsigned long relayStartTime;
     int relayDuration;
     bool activeShiftIsUp;
-    
-    // Clutch interlock
-    bool clutchInterlockEnabled;
+
+    // Clutch state (fed from main loop via setClutchPulled)
     bool clutchPulled;
-    
+
     // Current gear tracking
     int currentGear;     // 0=N, 1-6=gears — confirmed by CAN
     int expectedGear;    // gear we expect after the current shift relay fires
     int targetGear;      // stacked downshift target (0 = no stack pending)
-    
-    // Timeouts - FIXED: Updated constant names to match cpp file
+
+    // Timeouts
     static const unsigned long STATE_SHIFT_TIMEOUT_MS = 500;
     static const unsigned long CLUTCH_WAIT_TIMEOUT_MS = 200;
-    static const unsigned long CLUTCH_ENGAGE_DELAY_MS = 100;
-    
-    // State transition table access methods - MOVED FROM CPP
-    static const StateTransition* getTransitions();
-    static const int getTransitionCount();
 
 public:
-    GearboxStateMachine(int hallPin)
-        : currentState(IDLE_NEUTRAL), previousState(IDLE_NEUTRAL),
-          stateStartTime(0), lastStateChange(0),
+    GearboxStateMachine()
+        : currentState(IDLE_NEUTRAL),
+          stateStartTime(0),
           neutralDownMs(40), neutralUpMs(40), shiftDownMs(150), shiftUpMs(150),
           clutchIdlePos(0), clutchFullyPull(180),
           shiftLogger(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
-          pinHallSensor(hallPin),
           relayActive(false), relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
-          clutchInterlockEnabled(true), clutchPulled(false),
+          clutchPulled(false),
           currentGear(0), expectedGear(0), targetGear(0) {}
-    
+
     // Initialization
     void begin(ShiftLogger* logger, RPM* rpm, SimpleServo* servo);
-    void setConfiguration(int nDownMs, int nUpMs, int sDownMs, int sUpMs, 
+    void setConfiguration(int nDownMs, int nUpMs, int sDownMs, int sUpMs,
                          int cIdlePos, int cEngagePos);
-    
+
     // Main state machine execution
     void update();
     bool processEvent(GearboxEvent event);
-    
+
     // State queries
     GearboxState getCurrentState() const { return currentState; }
     String getStateName() const { return getStateName(currentState); }
@@ -156,28 +126,21 @@ public:
     bool isShifting() const;
     bool isIdle() const;
     bool canAcceptShiftCommand() const;
-    
+
     // Gear information
     void setCurrentGear(int gear);
     int getCurrentGear() const { return currentGear; }
     String getCurrentGearName() const;
-    
+
     // Clutch control
     void setClutchPulled(bool pulled) { clutchPulled = pulled; }
-    void setClutchInterlockEnabled(bool enabled) { clutchInterlockEnabled = enabled; }
-    
-    // Manual clutch control (hall sensor)
-    void updateManualClutchControl();
-    
-    // Status for web interface - FIXED: Updated to handle all waiting states
-    bool isWaitingForClutch() const { 
-        return currentState == WAITING_FOR_CLUTCH_NEUTRAL_DOWN || 
-               currentState == WAITING_FOR_CLUTCH_NEUTRAL_UP ||
-               currentState == WAITING_FOR_CLUTCH_SHIFT_DOWN ||
-               currentState == WAITING_FOR_CLUTCH_SHIFT_UP; 
+
+    // Status for web interface
+    bool isWaitingForClutch() const {
+        return currentState == WAITING_FOR_CLUTCH_SHIFT_DOWN ||
+               currentState == WAITING_FOR_CLUTCH_SHIFT_UP;
     }
-    bool isShiftInProgress() const;
-    
+
     // Debug
     void printStateInfo() const;
 
@@ -186,45 +149,37 @@ private:
     bool transitionToState(GearboxState newState);
     void executeStateEntry();
     void executeStateUpdate();
-    void executeStateExit();
-    
+
     // State handlers
     void enterIdleState();
     void enterShiftingState();
     void enterWaitingState();
     void enterErrorState();
-    
-    void updateIdleState();
-    void updateShiftingState();
+
+    void updateDownshiftClutchWait();
     void updateWaitingState();
     void updateErrorState();
-    
-    void exitShiftingState();
-    
+
     // Shift control (sends CAN command + tracks completion timing)
     void activateShift(bool isUpshift, int duration, uint16_t ignCutMs = 0, uint8_t targetGear = 0xFF);
     void deactivateShift();
     void engageClutch();
     void releaseClutch();
     void updateRelayControl();
-    
+
+    // Stacked downshift + logging helpers
+    void clearShiftStack();
+    void logShiftStart(int fromGear, int toGear, uint8_t shiftType);
+
     // Utility functions
     GearboxState getIdleStateForGear(int gear) const;
-    int getGearForIdleState(GearboxState state) const;
     bool isIdleState(GearboxState state) const;
     bool isShiftingState(GearboxState state) const;
-    
-    // Condition checkers for transitions
-    static bool clutchPulledCondition();
-    static bool clutchNotRequiredCondition();
-    
+
     // Timeout handling
     void checkTimeouts();
     unsigned long getStateElapsedTime() const { return millis() - stateStartTime; }
 };
-
-// Global state machine instance for condition functions - MOVED FROM CPP
-extern GearboxStateMachine* g_stateMachine;
 
 #endif
 
