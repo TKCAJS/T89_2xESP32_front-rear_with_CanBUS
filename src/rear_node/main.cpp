@@ -6,29 +6,30 @@
  *   - ESP32-S3
  *   - SN65HVD230 CAN transceiver  TX→GPIO4, RX→GPIO5
  *   - Rotary gear switch: 7 pins, active LOW, internal pullup
- *       Neutral→GPIO6, G1→GPIO7, G2→GPIO8, G3→GPIO9,
- *       G4→GPIO10, G5→GPIO11, G6→GPIO12
- *   - ST7789 170x320 TFT (Adafruit_ST7789)
- *       MOSI→13, SCLK→14, CS→16, DC→17, RST→18, BL→15
- *   - Relay outputs (active HIGH)
- *       Upshift→GPIO21, Downshift→GPIO47, Ignition cut→GPIO48
+ *       Neutral→GPIO7, G1→GPIO6, G2→GPIO15, G3→GPIO16,
+ *       G4→GPIO17, G5→GPIO18, G6→GPIO8
+ *   - ST7789 170x320 TFT (Adafruit_ST7789, pins in RearDisplay.h)
+ *       MOSI→13, SCLK→14, CS→10, DC→11, RST→12, BL→9
+ *   - Relay outputs (active HIGH, pins in GearShift.h)
+ *       Upshift→GPIO42, Downshift→GPIO40, Ignition cut→GPIO41
+ *   - NeoPixel heartbeat→GPIO48
  *
  * CAN frames transmitted:
- *   CAN_REAR_GEAR_POS   immediately on change + 1 Hz refresh
- *   CAN_REAR_GEAR_RAW   10 Hz debug
- *   CAN_REAR_STATUS     1 Hz
- *   CAN_HB_REAR         1 Hz heartbeat
+ *   CAN_REAR_GEAR_POS       immediately on change + 1 Hz refresh
+ *   CAN_REAR_GEAR_RAW       10 Hz debug
+ *   CAN_REAR_STATUS         1 Hz
+ *   CAN_HB_REAR             1 Hz heartbeat
+ *   CAN_REAR_ACK_COMPLETE   after each shift (expected vs actual gear)
  *
  * CAN frames received:
- *   CAN_REAR_CMD_SHIFT_UP   logged to display
- *   CAN_REAR_CMD_SHIFT_DN   logged to display
+ *   CAN_REAR_CMD_SHIFT_UP   fires shift relay (+ optional ignition cut)
+ *   CAN_REAR_CMD_SHIFT_DN   fires shift relay
  */
 
 #include <Arduino.h>
 #include <SPI.h>
 
 #define SOFTWARE_VERSION 100  // v1.0.0
-#include "esp_system.h"
 #include "esp_task_wdt.h"
 #include <Adafruit_NeoPixel.h>
 #include "can_ids.h"
@@ -160,27 +161,14 @@ void taskGearPoll(uint32_t now) {
     }
 }
 
-#define CAN_RECOVERY_TIMEOUT_MS  500
-
-static uint32_t s_canLostAt = 0;
-
 void taskCanHealth(uint32_t now) {
+    // Driver-level recovery (bus-off → canRestart) lives in canHealthPoll();
+    // a quiet bus must NOT reboot the node — gear sensing and the display
+    // should keep working standalone, and RX recovers NO_BUS when peers appear.
     if (g_lastCanHealth == 0) g_lastCanHealth = now;
     if (now - g_lastCanHealth < 500 || now < 2000) return;
     g_lastCanHealth = now;
-
     canHealthPoll();
-
-    if (!g_canReady) {
-        if (s_canLostAt == 0) s_canLostAt = now;
-        if (now - s_canLostAt > CAN_RECOVERY_TIMEOUT_MS) {
-            Serial.println("[CAN] Recovery timeout — restarting");
-            delay(100);
-            esp_restart();
-        }
-    } else {
-        s_canLostAt = 0;
-    }
 }
 
 void taskCanTx(uint32_t now) {
@@ -203,14 +191,21 @@ void taskGearShift() {
 }
 
 void taskHeartbeat(uint32_t now) {
+    static int8_t s_lastFlash = -1;   // -1 forces the first draw
+
     uint32_t t = now % HEARTBEAT_CYCLE_MS;
     bool flash = (t < FLASH_DURATION_MS) ||
                  (t > FLASH_DURATION_MS + FLASH_GAP_MS &&
                   t < FLASH_DURATION_MS * 2 + FLASH_GAP_MS);
+
+    // show() busy-waits the WS2812 latch (~300us) — only push on state change
+    if ((int8_t)flash == s_lastFlash) return;
+    s_lastFlash = (int8_t)flash;
+
     if (flash) {
         g_pixel.setPixelColor(0, g_pixel.Color(255, 0, 0));  // red
     } else {
-        g_pixel.setPixelColor(0, g_pixel.Color(0, 20, 0));  // purple
+        g_pixel.setPixelColor(0, g_pixel.Color(0, 20, 0));   // dim green
     }
     g_pixel.show();
 }

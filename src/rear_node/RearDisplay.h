@@ -302,18 +302,25 @@ private:
     }
 
     // -------------------------------------------------------------------------
+    // Draw one status flag row; skips rows that would fall off the panel.
+    void drawStatusFlag(const char *txt, int &y) {
+        if (y > 320 - 8) return;   // 8px glyph height at size 1
+        drawTextLeft(txt, 4, y, 1, COL_RED);
+        y += 10;
+    }
+
     void drawStatus() {
-        _tft.fillRect(0, Y_STATUS + 16, W, 34, COL_BLACK);
+        _tft.fillRect(0, Y_STATUS + 16, W, 320 - (Y_STATUS + 16), COL_BLACK);
         if (_nodeStatus == NODE_STATUS_OK) {
             drawGFXCentred("OK", W / 2, Y_STATUS + 18, &FreeSans12pt7b, COL_GREEN);
             return;
         }
         int y = Y_STATUS + 18;
-        if (_nodeStatus & NODE_STATUS_SENSOR_ERR)   { drawTextLeft("SENSOR ERR",   4, y, 1, COL_RED); y += 10; }
-        if (_nodeStatus & NODE_STATUS_CAN_ERR)      { drawTextLeft("CAN ERR",      4, y, 1, COL_RED); y += 10; }
-        if (_nodeStatus & NODE_STATUS_ACTUATOR_ERR) { drawTextLeft("ACTUATOR ERR", 4, y, 1, COL_RED); y += 10; }
-        if (_nodeStatus & NODE_STATUS_OVERTEMP)     { drawTextLeft("OVERTEMP",     4, y, 1, COL_RED); y += 10; }
-        if (_nodeStatus & NODE_STATUS_WATCHDOG)     { drawTextLeft("WATCHDOG RST", 4, y, 1, COL_RED); y += 10; }
-        if (_nodeStatus & NODE_STATUS_CONFIG_ERR)   { drawTextLeft("CONFIG ERR",   4, y, 1, COL_RED); }
+        if (_nodeStatus & NODE_STATUS_SENSOR_ERR)   drawStatusFlag("SENSOR ERR",   y);
+        if (_nodeStatus & NODE_STATUS_CAN_ERR)      drawStatusFlag("CAN ERR",      y);
+        if (_nodeStatus & NODE_STATUS_ACTUATOR_ERR) drawStatusFlag("ACTUATOR ERR", y);
+        if (_nodeStatus & NODE_STATUS_OVERTEMP)     drawStatusFlag("OVERTEMP",     y);
+        if (_nodeStatus & NODE_STATUS_WATCHDOG)     drawStatusFlag("WATCHDOG RST", y);
+        if (_nodeStatus & NODE_STATUS_CONFIG_ERR)   drawStatusFlag("CONFIG ERR",   y);
     }
 };

@@ -101,7 +101,7 @@ void canReceivePoll() {
 
             g_display.setTargetGear(target);
             g_display.setLastShift((ShiftDirection)dir);
-            gearShiftRequest(dir, shift_ms, ign_cut_ms, g_currentGear);
+            gearShiftRequest(dir, shift_ms, ign_cut_ms, g_currentGear, target);
         }
     }
 }
@@ -217,6 +217,6 @@ void sendHeartbeat() {
 //   [4] actual gear
 //   [5] result        (1=success, 0=failed)
 void sendShiftAck(const ShiftResult &r) {
-    uint8_t payload[6] = { r.dir, r.expectedGear, r.actualGear, r.success ? 1u : 0u, 0, 0 };
+    uint8_t payload[6] = { r.dir, r.expectedGear, r.actualGear, (uint8_t)(r.success ? 1 : 0), 0, 0 };
     canSend(CAN_REAR_ACK_COMPLETE, s_seqShiftAck++, g_nodeStatus, payload, 6);
 }

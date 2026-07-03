@@ -24,8 +24,13 @@
 #define PIN_RELAY_IGN_CUT   41
 #define PIN_RELAY_UPSHIFT   42
 
-
 #define SHIFT_SETTLE_MS     100     // wait after relays release before reading gear
+
+// Duration limits — a corrupted or misconfigured frame must never latch a relay
+#define SHIFT_MS_MIN        30
+#define SHIFT_MS_MAX        200
+#define IGN_CUT_MS_MIN      10
+#define IGN_CUT_MS_MAX      100
 
 // Actual gear after shift is read from main.cpp
 extern uint8_t g_currentGear;
@@ -65,18 +70,23 @@ void gearShiftInit() {
 }
 
 // Called from canReceivePoll() when a shift command arrives.
-// current_gear: gear position at time of command, used to compute expected result
-void gearShiftRequest(uint8_t dir, uint16_t shift_ms, uint16_t ign_cut_ms, uint8_t current_gear) {
+// current_gear: gear position at time of command (fallback for expected result)
+// target_gear:  commander's expected end gear (used when valid — handles
+//               half-shifts to N and shifts started from BETWEEN/UNKNOWN)
+void gearShiftRequest(uint8_t dir, uint16_t shift_ms, uint16_t ign_cut_ms,
+                      uint8_t current_gear, uint8_t target_gear) {
     if (s_shiftState != SHIFT_IDLE) {
         Serial.println("[SHIFT] Ignored — shift already in progress");
         return;
     }
 
     s_shiftDir  = dir;
-    s_shiftMs   = shift_ms;
-    s_ignCutMs  = ign_cut_ms;
+    s_shiftMs   = constrain(shift_ms, SHIFT_MS_MIN, SHIFT_MS_MAX);
+    s_ignCutMs  = (ign_cut_ms > 0) ? constrain(ign_cut_ms, IGN_CUT_MS_MIN, IGN_CUT_MS_MAX) : 0;
 
-    if (dir == SHIFT_UP) {
+    if (target_gear == GEAR_NEUTRAL || (target_gear >= GEAR_1 && target_gear <= GEAR_6)) {
+        s_expectedGear = target_gear;
+    } else if (dir == SHIFT_UP) {
         s_expectedGear = (current_gear < GEAR_6) ? current_gear + 1 : GEAR_6;
     } else {
         s_expectedGear = (current_gear > GEAR_NEUTRAL) ? current_gear - 1 : GEAR_NEUTRAL;
