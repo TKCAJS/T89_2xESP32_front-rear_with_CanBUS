@@ -128,6 +128,10 @@ void loop() {
         analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
     }
 
+    // ── Gear fast path — repaint immediately on change (single glyph, cheap),
+    //    so gear doesn't wait out the 200ms tick like the slow sensor rows ─────
+    displayUpdateGear(g_gear);
+
     // ── Refresh display (5 fps — decoupled from the faster sensor read) ───────
     if (now - g_lastDisplay >= DISPLAY_MS) {
         g_lastDisplay = now;

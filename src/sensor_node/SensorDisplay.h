@@ -51,6 +51,19 @@ static CanHealth s_d_can    = (CanHealth)0xFF;
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+// Deadband changed-check: raw ADC reads jitter by a few LSB every cycle, so a
+// plain != would repaint every row on every refresh — and each row repaint is a
+// large SPI fillRect that blocks the loop. Only repaint when the value moves
+// enough to matter on screen.
+static const float EPS_RAW = 8.0f;    // raw 12-bit ADC counts (~0.2% FS)
+static const float EPS_C   = 0.1f;    // °C — matches the displayed 0.1 resolution
+
+static bool _dirty(float val, float& cached, float eps) {
+    if (fabsf(val - cached) < eps) return false;
+    cached = val;
+    return true;
+}
+
 static void _dispRow(int row, float val, const char* unit = "") {
     int y = HEADER_H + row * DISP_ROW_H;
     s_tft.fillRect(VAL_X, y, DISP_W - VAL_X, DISP_ROW_H, COL_BLACK);
@@ -128,18 +141,28 @@ void displayBegin() {
     }
 }
 
+// Gear fast path — called every loop pass so a gear change repaints immediately
+// instead of waiting for the next full refresh tick. A single glyph is cheap on
+// SPI, unlike the full-row repaints in displayUpdate().
+void displayUpdateGear(uint8_t gear) {
+    if (gear != s_d_gear) {
+        s_d_gear = gear;
+        _dispGear(8, gear);
+    }
+}
+
 void displayUpdate(float oilPressure, float tps, float fuel1, float fuel2,
                    float waterTempC, float dallasTemp, uint8_t pumpDuty,
                    uint16_t rpm, uint8_t gear, CanHealth canHealth) {
-    if (canHealth    != s_d_can)    { s_d_can    = canHealth;    _dispCan(canHealth);             }
-    if (oilPressure  != s_d_oil)    { s_d_oil    = oilPressure;  _dispRow(0, oilPressure);        }
-    if (tps          != s_d_tps)    { s_d_tps    = tps;          _dispRow(1, tps);                }
-    if (fuel1        != s_d_fuel1)  { s_d_fuel1  = fuel1;        _dispRow(2, fuel1);              }
-    if (fuel2        != s_d_fuel2)  { s_d_fuel2  = fuel2;        _dispRow(3, fuel2);              }
-    if (waterTempC   != s_d_water)  { s_d_water  = waterTempC;   _dispRow(4, waterTempC,  "C");   }
-    if (dallasTemp   != s_d_dallas) { s_d_dallas = dallasTemp;   _dispRow(5, dallasTemp,  "C");   }
-    if (rpm          != s_d_rpm)    { s_d_rpm    = rpm;          _dispRowU16(7, rpm);             }
-    if (gear         != s_d_gear)   { s_d_gear   = gear;         _dispGear(8, gear);              }
+    if (canHealth != s_d_can) { s_d_can = canHealth; _dispCan(canHealth); }
+    if (_dirty(oilPressure, s_d_oil,    EPS_RAW)) _dispRow(0, oilPressure);
+    if (_dirty(tps,         s_d_tps,    EPS_RAW)) _dispRow(1, tps);
+    if (_dirty(fuel1,       s_d_fuel1,  EPS_RAW)) _dispRow(2, fuel1);
+    if (_dirty(fuel2,       s_d_fuel2,  EPS_RAW)) _dispRow(3, fuel2);
+    if (_dirty(waterTempC,  s_d_water,  EPS_RAW)) _dispRow(4, waterTempC, "C");  // raw counts for now (uncalibrated)
+    if (_dirty(dallasTemp,  s_d_dallas, EPS_C))   _dispRow(5, dallasTemp, "C");
+    if (rpm != s_d_rpm) { s_d_rpm = rpm; _dispRowU16(7, rpm); }
+    displayUpdateGear(gear);
     if (pumpDuty     != s_d_pump) {
         s_d_pump = pumpDuty;
         int y = HEADER_H + 6 * DISP_ROW_H;
