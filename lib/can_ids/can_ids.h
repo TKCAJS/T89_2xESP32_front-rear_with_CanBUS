@@ -146,19 +146,22 @@
 
 
 // =============================================================================
-// MESSAGE TYPES — NODE_GPS (0x05, future)
+// MESSAGE TYPES — NODE_GPS (0x05, sent by the STM32H723 GPS node)
 // =============================================================================
 
-#define MSGTYPE_GPS_POS             0x01    // Lat/lon (split across two frames)
-#define MSGTYPE_GPS_SPEED           0x02    // Speed + heading
+#define MSGTYPE_GPS_POS             0x01    // data[2] = 0:lat 1:lon, data[3:6] = int32 deg×1e7 LE.
+                                            // Only sent while the fix is valid.
+#define MSGTYPE_GPS_SPEED           0x02    // data[2:3] = uint16 mph×10 LE (0xFFFF = no fix),
+                                            // data[4] = satellites, data[5] = bit0 loc_valid bit1 speed_valid
 #define MSGTYPE_GPS_STATUS          0x03
 
 
 // =============================================================================
-// MESSAGE TYPES — NODE_IMU (0x06, future)
+// MESSAGE TYPES — NODE_IMU (0x06, sent by the STM32H723 GPS node's ICM20948)
 // =============================================================================
 
-#define MSGTYPE_IMU_ACCEL           0x01
+#define MSGTYPE_IMU_ACCEL           0x01    // int16 mg LE ×3: data[2:3] fwd(+)/brake(-),
+                                            // data[4:5] lateral(right+), data[6:7] vertical
 #define MSGTYPE_IMU_GYRO            0x02
 #define MSGTYPE_IMU_STATUS          0x03
 
