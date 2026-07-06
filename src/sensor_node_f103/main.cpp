@@ -29,8 +29,21 @@
 
 // ── Heartbeat LED ─────────────────────────────────────────────────────────────
 // Blue Pill onboard LED, active LOW (on the H562 board PC13 was the button).
-#define PIN_LED       PC13
-#define LED_TOGGLE_MS 500   // 1 Hz blink = loop alive
+// Blink rate tracks the pump duty command: 1 Hz at minimum flow (15%) up to
+// 9 Hz at max cooling (90%) — a glance at the LED shows how hard the pump works.
+// TIM2 toggles the pin in an interrupt so the blink stays steady while the loop
+// blocks on SPI display repaints or CAN TX mailbox waits; the loop only updates
+// the timer period when the duty command moves. (TIM3 is taken by the pump PWM.)
+#define PIN_LED             PC13
+#define LED_TOGGLE_SLOW_MS  500   // at PUMP_DUTY_MIN — 1 Hz blink = loop alive
+#define LED_TOGGLE_FAST_MS  55    // at PUMP_DUTY_MAX — ~9 Hz blink
+
+static HardwareTimer s_ledTimer(TIM2);
+static uint32_t      s_ledToggleMs = LED_TOGGLE_SLOW_MS;
+
+static void ledHeartbeatToggle() {
+    digitalToggle(PIN_LED);
+}
 
 // ── Shared state (extern'd by SensorCan.h) ────────────────────────────────────
 uint8_t            g_nodeStatus = NODE_STATUS_OK;
@@ -53,7 +66,6 @@ static uint32_t g_lastDisplay     = 0;
 static uint32_t g_lastSensorTx    = 0;
 static uint32_t g_lastCanHealth   = 0;
 static uint32_t g_lastStatusTx    = 0;
-static uint32_t g_lastLedToggle   = 0;
 
 #define SENSOR_READ_MS   200
 #define DISPLAY_MS       200   // 5 fps — plenty for this readout
@@ -113,16 +125,28 @@ void setup() {
 
     dallasBegin();
 
+    // Start the heartbeat last — LED is solid through boot, blinks once alive.
+    s_ledTimer.setOverflow(s_ledToggleMs * 1000, MICROSEC_FORMAT);
+    s_ledTimer.attachInterrupt(ledHeartbeatToggle);
+    s_ledTimer.resume();
+
     Serial.println("[SENSOR NODE] Ready");
 }
 
 void loop() {
     uint32_t now = millis();
 
-    // ── Heartbeat — proves the loop is alive, not just that power is on ──────
-    if (now - g_lastLedToggle >= LED_TOGGLE_MS) {
-        g_lastLedToggle = now;
-        digitalWrite(PIN_LED, !digitalRead(PIN_LED));
+    // ── Heartbeat — toggled by TIM2; here we only retune the period when the
+    //    pump duty command (15..90%) moves, so the blink itself never jitters ──
+    uint8_t  duty         = g_pumpDuty;
+    uint32_t ledToggleMs  = map(constrain(duty, PUMP_DUTY_MIN, PUMP_DUTY_MAX),
+                                PUMP_DUTY_MIN, PUMP_DUTY_MAX,
+                                LED_TOGGLE_SLOW_MS, LED_TOGGLE_FAST_MS);
+    if (ledToggleMs != s_ledToggleMs) {
+        s_ledToggleMs = ledToggleMs;
+        s_ledTimer.setOverflow(ledToggleMs * 1000, MICROSEC_FORMAT);
+        s_ledTimer.refresh();   // reload now — a shrunk ARR below CNT would
+                                // otherwise wait out a full counter wrap
     }
 
     // ── Read sensors ──────────────────────────────────────────────────────────
