@@ -50,7 +50,8 @@ static void ledHeartbeatToggle() {
 uint8_t            g_nodeStatus = NODE_STATUS_OK;
 volatile bool      g_canReady   = false;
 volatile CanHealth g_canHealth  = CAN_HEALTH_FAULT;
-volatile uint8_t   g_pumpDuty   = 0;
+volatile uint8_t   g_pumpDuty    = 0;
+volatile uint8_t   g_pumpTargetC = PUMP_TARGET_DEFAULT;   // set from display via CAN
 volatile uint16_t  g_rpm        = 0;
 volatile uint8_t   g_gear       = GEAR_UNKNOWN;
 
@@ -109,7 +110,8 @@ void setup() {
 
     pinMode(PIN_PUMP_PWM, OUTPUT);
     analogWriteFrequency(PUMP_PWM_FREQ_HZ);
-    // Boot at minimum flow (15%); the temp algorithm takes over at 1 Hz.
+    // Boot at minimum flow (15%); the water-temp algorithm takes over at the
+    // 200 ms sensor read.
     // Never command 0% — that's the controller's failsafe = full speed.
     g_pumpDuty = PUMP_DUTY_MIN;
     analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
@@ -164,8 +166,9 @@ void loop() {
         g_fuel2       = analogRead(PIN_FUEL_2);
         g_waterTempC  = ntcTempC(analogRead(PIN_WATER_TEMP));
 
-        // g_pumpDuty (%) is set by the temperature algorithm at 1 Hz below.
-        // analogWrite is 8-bit here, so map the percent command to 0..255.
+        // Water temp (NTC) -> pump duty command, out as 8-bit PWM (percent
+        // mapped to 0..255). Curve centers on the CAN-adjustable target temp.
+        g_pumpDuty = pumpDutyForTemp(g_waterTempC, g_pumpTargetC);
         analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
     }
 
@@ -181,10 +184,8 @@ void loop() {
                       g_rpm, g_gear, g_canHealth);
     }
 
-    // ── Dallas temperature → pump duty (non-blocking, 1 Hz) ───────────────────
-    if (dallasUpdate(now)) {
-        g_pumpDuty = pumpDutyForTemp(dallasTempC());   // temperature-scheduled pump duty
-    }
+    // ── Dallas radiator temperature (non-blocking, 1 Hz — display + CAN only) ─
+    dallasUpdate(now);
 
     // ── CAN receive is interrupt-driven (USB_LP_CAN1_RX0 → canReceivePoll).
     //    The bxCAN RX FIFO only holds 3 frames and the loop blocks tens of ms

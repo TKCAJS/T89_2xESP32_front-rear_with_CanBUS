@@ -133,6 +133,7 @@
 
 // Commands TO sensor node (0x40-0x5F)
 #define MSGTYPE_SENS_CMD_PUMP       0x40    // data[2] = uint8_t 0–100 % PWM duty override
+#define MSGTYPE_SENS_CMD_TARGET     0x41    // data[2] = uint8_t target water temp °C (pump curve center)
 
 
 // =============================================================================
@@ -245,6 +246,7 @@
 #define CAN_SENS_STATUS             CAN_ID(CAN_PRIO_INFO,     NODE_SENSOR,  MSGTYPE_SENS_STATUS,        0)
 #define CAN_SENS_RADIATOR_TEMP      CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_RADIATOR_TEMP, 0)
 #define CAN_SENS_CMD_PUMP           CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_CMD_PUMP,      0)
+#define CAN_SENS_CMD_TARGET_TEMP    CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_CMD_TARGET,    0)
 
 // --- COOLING NODE (future) ---
 #define CAN_COOL_WATER_TEMP         CAN_ID(CAN_PRIO_MEDIUM,   NODE_COOLING, MSGTYPE_COOL_WATER_TEMP,    0)

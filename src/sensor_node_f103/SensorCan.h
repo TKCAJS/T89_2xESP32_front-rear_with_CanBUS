@@ -16,6 +16,7 @@
 #include <Arduino.h>
 #include "can_ids.h"
 #include "SensorDisplay.h"  // for CanHealth enum
+#include "PumpControl.h"    // for PUMP_TARGET_MIN/MAX clamp
 
 // Shared state — defined in main.cpp.
 // Fields touched by the RX ISR (canReceivePoll) are volatile so the main loop
@@ -24,6 +25,7 @@ extern uint8_t            g_nodeStatus;
 extern volatile bool      g_canReady;
 extern volatile CanHealth g_canHealth;
 extern volatile uint8_t   g_pumpDuty;
+extern volatile uint8_t   g_pumpTargetC;
 extern volatile uint16_t  g_rpm;
 extern volatile uint8_t   g_gear;
 
@@ -175,6 +177,9 @@ void canReceivePoll() {
             uint8_t duty = data[2];
             if (duty > 100) duty = 100;
             g_pumpDuty = duty;
+        }
+        else if (hdr.ExtId == CAN_SENS_CMD_TARGET_TEMP) {
+            g_pumpTargetC = constrain(data[2], PUMP_TARGET_MIN, PUMP_TARGET_MAX);
         }
         else if (hdr.ExtId == CAN_MAIN_RPM) {
             g_rpm = data[2] | ((uint16_t)data[3] << 8);
