@@ -1,7 +1,7 @@
 #define SOFTWARE_VERSION  100   // v1.0.0
 
-// STM32F103C8T6 (Blue Pill) port of the sensor node. Same application logic as
-// src/sensor_node/ — only the pins and the CAN driver (bxCAN vs FDCAN) differ.
+// Sensor node — STM32F103C8T6 (Blue Pill). Originally ported from an
+// STM32H562 board (removed); pin/driver history is in CLAUDE.md.
 
 #include <Arduino.h>
 #include "can_ids.h"
@@ -9,6 +9,7 @@
 #include "SensorCan.h"
 #include "DallasTemp.h"
 #include "PumpControl.h"
+#include "NtcTemp.h"
 
 // ── Analogue inputs ───────────────────────────────────────────────────────────
 // PC1-PC5 don't exist on the LQFP48 package — reallocated to PA0-PA4.
@@ -87,6 +88,10 @@ static void gpio_blanket_init() {
 void setup() {
     gpio_blanket_init();
 
+    // STM32duino defaults analogRead to 10-bit; the NTC math (NTC_ADC_MAX)
+    // and the display's EPS_RAW deadband both assume 12-bit counts.
+    analogReadResolution(12);
+
     pinMode(PIN_LED, OUTPUT);
     digitalWrite(PIN_LED, LOW);   // active low — on during boot, blinks once loop runs
 
@@ -133,7 +138,7 @@ void loop() {
         g_tps         = analogRead(PIN_TPS);
         g_fuel1       = analogRead(PIN_FUEL_1);
         g_fuel2       = analogRead(PIN_FUEL_2);
-        g_waterTempC  = analogRead(PIN_WATER_TEMP);
+        g_waterTempC  = ntcTempC(analogRead(PIN_WATER_TEMP));
 
         // g_pumpDuty (%) is set by the temperature algorithm at 1 Hz below.
         // analogWrite is 8-bit here, so map the percent command to 0..255.

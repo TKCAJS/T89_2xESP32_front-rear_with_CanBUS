@@ -1,8 +1,9 @@
-# Sensor Node — STM32F103C8T6 port (Blue Pill)
+# Sensor Node — STM32F103C8T6 (Blue Pill)
 
-Parallel port of `src/sensor_node/` (STM32H562RGT6) to the F103C8T6, built as the
-`sensor_node_f103` PlatformIO env. **Non-destructive**: the H562 version stays
-untouched; the two share `lib/can_ids/can_ids.h` and identical application logic.
+The sensor node, built as the `sensor_node_f103` PlatformIO env. Originally a
+port of an STM32H562RGT6 board whose folder (`src/sensor_node/`) has since been
+removed — the H562 references below survive as porting history. Shares
+`lib/can_ids/can_ids.h` with the other nodes.
 
 Board: Blue Pill STM32F103C8T6 (LQFP48, 72 MHz Cortex-M3, 64 KB flash, 20 KB SRAM)
 
@@ -51,8 +52,8 @@ JTAG (PB3/PB4/PA15); SWD survives.
 
 ## Flash budget
 
-64 KB part. Full build measures ~39 KB (~60%). Unlike the H562 env, this env
-does **not** link `_printf_float` — the display renders ×10 fixed-point with
+64 KB part. Full build measures ~39 KB (~60%). This env does **not** link
+`_printf_float` — the display renders ×10 fixed-point with
 integer snprintf (`_dispRow` in SensorDisplay.h); adding a `%f` anywhere will
 print blanks until the flag is restored (costs ~13 KB). Most C8T6 dies
 physically carry 128 KB if truly needed (`board = bluepill_f103c8_128k`).

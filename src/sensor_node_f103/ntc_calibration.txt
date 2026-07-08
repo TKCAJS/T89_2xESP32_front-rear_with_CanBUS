@@ -1,0 +1,43 @@
+NTC water-temp sensor calibration reference
+============================================
+
+Sensor: 2-wire NTC, ~50 kOhm @ 25 C, beta ~4040 K (fit from the table below).
+Measured resistance values, 2026-07-08. This table is the source of the
+NTC_TABLE in NtcTemp.h — keep the two in sync.
+
+Divider (as coded in NtcTemp.h):
+  3.3 V rail --[ 4.7 kOhm 1% ]--+--> ADC pin (PA4, 12-bit)
+                                |
+                               NTC
+                                |
+                               GND
+  One sensor wire to board GND, the other to the pin. 100 nF ceramic from
+  pin to GND. Twist the sensor pair in the loom.
+
+  R_ntc = 4700 * counts / (4095 - counts)
+
+Temp C   R (kOhm)   ADC counts   Volts
+------   --------   ----------   -----
+  20       62.32       3808       3.07
+  30       40.34       3668       2.96
+  40       26.65       3481       2.81
+  50       17.95       3245       2.62
+  60       12.32       2964       2.39
+  70        8.61       2649       2.13
+  80        6.14       2320       1.87
+  90        4.43       1987       1.60
+ 100        3.32       1695       1.37
+ 110        2.55       1440       1.16
+ 120        1.97       1210       0.98
+ 130        1.51        996       0.80
+ 140        1.17        816       0.66
+ 150        0.90        658       0.53
+
+Counts/volts are computed from the divider formula, not measured.
+
+Fault behaviour (clamped to table ends in ntcTempC):
+  open / unplugged sensor -> pin pulled to 3.3 V -> reads 20 C
+  shorted sensor          -> 0 V                 -> reads 150 C
+
+Bench check: substitute a fixed resistor for the NTC —
+  4.43 kOhm should display 90.0 C, 12.32 kOhm should display 60.0 C.

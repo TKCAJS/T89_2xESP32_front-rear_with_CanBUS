@@ -166,7 +166,7 @@ void displayUpdate(float oilPressure, float tps, float fuel1, float fuel2,
     if (_dirty(tps,         s_d_tps,    EPS_RAW)) _dispRow(1, tps);
     if (_dirty(fuel1,       s_d_fuel1,  EPS_RAW)) _dispRow(2, fuel1);
     if (_dirty(fuel2,       s_d_fuel2,  EPS_RAW)) _dispRow(3, fuel2);
-    if (_dirty(waterTempC,  s_d_water,  EPS_RAW)) _dispRow(4, waterTempC, "C");  // raw counts for now (uncalibrated)
+    if (_dirty(waterTempC,  s_d_water,  EPS_C))   _dispRow(4, waterTempC, "C");
     if (_dirty(dallasTemp,  s_d_dallas, EPS_C))   _dispRow(5, dallasTemp, "C");
     if (rpm != s_d_rpm) { s_d_rpm = rpm; _dispRowU16(7, rpm); }
     displayUpdateGear(gear);
