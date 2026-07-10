@@ -18,6 +18,10 @@
 #define PIN_FUEL_1        PA2
 #define PIN_FUEL_2        PA3
 #define PIN_WATER_TEMP    PA4   // analog NTC
+#define NTC_AVG_SAMPLES   20    // spread evenly across one pump-PWM period so
+                                // PWM ripple coupled onto the NTC averages out
+                                // (NTC counts drive the pump duty directly)
+#define NTC_SAMPLE_GAP_US (1000000 / PUMP_PWM_FREQ_HZ / NTC_AVG_SAMPLES)
 
 // ── Pump PWM speed command ────────────────────────────────────────────────────
 // PB1 PWM -> 6N137 opto -> 2N2222 -> smart pump controller's PWM input.
@@ -164,7 +168,14 @@ void loop() {
         g_tps         = analogRead(PIN_TPS);
         g_fuel1       = analogRead(PIN_FUEL_1);
         g_fuel2       = analogRead(PIN_FUEL_2);
-        g_waterTempC  = ntcTempC(analogRead(PIN_WATER_TEMP));
+        // ~10 ms blocking burst — same order as a display repaint, and CAN RX
+        // is interrupt-driven, so nothing time-critical waits on this.
+        uint32_t ntcSum = 0;
+        for (int i = 0; i < NTC_AVG_SAMPLES; i++) {
+            ntcSum += analogRead(PIN_WATER_TEMP);
+            if (i < NTC_AVG_SAMPLES - 1) delayMicroseconds(NTC_SAMPLE_GAP_US);
+        }
+        g_waterTempC  = ntcTempC(ntcSum / NTC_AVG_SAMPLES);
 
         // Water temp (NTC) -> pump duty command, out as 8-bit PWM (percent
         // mapped to 0..255). Curve centers on the CAN-adjustable target temp.
