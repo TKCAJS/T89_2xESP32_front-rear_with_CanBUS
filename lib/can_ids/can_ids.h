@@ -57,7 +57,7 @@
 #define NODE_MAIN           0x01    // ESP32-S3   - main controller / SD logger
 #define NODE_DISPLAY        0x02    // ESP32-S3   - 8048S043C 800x480 LVGL display
 #define NODE_REAR           0x03    // ESP32-S3   - rear node: gear shift + position
-#define NODE_COOLING        0x04    // (future)   - PWM water pump + coolant temp
+// 0x04 retired — cooling folded into NODE_SENSOR (PWM pump control lives there)
 #define NODE_GPS            0x05    // (future)   - GPS
 #define NODE_IMU            0x06    // (future)   - accelerometer / gyro
 #define NODE_LAP            0x07    // (future)   - lap trigger
@@ -137,16 +137,6 @@
 
 
 // =============================================================================
-// MESSAGE TYPES — NODE_COOLING (0x04, future)
-// =============================================================================
-
-#define MSGTYPE_COOL_WATER_TEMP     0x01
-#define MSGTYPE_COOL_DUTY           0x02
-#define MSGTYPE_COOL_STATUS         0x03
-#define MSGTYPE_COOL_CMD_DUTY       0x40    // Override PWM duty
-
-
-// =============================================================================
 // MESSAGE TYPES — NODE_GPS (0x05, sent by the STM32H723 GPS node)
 // =============================================================================
 
@@ -204,7 +194,6 @@
 #define CAN_HB_MAIN                 CAN_ID(CAN_PRIO_INFO,     NODE_MAIN,    MSGTYPE_HEARTBEAT,          0)
 #define CAN_HB_DISPLAY              CAN_ID(CAN_PRIO_INFO,     NODE_DISPLAY, MSGTYPE_HEARTBEAT,          0)
 #define CAN_HB_REAR                 CAN_ID(CAN_PRIO_INFO,     NODE_REAR,    MSGTYPE_HEARTBEAT,          0)
-#define CAN_HB_COOLING              CAN_ID(CAN_PRIO_INFO,     NODE_COOLING, MSGTYPE_HEARTBEAT,          0)
 #define CAN_HB_GPS                  CAN_ID(CAN_PRIO_INFO,     NODE_GPS,     MSGTYPE_HEARTBEAT,          0)
 #define CAN_HB_IMU                  CAN_ID(CAN_PRIO_INFO,     NODE_IMU,     MSGTYPE_HEARTBEAT,          0)
 #define CAN_HB_LAP                  CAN_ID(CAN_PRIO_INFO,     NODE_LAP,     MSGTYPE_HEARTBEAT,          0)
@@ -247,12 +236,6 @@
 #define CAN_SENS_RADIATOR_TEMP      CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_RADIATOR_TEMP, 0)
 #define CAN_SENS_CMD_PUMP           CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_CMD_PUMP,      0)
 #define CAN_SENS_CMD_TARGET_TEMP    CAN_ID(CAN_PRIO_MEDIUM,   NODE_SENSOR,  MSGTYPE_SENS_CMD_TARGET,    0)
-
-// --- COOLING NODE (future) ---
-#define CAN_COOL_WATER_TEMP         CAN_ID(CAN_PRIO_MEDIUM,   NODE_COOLING, MSGTYPE_COOL_WATER_TEMP,    0)
-#define CAN_COOL_DUTY               CAN_ID(CAN_PRIO_MEDIUM,   NODE_COOLING, MSGTYPE_COOL_DUTY,          0)
-#define CAN_COOL_STATUS             CAN_ID(CAN_PRIO_INFO,     NODE_COOLING, MSGTYPE_COOL_STATUS,        0)
-#define CAN_COOL_CMD_DUTY           CAN_ID(CAN_PRIO_LOW,      NODE_COOLING, MSGTYPE_COOL_CMD_DUTY,      0)
 
 // --- GPS NODE (future) ---
 #define CAN_GPS_POS                 CAN_ID(CAN_PRIO_LOW,      NODE_GPS,     MSGTYPE_GPS_POS,            0)
