@@ -45,8 +45,8 @@ static float     s_d_oil    = -99.0f;
 static float     s_d_tps    = -99.0f;
 static float     s_d_fuel1  = -99.0f;
 static float     s_d_fuel2  = -99.0f;
-static float     s_d_water  = -99.0f;
-static float     s_d_dallas = -99.0f;
+static float     s_d_eng    = -99.0f;
+static float     s_d_radout = -99.0f;
 static uint8_t   s_d_pump   = 0xFF;
 static uint16_t  s_d_rpm    = 0xFFFF;
 static uint8_t   s_d_gear   = GEAR_UNKNOWN;
@@ -141,7 +141,7 @@ void displayBegin() {
 
     s_tft.setTextSize(TXT_SZ);
     s_tft.setTextColor(COL_LIGHTGREY, COL_BLACK);
-    const char* labels[] = { "OIL:", "TPS:", "FUEL1:", "FUEL2:", "WATER:", "DALL:", "PUMP:", "RPM:", "GEAR:" };
+    const char* labels[] = { "OIL:", "TPS:", "FUEL1:", "FUEL2:", "ENG:", "RADO:", "PUMP:", "RPM:", "GEAR:" };
     for (int i = 0; i < 9; i++) {
         s_tft.setCursor(4, HEADER_H + i * DISP_ROW_H + TXT_Y_OFF);
         s_tft.print(labels[i]);
@@ -159,15 +159,15 @@ void displayUpdateGear(uint8_t gear) {
 }
 
 void displayUpdate(float oilPressure, float tps, float fuel1, float fuel2,
-                   float waterTempC, float dallasTemp, uint8_t pumpDuty,
+                   float engineTempC, float radOutTempC, uint8_t pumpDuty,
                    uint16_t rpm, uint8_t gear, CanHealth canHealth) {
     if (canHealth != s_d_can) { s_d_can = canHealth; _dispCan(canHealth); }
     if (_dirty(oilPressure, s_d_oil,    EPS_RAW)) _dispRow(0, oilPressure);
     if (_dirty(tps,         s_d_tps,    EPS_RAW)) _dispRow(1, tps);
     if (_dirty(fuel1,       s_d_fuel1,  EPS_RAW)) _dispRow(2, fuel1);
     if (_dirty(fuel2,       s_d_fuel2,  EPS_RAW)) _dispRow(3, fuel2);
-    if (_dirty(waterTempC,  s_d_water,  EPS_C))   _dispRow(4, waterTempC, "C");
-    if (_dirty(dallasTemp,  s_d_dallas, EPS_C))   _dispRow(5, dallasTemp, "C");
+    if (_dirty(engineTempC, s_d_eng,    EPS_C))   _dispRow(4, engineTempC, "C");
+    if (_dirty(radOutTempC, s_d_radout, EPS_C))   _dispRow(5, radOutTempC, "C");
     if (rpm != s_d_rpm) { s_d_rpm = rpm; _dispRowU16(7, rpm); }
     displayUpdateGear(gear);
     if (pumpDuty     != s_d_pump) {

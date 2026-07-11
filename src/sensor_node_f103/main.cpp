@@ -17,7 +17,8 @@
 #define PIN_TPS           PA1
 #define PIN_FUEL_1        PA2
 #define PIN_FUEL_2        PA3
-#define PIN_WATER_TEMP    PA4   // analog NTC
+#define PIN_ENGINE_TEMP   PA4   // analog NTC — engine water temp
+#define PIN_RAD_OUT_TEMP  PA5   // analog NTC — radiator outlet temp
 #define NTC_AVG_SAMPLES   20    // spread evenly across one pump-PWM period so
                                 // PWM ripple coupled onto the NTC averages out
                                 // (NTC counts drive the pump duty directly)
@@ -60,11 +61,12 @@ volatile uint16_t  g_rpm        = 0;
 volatile uint8_t   g_gear       = GEAR_UNKNOWN;
 
 // ── Sensor readings ───────────────────────────────────────────────────────────
-static float g_oilPressure = 0.0f;
-static float g_tps         = 0.0f;
-static float g_fuel1       = 0.0f;
-static float g_fuel2       = 0.0f;
-static float g_waterTempC  = 0.0f;
+static float g_oilPressure  = 0.0f;
+static float g_tps          = 0.0f;
+static float g_fuel1        = 0.0f;
+static float g_fuel2        = 0.0f;
+static float g_engineTempC  = 0.0f;
+static float g_radOutTempC  = 0.0f;
 
 // ── Timing ────────────────────────────────────────────────────────────────────
 static uint32_t g_lastSensorRead  = 0;
@@ -169,17 +171,21 @@ void loop() {
         g_fuel1       = analogRead(PIN_FUEL_1);
         g_fuel2       = analogRead(PIN_FUEL_2);
         // ~10 ms blocking burst — same order as a display repaint, and CAN RX
-        // is interrupt-driven, so nothing time-critical waits on this.
-        uint32_t ntcSum = 0;
+        // is interrupt-driven, so nothing time-critical waits on this. Both
+        // NTCs are sampled in the same pass so each still averages across one
+        // full pump-PWM period.
+        uint32_t ntcSumEng = 0, ntcSumRad = 0;
         for (int i = 0; i < NTC_AVG_SAMPLES; i++) {
-            ntcSum += analogRead(PIN_WATER_TEMP);
+            ntcSumEng += analogRead(PIN_ENGINE_TEMP);
+            ntcSumRad += analogRead(PIN_RAD_OUT_TEMP);
             if (i < NTC_AVG_SAMPLES - 1) delayMicroseconds(NTC_SAMPLE_GAP_US);
         }
-        g_waterTempC  = ntcTempC(ntcSum / NTC_AVG_SAMPLES);
+        g_engineTempC = ntcTempC(ntcSumEng / NTC_AVG_SAMPLES);
+        g_radOutTempC = ntcTempC(ntcSumRad / NTC_AVG_SAMPLES);
 
-        // Water temp (NTC) -> pump duty command, out as 8-bit PWM (percent
+        // Engine temp (NTC) -> pump duty command, out as 8-bit PWM (percent
         // mapped to 0..255). Curve centers on the CAN-adjustable target temp.
-        g_pumpDuty = pumpDutyForTemp(g_waterTempC, g_pumpTargetC);
+        g_pumpDuty = pumpDutyForTemp(g_engineTempC, g_pumpTargetC);
         analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
     }
 
@@ -191,7 +197,7 @@ void loop() {
     if (now - g_lastDisplay >= DISPLAY_MS) {
         g_lastDisplay = now;
         displayUpdate(g_oilPressure, g_tps, g_fuel1, g_fuel2,
-                      g_waterTempC, dallasTempC(), g_pumpDuty,
+                      g_engineTempC, g_radOutTempC, g_pumpDuty,
                       g_rpm, g_gear, g_canHealth);
     }
 
@@ -213,7 +219,8 @@ void loop() {
     if (g_canReady && now - g_lastSensorTx >= SENSOR_TX_MS) {
         g_lastSensorTx = now;
         sendOilPressure(g_oilPressure);
-        sendWaterTemp(g_waterTempC);
+        sendEngineTemp(g_engineTempC);
+        sendRadOutTemp(g_radOutTempC);
         sendRadiatorTemp(dallasTempC());
         sendTPS(g_tps);
         sendFuel1(g_fuel1);
