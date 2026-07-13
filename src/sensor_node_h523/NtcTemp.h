@@ -1,7 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
-// Water-temp NTC → °C. Divider: 4.7 kΩ 1% pull-up from the 3.3 V ADC rail to
+// NTC → °C (engine temp + radiator outlet temp, one divider each, same
+// parts). Divider: 4.7 kΩ 1% pull-up from the 3.3 V ADC rail to
 // the pin, NTC from the pin to GND. The sensor is 2-wire: one wire to board
 // GND, the other to the pin — no block-ground return, so no ground-offset
 // error. Counts fall as temperature rises.

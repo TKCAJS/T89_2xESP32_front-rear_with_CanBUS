@@ -74,7 +74,8 @@ assume otherwise since so much else *is* enabled by default on this chip.
 | Oil pressure | PA0 | **PA1** | ADC — shifted off PA0 (see button note above) |
 | TPS | PA1 | **PA2** | ADC |
 | Fuel 1 / Fuel 2 | PA2 / PA3 | **PA3 / PA4** | ADC |
-| Water NTC | PA4 | **PA5** | ADC |
+| Engine temp NTC | PA4 | **PA5** | ADC — renamed from "water temp" upstream (can_ids.h `MSGTYPE_SENS_ENGINE_TEMP`), same divider/table |
+| Rad-out temp NTC | PA5 | **PA6** | ADC — new second NTC added upstream (`MSGTYPE_SENS_RAD_OUT_TEMP`); F103 had PA5 free, H523 doesn't (button-shift above), so it lands on PA6 instead |
 | Pump PWM | PB1 | PB1 | unchanged — TIM3_CH4 on both parts, 100 Hz |
 | Dallas OneWire | PB0 | PB0 | unchanged — any GPIO |
 | Debug UART | PA9 / PA10 | PA9 / PA10 | unchanged (USART1, 115200) |

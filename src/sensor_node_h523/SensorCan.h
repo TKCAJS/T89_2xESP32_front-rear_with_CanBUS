@@ -36,7 +36,8 @@ extern volatile uint8_t   g_gear;
 static FDCAN_HandleTypeDef s_hfdcan;
 
 static uint8_t s_seqOilPressure = 0;
-static uint8_t s_seqWaterTemp   = 0;
+static uint8_t s_seqEngineTemp  = 0;
+static uint8_t s_seqRadOut      = 0;
 static uint8_t s_seqTPS         = 0;
 static uint8_t s_seqFuel1       = 0;
 static uint8_t s_seqFuel2       = 0;
@@ -272,10 +273,16 @@ void sendOilPressure(float kPa) {
     canSend(CAN_SENS_OIL_PRESSURE, s_seqOilPressure++, p, 6);
 }
 
-void sendWaterTemp(float degC) {
+void sendEngineTemp(float degC) {
     int16_t v = (int16_t)(degC * 10.0f);
     uint8_t p[6] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
-    canSend(CAN_SENS_WATER_TEMP, s_seqWaterTemp++, p, 6);
+    canSend(CAN_SENS_ENGINE_TEMP, s_seqEngineTemp++, p, 6);
+}
+
+void sendRadOutTemp(float degC) {
+    int16_t v = (int16_t)(degC * 10.0f);
+    uint8_t p[6] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
+    canSend(CAN_SENS_RAD_OUT_TEMP, s_seqRadOut++, p, 6);
 }
 
 void sendRadiatorTemp(float degC) {

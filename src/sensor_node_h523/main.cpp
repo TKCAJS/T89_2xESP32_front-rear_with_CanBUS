@@ -65,13 +65,14 @@ void SystemClock_Config(void) {
 
 // ── Analogue inputs ───────────────────────────────────────────────────────────
 // PA0 is the WeAct BlackPill H523 board's onboard user button (active-low with
-// a pull-up) — reading it as analog would fight that pull-up, so the 5 analog
-// channels shift one pin right vs the F103 build (PA0-4 -> PA1-5).
-#define PIN_OIL_PRESSURE  PA1
-#define PIN_TPS           PA2
-#define PIN_FUEL_1        PA3
-#define PIN_FUEL_2        PA4
-#define PIN_WATER_TEMP    PA5   // analog NTC
+// a pull-up) — reading it as analog would fight that pull-up, so the 6 analog
+// channels shift one pin right vs the F103 build (PA0-5 -> PA1-6).
+#define PIN_OIL_PRESSURE   PA1
+#define PIN_TPS            PA2
+#define PIN_FUEL_1         PA3
+#define PIN_FUEL_2         PA4
+#define PIN_ENGINE_TEMP    PA5   // analog NTC — engine water temp
+#define PIN_RAD_OUT_TEMP   PA6   // analog NTC — radiator outlet temp
 #define NTC_AVG_SAMPLES   20    // spread evenly across one pump-PWM period so
                                 // PWM ripple coupled onto the NTC averages out
                                 // (NTC counts drive the pump duty directly)
@@ -115,11 +116,12 @@ volatile uint16_t  g_rpm        = 0;
 volatile uint8_t   g_gear       = GEAR_UNKNOWN;
 
 // ── Sensor readings ───────────────────────────────────────────────────────────
-static float g_oilPressure = 0.0f;
-static float g_tps         = 0.0f;
-static float g_fuel1       = 0.0f;
-static float g_fuel2       = 0.0f;
-static float g_waterTempC  = 0.0f;
+static float g_oilPressure  = 0.0f;
+static float g_tps          = 0.0f;
+static float g_fuel1        = 0.0f;
+static float g_fuel2        = 0.0f;
+static float g_engineTempC  = 0.0f;
+static float g_radOutTempC  = 0.0f;
 
 // ── Timing ────────────────────────────────────────────────────────────────────
 static uint32_t g_lastSensorRead  = 0;
@@ -168,7 +170,7 @@ void setup() {
 
     pinMode(PIN_PUMP_PWM, OUTPUT);
     analogWriteFrequency(PUMP_PWM_FREQ_HZ);
-    // Boot at minimum flow (15%); the water-temp algorithm takes over at the
+    // Boot at minimum flow (15%); the engine-temp algorithm takes over at the
     // 200 ms sensor read.
     // Never command 0% — that's the controller's failsafe = full speed.
     g_pumpDuty = PUMP_DUTY_MIN;
@@ -223,17 +225,21 @@ void loop() {
         g_fuel1       = analogRead(PIN_FUEL_1);
         g_fuel2       = analogRead(PIN_FUEL_2);
         // ~10 ms blocking burst — same order as a display repaint, and CAN RX
-        // is interrupt-driven, so nothing time-critical waits on this.
-        uint32_t ntcSum = 0;
+        // is interrupt-driven, so nothing time-critical waits on this. Both
+        // NTCs are sampled in the same pass so each still averages across one
+        // full pump-PWM period.
+        uint32_t ntcSumEng = 0, ntcSumRad = 0;
         for (int i = 0; i < NTC_AVG_SAMPLES; i++) {
-            ntcSum += analogRead(PIN_WATER_TEMP);
+            ntcSumEng += analogRead(PIN_ENGINE_TEMP);
+            ntcSumRad += analogRead(PIN_RAD_OUT_TEMP);
             if (i < NTC_AVG_SAMPLES - 1) delayMicroseconds(NTC_SAMPLE_GAP_US);
         }
-        g_waterTempC  = ntcTempC(ntcSum / NTC_AVG_SAMPLES);
+        g_engineTempC = ntcTempC(ntcSumEng / NTC_AVG_SAMPLES);
+        g_radOutTempC = ntcTempC(ntcSumRad / NTC_AVG_SAMPLES);
 
-        // Water temp (NTC) -> pump duty command, out as 8-bit PWM (percent
+        // Engine temp (NTC) -> pump duty command, out as 8-bit PWM (percent
         // mapped to 0..255). Curve centers on the CAN-adjustable target temp.
-        g_pumpDuty = pumpDutyForTemp(g_waterTempC, g_pumpTargetC);
+        g_pumpDuty = pumpDutyForTemp(g_engineTempC, g_pumpTargetC);
         analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
     }
 
@@ -245,7 +251,7 @@ void loop() {
     if (now - g_lastDisplay >= DISPLAY_MS) {
         g_lastDisplay = now;
         displayUpdate(g_oilPressure, g_tps, g_fuel1, g_fuel2,
-                      g_waterTempC, dallasTempC(), g_pumpDuty,
+                      g_engineTempC, g_radOutTempC, g_pumpDuty,
                       g_rpm, g_gear, g_canHealth);
     }
 
@@ -267,7 +273,8 @@ void loop() {
     if (g_canReady && now - g_lastSensorTx >= SENSOR_TX_MS) {
         g_lastSensorTx = now;
         sendOilPressure(g_oilPressure);
-        sendWaterTemp(g_waterTempC);
+        sendEngineTemp(g_engineTempC);
+        sendRadOutTemp(g_radOutTempC);
         sendRadiatorTemp(dallasTempC());
         sendTPS(g_tps);
         sendFuel1(g_fuel1);
