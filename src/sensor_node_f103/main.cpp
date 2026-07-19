@@ -9,6 +9,7 @@
 #include "SensorCan.h"
 #include "DallasTemp.h"
 #include "PumpControl.h"
+#include "FanControl.h"
 #include "NtcTemp.h"
 
 // ── Analogue inputs ───────────────────────────────────────────────────────────
@@ -122,6 +123,8 @@ void setup() {
     g_pumpDuty = PUMP_DUTY_MIN;
     analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
 
+    fanInit();   // relays off + one wiring-check click each
+
     Serial.begin(115200);   // USART1 PA9/PA10 — no USB CDC on this build
     delay(500);
     Serial.println("[SENSOR NODE] v" + String(SOFTWARE_VERSION) + " Booting...");
@@ -187,6 +190,9 @@ void loop() {
         // mapped to 0..255). Curve centers on the CAN-adjustable target temp.
         g_pumpDuty = pumpDutyForTemp(g_engineTempC, g_pumpTargetC);
         analogWrite(PIN_PUMP_PWM, map(g_pumpDuty, 0, 100, 0, 255));
+
+        // Aux fans: staged on sustained overshoot the pump can't hold back
+        fanUpdate(g_engineTempC, g_pumpTargetC, g_pumpDuty, now);
     }
 
     // ── Gear fast path — repaint immediately on change (single glyph, cheap),

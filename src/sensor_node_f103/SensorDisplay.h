@@ -5,13 +5,15 @@
 #include <Adafruit_ST7789.h>
 #include "can_ids.h"
 
-// F103 pins: RST=PB11, CS=PB12, DC=PB10, DIN=PB15, CLK=PB13
-// (PC6/PC7 from the H562 board don't exist on LQFP48; DC/RST moved to the free
-// USART3 pins PB10/PB11. PB14 stays claimed as SPI2 MISO — unused but the SPI
-// class owns it, so it can't double as DC.)
+// F103 pins: RST=PB4, CS=PB12, DC=PA15, DIN=PB15, CLK=PB13
+// DC/RST sit on the right-edge header (moved from PB10/PB11 for wiring reach;
+// that also frees I2C2/USART3). PA15/PB4 are JTAG-only otherwise — pinMode()
+// disconnects the JTAG function per-pin, SWD (PA13/PA14) unaffected. PB3/PB5
+// stay reserved for the planned fan relays. PB14 stays claimed as SPI2 MISO —
+// unused but the SPI class owns it, so it can't double as DC.
 #define TFT_CS   PB12
-#define TFT_DC   PB10
-#define TFT_RST  PB11
+#define TFT_DC   PA15
+#define TFT_RST  PB4
 
 #define COL_BLACK      0x0000
 #define COL_WHITE      0xFFFF

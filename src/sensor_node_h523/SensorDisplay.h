@@ -5,14 +5,15 @@
 #include <Adafruit_ST7789.h>
 #include "can_ids.h"
 
-// H523 pins: CS=PB12, DC=PB10, DIN=PB15, CLK=PB13 — unchanged from the F103
-// build (SPI2 maps SCK/MISO/MOSI to the same PB13/PB14/PB15 pins here too).
-// RST moves to PB2 — this variant's generic Arduino core doesn't expose PB11
-// as a usable pin name at all (PB9 is similarly absent; both are skipped in
-// variant_generic.h for this chip, unlike the F103 where PB11 was free GPIO).
+// H523 pins: RST=PB4, CS=PB12, DC=PA15, DIN=PB15, CLK=PB13 — identical to the
+// F103 build. DC/RST moved off PB10/PB2 so all six display lines sit on the
+// same board edge as the SPI2 block (WeAct header splits PB2/PB10 onto the
+// opposite side). PA15/PB4 are otherwise JTAG-only; pinMode() releases them,
+// SWD (PA13/PA14) unaffected. PB3/PB5 stay reserved for the planned fan
+// relays. PB14 stays claimed as SPI2 MISO — unused but the SPI class owns it.
 #define TFT_CS   PB12
-#define TFT_DC   PB10
-#define TFT_RST  PB2
+#define TFT_DC   PA15
+#define TFT_RST  PB4
 
 #define COL_BLACK      0x0000
 #define COL_WHITE      0xFFFF
