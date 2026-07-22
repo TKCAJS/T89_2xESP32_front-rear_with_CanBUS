@@ -81,11 +81,11 @@ assume otherwise since so much else *is* enabled by default on this chip.
 
 | Function | F103C8T6 | H523CET6 | Notes |
 |----------|----------|----------|-------|
-| CAN TX / RX | PB9 / PB8 | **PA12** / **PA11** | FDCAN1 has no PB9 TX option on this chip — PB9 isn't even a usable Arduino pin name on this variant at all. Originally landed on PB7/PB8 (the other valid FDCAN1 pin pair); moved to PA12/PA11 to free PB7/PB8 for the fan relays (see FanControl.h). |
+| CAN TX / RX | PB9 / PB8 | **PB7** / PB8 | FDCAN1 has no PB9 TX option on this chip — PB9 isn't even a usable Arduino pin name on this variant at all. RX unchanged. (Briefly moved to PA12/PA11 to free PB7/PB8 for the fan relays; moved back and the fans went to PA11/PA12 instead — see FanControl.h.) |
 | Display SCK / MOSI | PB13 / PB15 | PB13 / PB15 | unchanged (SPI2) |
 | Display CS / DC | PB12 / PB10 | PB12 / **PA15** | PB11 isn't a usable Arduino pin name on this variant (skipped in `variant_generic.h`, same as PB9 above); DC moved to PA15 so all six display lines sit on the same header edge as the SPI2 block. |
 | Display RST | PB11 | **PB3** | Moved to the nearest free GPIO on that same header edge, next to DC. |
-| Fan relays (FAN1 / FAN2) | n/a | **PB7 / PB8** | New on H523 — no F103 equivalent. Freed up by moving CAN TX/RX off PB7/PB8 to PA12/PA11 above. |
+| Fan relays (FAN1 / FAN2) | PB3 / PB5 | **PA11 / PA12** | No USB on this node (unlike the H723 transmitter, where these are USB-C), so they're free here. Kept off PB3/PB5 (the F103's fan pins) since PB3 is this board's TFT_RST. |
 | Oil pressure | PA0 | **PA1** | ADC — shifted off PA0 (see button note above) |
 | TPS | PA1 | **PA2** | ADC |
 | Fuel 1 / Fuel 2 | PA2 / PA3 | **PA3 / PA4** | ADC |

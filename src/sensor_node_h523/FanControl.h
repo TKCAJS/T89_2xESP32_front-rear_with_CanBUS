@@ -3,8 +3,9 @@
  * Two staged aux-fan relay outputs driving a mini relay board.
  * ACTIVE HIGH (bench-verified 2026-07-19: this board energizes on a high
  * input): pin LOW = relay off; floating (boot/reset) = off. Wiring:
- * IN1=PB7 (FAN1), IN2=PB8 (FAN2), board VCC=3.3V, no pull resistors.
- * PB7/PB8 were freed up by moving FDCAN1 to PA12/PA11 (see SensorCan.h).
+ * IN1=PA11 (FAN1), IN2=PA12 (FAN2), board VCC=3.3V, no pull resistors.
+ * FDCAN1 sits on PB7/PB8 (see SensorCan.h); no USB on this node, so PA11/
+ * PA12 are free (unlike the H723 transmitter node, where they're USB-C).
  *
  * Staging (offsets from the CAN-adjustable pump target temp):
  *   FAN1 on : temp >= target+3 C while the pump sits at its 90% cap,
@@ -21,8 +22,8 @@
 #include <Arduino.h>
 #include "PumpControl.h"
 
-#define PIN_FAN1  PB7
-#define PIN_FAN2  PB8
+#define PIN_FAN1  PA11
+#define PIN_FAN2  PA12
 
 static const float    FAN1_ON_OFS  = 3.0f;    // °C above target
 static const float    FAN1_OFF_OFS = 0.0f;

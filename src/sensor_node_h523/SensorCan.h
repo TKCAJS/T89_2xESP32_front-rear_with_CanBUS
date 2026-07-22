@@ -1,9 +1,9 @@
 /**
  * SensorCan.h — H523 port
  * FDCAN1 (classic-frame mode) init, send, receive and health monitoring for
- * the sensor node. TX: PA12  RX: PA11 — the other valid FDCAN1 pin pair on
- * this chip (PB7/PB8 was the original choice; moved here to free PB7/PB8 for
- * the fan relays, see FanControl.h).
+ * the sensor node. TX: PB7  RX: PB8 (closest match to the F103's PB9/PB8 —
+ * FDCAN1 has no PB9 TX option on this chip). Fan relays moved to PA11/PA12
+ * instead, see FanControl.h.
  *
  * Differences from the F103 bxCAN version:
  *  - FDCAN1 kernel clock is PLL1Q (50 MHz, see SystemClock_Config in
@@ -53,19 +53,19 @@ void canReceivePoll();   // forward decl — called from the RX ISR below
 
 bool canInit() {
     __HAL_RCC_FDCAN_CLK_ENABLE();
-    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
 
     GPIO_InitTypeDef gpio = {};
-    gpio.Pin       = GPIO_PIN_12;       // TX
+    gpio.Pin       = GPIO_PIN_7;        // TX
     gpio.Mode      = GPIO_MODE_AF_PP;
     gpio.Pull      = GPIO_NOPULL;
     gpio.Speed     = GPIO_SPEED_FREQ_HIGH;
     gpio.Alternate = GPIO_AF9_FDCAN1;
-    HAL_GPIO_Init(GPIOA, &gpio);
+    HAL_GPIO_Init(GPIOB, &gpio);
 
-    gpio.Pin  = GPIO_PIN_11;            // RX — pulled up so the line reads
+    gpio.Pin  = GPIO_PIN_8;             // RX — pulled up so the line reads
     gpio.Pull = GPIO_PULLUP;            // recessive if the transceiver is absent
-    HAL_GPIO_Init(GPIOA, &gpio);
+    HAL_GPIO_Init(GPIOB, &gpio);
 
     // H5's FDCAN_InitTypeDef has no message-RAM element-count/size fields —
     // unlike the H723's driver, message RAM layout is fixed on this part,
