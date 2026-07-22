@@ -11,10 +11,24 @@ Arduino_Core_STM32 variant this board maps to (`H523C(C-E)(T-U)_H533CE(T-U)`)
 is itself newly added and had two real packaging gaps this port had to work
 around — see "Upstream packaging gaps" below.
 
-Upload: **ST-Link only** (`upload_protocol = stlink`), same as the F103 build.
+Upload: **ST-Link only**, but NOT via `upload_protocol = stlink` — PlatformIO's
+bundled OpenOCD (checked up to tool-openocd 3.1200.7, the latest available)
+has no `target/stm32h5x.cfg` and no `stm32h5x` flash driver at all, so that
+protocol fails outright ("Can't find target/stm32h5x.cfg"). The env instead
+uses `upload_protocol = custom` with `pyocd flash -t stm32h523cetx` — pyocd
+uses the STM32H523CETx CMSIS-Pack (Keil.STM32H5xx_DFP) for flash algorithms
+instead of OpenOCD's target scripts, so it doesn't hit the same gap.
+
+One-time setup on a new machine: `~/.platformio/penv/bin/pip install pyocd`,
+then `~/.platformio/penv/bin/pyocd pack install stm32h523cetx` to fetch the
+CMSIS pack (pyocd will also fetch it automatically on first flash if missing,
+just slower). After that, `pio run -e sensor_node_h523 -t upload` works
+exactly like any other env.
 
 Build-verified (`pio run -e sensor_node_h523` succeeds, RAM 0.8% / Flash
-11.2%) but **not bench-tested** — see "Not yet verified on real hardware".
+11.4%) and now **bench-flashed successfully** (2026-07-22, via pyocd) — see
+"Not yet verified on real hardware" for what still needs checking beyond
+a clean flash (display/fan/CAN pin layout was chosen before the board arrived).
 
 ---
 
