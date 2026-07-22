@@ -5,15 +5,17 @@
 #include <Adafruit_ST7789.h>
 #include "can_ids.h"
 
-// H523 pins: RST=PB4, CS=PB12, DC=PA15, DIN=PB15, CLK=PB13 — identical to the
+// H523 pins: RST=PB3, CS=PB12, DC=PA15, DIN=PB15, CLK=PB13 — identical to the
 // F103 build. DC/RST moved off PB10/PB2 so all six display lines sit on the
 // same board edge as the SPI2 block (WeAct header splits PB2/PB10 onto the
-// opposite side). PA15/PB4 are otherwise JTAG-only; pinMode() releases them,
-// SWD (PA13/PA14) unaffected. PB3/PB5 stay reserved for the planned fan
-// relays. PB14 stays claimed as SPI2 MISO — unused but the SPI class owns it.
+// opposite side). PA15/PB3 are otherwise JTAG-only; pinMode() releases them,
+// SWD (PA13/PA14) unaffected. RST sits on PB3 (not PB4) so the two display
+// pins (DC, RST) land next to each other on the header instead of straddling
+// the fan relay pins. PB4/PB5 stay reserved for the planned fan relays.
+// PB14 stays claimed as SPI2 MISO — unused but the SPI class owns it.
 #define TFT_CS   PB12
 #define TFT_DC   PA15
-#define TFT_RST  PB4
+#define TFT_RST  PB3
 
 #define COL_BLACK      0x0000
 #define COL_WHITE      0xFFFF
