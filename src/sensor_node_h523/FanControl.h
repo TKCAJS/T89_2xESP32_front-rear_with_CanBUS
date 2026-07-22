@@ -3,7 +3,8 @@
  * Two staged aux-fan relay outputs driving a mini relay board.
  * ACTIVE HIGH (bench-verified 2026-07-19: this board energizes on a high
  * input): pin LOW = relay off; floating (boot/reset) = off. Wiring:
- * IN1=PB4 (FAN1), IN2=PB5 (FAN2), board VCC=3.3V, no pull resistors.
+ * IN1=PB7 (FAN1), IN2=PB8 (FAN2), board VCC=3.3V, no pull resistors.
+ * PB7/PB8 were freed up by moving FDCAN1 to PA12/PA11 (see SensorCan.h).
  *
  * Staging (offsets from the CAN-adjustable pump target temp):
  *   FAN1 on : temp >= target+3 C while the pump sits at its 90% cap,
@@ -15,16 +16,13 @@
  *
  * CAUTION: same NTC blind spot as PumpControl.h — an unplugged sensor
  * reads 20 C and keeps the fans OFF.
- * PB4 is JTAG-NJTRST at reset; pinMode() releases it (SWD unaffected).
- * PB5 is not 5V-tolerant on the F103 — fine as a 3.3V output; only
- * relevant if the relay board were ever rewired open-drain at 5V.
  */
 #pragma once
 #include <Arduino.h>
 #include "PumpControl.h"
 
-#define PIN_FAN1  PB4
-#define PIN_FAN2  PB5
+#define PIN_FAN1  PB7
+#define PIN_FAN2  PB8
 
 static const float    FAN1_ON_OFS  = 3.0f;    // °C above target
 static const float    FAN1_OFF_OFS = 0.0f;
