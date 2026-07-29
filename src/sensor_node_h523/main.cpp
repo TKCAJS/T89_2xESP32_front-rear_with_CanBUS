@@ -262,7 +262,12 @@ void loop() {
     }
 
     // ── Dallas radiator temperature (non-blocking, 1 Hz — display + CAN only) ─
+    // A missing or failing DS18B20 is not fatal — it's a calibration sanity
+    // check against the NTCs, not part of the cooling control loop — so it
+    // only raises the status flag and transmits DALLAS_INVALID_C.
     dallasUpdate(now);
+    if (dallasValid()) g_nodeStatus &= ~NODE_STATUS_SENSOR_ERR;
+    else               g_nodeStatus |=  NODE_STATUS_SENSOR_ERR;
 
     // ── CAN receive is interrupt-driven (FDCAN1_IT0 → canReceivePoll).
     //    The FDCAN RX FIFO0 is configured for 32 elements (see SensorCan.h),

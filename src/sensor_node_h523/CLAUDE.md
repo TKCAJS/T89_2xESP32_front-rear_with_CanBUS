@@ -70,7 +70,14 @@ assume otherwise since so much else *is* enabled by default on this chip.
    generic variant (same H5xx RCC/PWR IP) — not hand-derived. FDCAN prescaler
    is set for 500 kbit/s off that 50 MHz, but confirm the actual bit rate on
    the bus before connecting other nodes.
-2. **PA0 onboard button.** The WeAct board ties PA0 to a populated user
+2. **The DS18B20 driver in `DallasTemp.h`.** Written to fix a boot hang that
+   only appeared with the sensor physically attached (see "DS18B20 driver"
+   below); build-verified only. If the radiator temp still reads
+   −127 °C / `NODE_STATUS_SENSOR_ERR` stays set, the remaining unknowns are
+   the bit-slot constants and the cable — put a scope on PB0 and check that a
+   read slot samples ~10 µs after the falling edge and that the line reaches
+   3.3 V within it.
+3. **PA0 onboard button.** The WeAct board ties PA0 to a populated user
    button (active-low, pulled up) — confirmed via two independent sources
    (Zephyr's board devicetree and its board docs), not measured directly on
    a unit. If your specific board revision doesn't have this button
@@ -118,6 +125,42 @@ assume otherwise since so much else *is* enabled by default on this chip.
   bxCAN `CAN1->ESR` register read — same escalation, different API.
 - FDCAN1 has its own interrupt vector (`FDCAN1_IT0_IRQn`), not a shared
   USB/CAN vector like the F103's `USB_LP_CAN1_RX0`.
+
+## DS18B20 driver (DallasTemp.h) — no OneWire/DallasTemperature
+
+This env does **not** depend on `paulstoffregen/OneWire` or
+`milesburton/DallasTemperature` (the F103 env still does). `DallasTemp.h` is a
+self-contained bit-banger. Two reasons, both specific to running those
+libraries on this core:
+
+1. **OneWire's STM32 backend misses the read window.** Its
+   `DIRECT_MODE_INPUT` / `DIRECT_MODE_OUTPUT` macros
+   (`util/OneWire_direct_gpio.h`, the `ARDUINO_ARCH_STM32` branch) are
+   `pin_function()` → `HAL_GPIO_Init()`, and `read_bit()` calls two of them
+   *inside* the read slot. The DS18B20 holds read data valid for only 15 µs
+   after the falling edge; the two HAL calls on top of the library's 3+10 µs
+   waits put the sample at ~17 µs, so zeros come back as ones — but only once a
+   device is actually attached, which is why the node behaved with the sensor
+   unplugged. Here the pin is a permanently open-drain output and every edge is
+   a single-cycle BSRR write, so the sample lands at 10 µs with ~5 µs of margin.
+2. **`DallasTemperature` runs a full 64-bit ROM search on every read.**
+   `getTempCByIndex()` → `getAddress()` searches the bus each call (~13 ms with
+   interrupts masked in ~200 µs chunks), and `begin()` walks the same search —
+   which on a bus with corrupted bits wanders a bogus ROM tree. There is
+   exactly one device on this bus, so every transaction here uses SKIP ROM and
+   no search exists anywhere.
+
+Scratchpad reads are CRC-8 checked and every wait is bounded, so a missing,
+shorted or noisy sensor costs ~1 ms once a second and cannot stall the loop. A
+failed read publishes `DALLAS_INVALID_C` (−127 °C) on `CAN_SENS_RADIATOR_TEMP`
+and raises `NODE_STATUS_SENSOR_ERR` in the status byte — the Dallas is a
+calibration sanity check against the NTCs, not part of the cooling control
+loop, so it is never allowed to be fatal.
+
+Timing note: `delayMicroseconds()` on this core takes the DWT cycle-counter
+path (`wiring_time.h`), which is exact — no `-1 µs` fudge like the SysTick
+fallback — and `SystemCoreClock` is updated to 250 MHz by `HAL_RCC_ClockConfig`
+inside `SystemClock_Config`. The slot constants assume both.
 
 ## System clock (main.cpp)
 
