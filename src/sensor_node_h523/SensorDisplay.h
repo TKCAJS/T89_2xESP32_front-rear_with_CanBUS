@@ -53,7 +53,11 @@ static float     s_d_eng    = -99.0f;
 static float     s_d_radout = -99.0f;
 static uint8_t   s_d_pump   = 0xFF;
 static uint16_t  s_d_rpm    = 0xFFFF;
-static uint8_t   s_d_gear   = GEAR_UNKNOWN;
+static uint8_t   s_d_gear   = 0xFD;   // not GEAR_UNKNOWN (0xFF) — the boot gear
+                                      // *is* GEAR_UNKNOWN, so seeding it with
+                                      // that value made the changed-check skip
+                                      // the first draw and left the row blank
+
 static CanHealth s_d_can    = (CanHealth)0xFF;
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
