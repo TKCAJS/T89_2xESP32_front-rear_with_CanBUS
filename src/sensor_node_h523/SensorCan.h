@@ -93,7 +93,7 @@ bool canInit() {
     s_hfdcan.Init.TxFifoQueueMode   = FDCAN_TX_FIFO_OPERATION;
 
     if (HAL_FDCAN_Init(&s_hfdcan) != HAL_OK) {
-        Serial.println("[CAN] Init failed");
+        DebugSerial.println("[CAN] Init failed");
         return false;
     }
 
@@ -108,19 +108,19 @@ bool canInit() {
     filter.FilterID1    = 0x00000000;
     filter.FilterID2    = 0x00000000;   // mask = 0 -> match any ID
     if (HAL_FDCAN_ConfigFilter(&s_hfdcan, &filter) != HAL_OK) {
-        Serial.println("[CAN] Filter failed");
+        DebugSerial.println("[CAN] Filter failed");
         return false;
     }
     // Reject anything that isn't extended data (no standard IDs or remote
     // frames used anywhere in this system).
     if (HAL_FDCAN_ConfigGlobalFilter(&s_hfdcan, FDCAN_REJECT, FDCAN_ACCEPT_IN_RX_FIFO0,
                                      FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE) != HAL_OK) {
-        Serial.println("[CAN] Global filter failed");
+        DebugSerial.println("[CAN] Global filter failed");
         return false;
     }
 
     if (HAL_FDCAN_Start(&s_hfdcan) != HAL_OK) {
-        Serial.println("[CAN] Start failed");
+        DebugSerial.println("[CAN] Start failed");
         return false;
     }
 
@@ -129,13 +129,13 @@ bool canInit() {
     // RPM that window can overrun a shallow FIFO; the ISR drains every frame
     // the instant it arrives.
     if (HAL_FDCAN_ActivateNotification(&s_hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
-        Serial.println("[CAN] RX notify failed");
+        DebugSerial.println("[CAN] RX notify failed");
         return false;
     }
     HAL_NVIC_SetPriority(FDCAN1_IT0_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(FDCAN1_IT0_IRQn);
 
-    Serial.println("[CAN] FDCAN1 500 Kbps OK");
+    DebugSerial.println("[CAN] FDCAN1 500 Kbps OK");
     return true;
 }
 
@@ -189,8 +189,9 @@ void canReceivePoll() {
         if (HAL_FDCAN_GetRxMessage(&s_hfdcan, FDCAN_RX_FIFO0, &hdr, data) != HAL_OK) break;
         if (hdr.IdType != FDCAN_EXTENDED_ID) continue;
 
-        // Any received message proves the bus is live
-        if (!g_canReady && g_canHealth == CAN_HEALTH_NO_BUS) {
+        // Any received message proves the bus is live, regardless of
+        // whatever health state canHealthPoll() last landed on.
+        if (!g_canReady) {
             g_canReady  = true;
             g_canHealth = CAN_HEALTH_OK;
         }
@@ -221,7 +222,23 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 }
 
 void canHealthPoll() {
-    static uint8_t s_cleanPolls = 0;
+    static uint8_t  s_cleanPolls    = 0;
+    // Bus-off recovery is spread across calls instead of HAL_Delay(100) here
+    // — this poll runs from the main loop (CAN_HEALTH_MS cadence), and a
+    // blocking delay there stalls sensor reads, display refresh and CAN TX
+    // for the same 100 ms, repeatedly, for as long as the bus stays off.
+    static bool     s_recovering    = false;
+    static uint32_t s_recoverStopMs = 0;
+
+    if (s_recovering) {
+        if (HAL_GetTick() - s_recoverStopMs >= 100) {
+            HAL_FDCAN_Start(&s_hfdcan);
+            s_recovering = false;
+            DebugSerial.println("[CAN] Bus-off recovery: restarted");
+        }
+        return;
+    }
+
     FDCAN_ProtocolStatusTypeDef psr;
     if (HAL_FDCAN_GetProtocolStatus(&s_hfdcan, &psr) != HAL_OK) return;
 
@@ -230,12 +247,35 @@ void canHealthPoll() {
         g_canHealth   = CAN_HEALTH_BUS_OFF;
         g_canReady    = false;
         g_nodeStatus |= NODE_STATUS_CAN_ERR;
+
+        // TEMP DIAGNOSTIC: last protocol error + error counters, to identify
+        // an ACK/bit/form/CRC/stuff error without a scope. Remove once the
+        // bus-off cause on this node is confirmed.
+        const char* lec;
+        switch (psr.LastErrorCode) {
+            case FDCAN_PROTOCOL_ERROR_NONE:      lec = "NONE";      break;
+            case FDCAN_PROTOCOL_ERROR_STUFF:     lec = "STUFF";     break;
+            case FDCAN_PROTOCOL_ERROR_FORM:      lec = "FORM";      break;
+            case FDCAN_PROTOCOL_ERROR_ACK:       lec = "ACK";       break;
+            case FDCAN_PROTOCOL_ERROR_BIT1:      lec = "BIT1";      break;
+            case FDCAN_PROTOCOL_ERROR_BIT0:      lec = "BIT0";      break;
+            case FDCAN_PROTOCOL_ERROR_CRC:       lec = "CRC";       break;
+            default:                             lec = "NO_CHANGE"; break;
+        }
+        FDCAN_ErrorCountersTypeDef ec;
+        HAL_FDCAN_GetErrorCounters(&s_hfdcan, &ec);
+        DebugSerial.print("[CAN] Bus-off: LEC=");
+        DebugSerial.print(lec);
+        DebugSerial.print(" TEC=");
+        DebugSerial.print(ec.TxErrorCnt);
+        DebugSerial.print(" REC=");
+        DebugSerial.println(ec.RxErrorCnt);
+
         // Entering and leaving init mode kicks off the bus-off recovery
-        // sequence, mirroring the F103 stop/start.
+        // sequence, mirroring the F103 stop/start — just non-blocking here.
         HAL_FDCAN_Stop(&s_hfdcan);
-        HAL_Delay(100);
-        HAL_FDCAN_Start(&s_hfdcan);
-        Serial.println("[CAN] Bus-off recovery");
+        s_recoverStopMs = HAL_GetTick();
+        s_recovering    = true;
         return;
     }
 
@@ -269,7 +309,11 @@ void canHealthPoll() {
 // =============================================================================
 
 void sendOilPressure(float kPa) {
-    int16_t v = (int16_t)(kPa * 10.0f);
+    // Clamped defensively: the oil pressure sensor isn't wired/calibrated yet
+    // (main.cpp still passes raw ADC counts here), and raw counts×10 can
+    // exceed int16_t range and wrap silently without this clamp. Once a real
+    // ADC-to-kPa calibration exists, this just becomes a no-op headroom guard.
+    int16_t v = (int16_t)constrain(kPa * 10.0f, -32768.0f, 32767.0f);
     uint8_t p[6] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
     canSend(CAN_SENS_OIL_PRESSURE, s_seqOilPressure++, p, 6);
 }
@@ -293,19 +337,19 @@ void sendRadiatorTemp(float degC) {
 }
 
 void sendTPS(float pct) {
-    uint16_t v = (uint16_t)(pct * 100.0f);
+    uint16_t v = (uint16_t)constrain(pct * 100.0f, 0.0f, 65535.0f);
     uint8_t p[6] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
     canSend(CAN_SENS_TPS, s_seqTPS++, p, 6);
 }
 
 void sendFuel1(float pct) {
-    uint16_t v = (uint16_t)(pct * 100.0f);
+    uint16_t v = (uint16_t)constrain(pct * 100.0f, 0.0f, 65535.0f);
     uint8_t p[6] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
     canSend(CAN_SENS_FUEL_1, s_seqFuel1++, p, 6);
 }
 
 void sendFuel2(float pct) {
-    uint16_t v = (uint16_t)(pct * 100.0f);
+    uint16_t v = (uint16_t)constrain(pct * 100.0f, 0.0f, 65535.0f);
     uint8_t p[6] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
     canSend(CAN_SENS_FUEL_2, s_seqFuel2++, p, 6);
 }

@@ -33,7 +33,11 @@ enum CanHealth {
     CAN_HEALTH_FAULT
 };
 
-static SPIClass        s_spi2(PB15, PB14, PB13);   // MOSI=DIN, MISO(NC), SCK=CLK
+// Plain PB15 resolves to SPI1 (AF6) in this variant's pin map, not SPI2 —
+// PB15_ALT1 selects SPI2's AF5 instead (PB13/PB14 plain already resolve to
+// SPI2, no ALT needed there). Without this, pinmap_merge_peripheral() can't
+// reconcile MOSI on SPI1 with SCK/MISO on SPI2 and the SPI init hangs.
+static SPIClass        s_spi2(PB15_ALT1, PB14, PB13);   // MOSI=DIN, MISO(NC), SCK=CLK
 static Adafruit_ST7789 s_tft(&s_spi2, TFT_CS, TFT_DC, TFT_RST);
 
 // 2.4" ST7789, 240x320 portrait. Header + 9 data rows × 32px = 320px.
@@ -68,6 +72,7 @@ static CanHealth s_d_can    = (CanHealth)0xFF;
 // enough to matter on screen.
 static const float EPS_RAW = 8.0f;    // raw 12-bit ADC counts (~0.2% FS)
 static const float EPS_C   = 0.1f;    // °C — matches the displayed 0.1 resolution
+static const float EPS_PCT = 0.1f;    // % — TPS/fuel, matches the displayed 0.1 resolution
 
 static bool _dirty(float val, float& cached, float eps) {
     if (fabsf(val - cached) < eps) return false;
@@ -170,10 +175,12 @@ void displayUpdate(float oilPressure, float tps, float fuel1, float fuel2,
                    float engineTempC, float radOutTempC, uint8_t pumpDuty,
                    uint16_t rpm, uint8_t gear, CanHealth canHealth) {
     if (canHealth != s_d_can) { s_d_can = canHealth; _dispCan(canHealth); }
+    // oilPressure is still raw ADC counts (sensor not wired/calibrated yet);
+    // tps/fuel1/fuel2 are percent (adcToPercent() in main.cpp), hence EPS_PCT.
     if (_dirty(oilPressure, s_d_oil,    EPS_RAW)) _dispRow(0, oilPressure);
-    if (_dirty(tps,         s_d_tps,    EPS_RAW)) _dispRow(1, tps);
-    if (_dirty(fuel1,       s_d_fuel1,  EPS_RAW)) _dispRow(2, fuel1);
-    if (_dirty(fuel2,       s_d_fuel2,  EPS_RAW)) _dispRow(3, fuel2);
+    if (_dirty(tps,         s_d_tps,    EPS_PCT)) _dispRow(1, tps, "%");
+    if (_dirty(fuel1,       s_d_fuel1,  EPS_PCT)) _dispRow(2, fuel1, "%");
+    if (_dirty(fuel2,       s_d_fuel2,  EPS_PCT)) _dispRow(3, fuel2, "%");
     if (_dirty(engineTempC, s_d_eng,    EPS_C))   _dispRow(4, engineTempC, "C");
     if (_dirty(radOutTempC, s_d_radout, EPS_C))   _dispRow(5, radOutTempC, "C");
     if (rpm != s_d_rpm) { s_d_rpm = rpm; _dispRowU16(7, rpm); }

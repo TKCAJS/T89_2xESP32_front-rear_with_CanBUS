@@ -6,6 +6,15 @@
 #include <Arduino.h>
 #include "can_ids.h"
 #include "SensorDisplay.h"
+
+// This variant's default Serial is UART4 on PA0/PA1 (see
+// variant_generic.h SERIAL_UART_INSTANCE) — both already claimed here
+// (PA0 = onboard user button, PA1 = PIN_OIL_PRESSURE). Debug output is
+// rebound to USART1 on PA9/PA10 instead, which are otherwise unused.
+// Plain PA9/PA10 pin names resolve to LPUART1 in this variant's pin map;
+// USART1 needs the _ALT1 pin variants (see PeripheralPins.c).
+HardwareSerial DebugSerial(PA10_ALT1, PA9_ALT1);   // RX, TX
+
 #include "SensorCan.h"
 #include "DallasTemp.h"
 #include "PumpControl.h"
@@ -78,6 +87,36 @@ void SystemClock_Config(void) {
                                 // PWM ripple coupled onto the NTC averages out
                                 // (NTC counts drive the pump duty directly)
 #define NTC_SAMPLE_GAP_US (1000000 / PUMP_PWM_FREQ_HZ / NTC_AVG_SAMPLES)
+#define ADC_COUNTS_MAX     4095   // analogReadResolution(12) — set in setup()
+
+// can_ids.h documents TPS/Fuel1/Fuel2 as 0-100% (0.01% CAN resolution) — both
+// are potentiometer-style senders, so percent of full ADC span is the
+// standard assumption absent a per-sensor 2-point (end-stop) calibration.
+// Without this conversion the raw 0-4095 counts were passed straight into
+// SensorCan.h's send*() helpers, which multiply by 100 assuming an input
+// already in percent — silently overflowing uint16_t above ~655 counts.
+static inline float adcToPercent(uint16_t counts) {
+    return (float)counts / ADC_COUNTS_MAX * 100.0f;
+}
+
+// ── Floating-input bias for unwired senders ──────────────────────────────────
+// PA1 (oil pressure), PA2 (TPS), PA3 (fuel1), PA4 (fuel2) have no sender
+// connected yet, so they'd otherwise float and read noise. This variant's
+// PinMap_ADC (PeripheralPins.c) hardcodes GPIO_NOPULL for these pins, and
+// analogRead() reprograms the pin to that mapping on every single call —
+// so a pull configured once at boot (see gpio_blanket_init()) only survives
+// the very first read. Reasserting pull-down right after each conversion
+// holds the node near 0 V for the ~200 ms until the next read; the ADC's
+// few-microsecond sample-and-hold happens too fast for the pin's tiny stray
+// capacitance to drift away from that before NOPULL is restored for the
+// next sample.
+static inline void reassertAdcPulldown(GPIO_TypeDef *port, uint32_t pinMask) {
+    GPIO_InitTypeDef cfg = {};
+    cfg.Pin  = pinMask;
+    cfg.Mode = GPIO_MODE_ANALOG;
+    cfg.Pull = GPIO_PULLDOWN;
+    HAL_GPIO_Init(port, &cfg);
+}
 
 // ── Pump PWM speed command ────────────────────────────────────────────────────
 // PB1 PWM -> 6N137 opto -> 2N2222 -> smart pump controller's PWM input.
@@ -157,6 +196,13 @@ static void gpio_blanket_init() {
 
     cfg.Pin = GPIO_PIN_ALL;
     HAL_GPIO_Init(GPIOB, &cfg);
+
+    // PA1-PA4 (oil pressure, TPS, fuel1, fuel2) have no sender wired yet —
+    // pull down so the very first read (before loop() reasserts it, see
+    // reassertAdcPulldown()) is a stable ~0 rather than floating noise too.
+    cfg.Pin  = GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4;
+    cfg.Pull = GPIO_PULLDOWN;
+    HAL_GPIO_Init(GPIOA, &cfg);
 }
 
 void setup() {
@@ -179,9 +225,9 @@ void setup() {
 
     fanInit();   // relays off + one wiring-check click each
 
-    Serial.begin(115200);   // USART1 PA9/PA10 — no USB CDC on this build
+    DebugSerial.begin(115200);   // USART1 PA9/PA10 — no USB CDC on this build
     delay(500);
-    Serial.println("[SENSOR NODE] v" + String(SOFTWARE_VERSION) + " Booting...");
+    DebugSerial.println("[SENSOR NODE] v" + String(SOFTWARE_VERSION) + " Booting...");
 
     displayBegin();
     displayUpdate(0, 0, 0, 0, 0, 0, 0, g_rpm, g_gear, CAN_HEALTH_FAULT);
@@ -190,7 +236,7 @@ void setup() {
     if (!g_canReady) {
         g_canHealth   = CAN_HEALTH_FAULT;
         g_nodeStatus |= NODE_STATUS_CAN_ERR;
-        Serial.println("[SENSOR NODE] WARNING: CAN init failed");
+        DebugSerial.println("[SENSOR NODE] WARNING: CAN init failed");
     }
 
     dallasBegin();
@@ -200,7 +246,7 @@ void setup() {
     s_ledTimer.attachInterrupt(ledHeartbeatToggle);
     s_ledTimer.resume();
 
-    Serial.println("[SENSOR NODE] Ready");
+    DebugSerial.println("[SENSOR NODE] Ready");
 }
 
 void loop() {
@@ -223,10 +269,18 @@ void loop() {
     if (now - g_lastSensorRead >= SENSOR_READ_MS) {
         g_lastSensorRead = now;
 
+        // TODO: oil pressure sensor isn't wired/calibrated yet — this is
+        // still raw ADC counts, not kPa. sendOilPressure() clamps so it
+        // can't corrupt the CAN frame in the meantime, but the value itself
+        // isn't meaningful until a real ADC-to-kPa curve replaces this.
         g_oilPressure = analogRead(PIN_OIL_PRESSURE);
-        g_tps         = analogRead(PIN_TPS);
-        g_fuel1       = analogRead(PIN_FUEL_1);
-        g_fuel2       = analogRead(PIN_FUEL_2);
+        reassertAdcPulldown(GPIOA, GPIO_PIN_1);
+        g_tps         = adcToPercent(analogRead(PIN_TPS));
+        reassertAdcPulldown(GPIOA, GPIO_PIN_2);
+        g_fuel1       = adcToPercent(analogRead(PIN_FUEL_1));
+        reassertAdcPulldown(GPIOA, GPIO_PIN_3);
+        g_fuel2       = adcToPercent(analogRead(PIN_FUEL_2));
+        reassertAdcPulldown(GPIOA, GPIO_PIN_4);
         // ~10 ms blocking burst — same order as a display repaint, and CAN RX
         // is interrupt-driven, so nothing time-critical waits on this. Both
         // NTCs are sampled in the same pass so each still averages across one
