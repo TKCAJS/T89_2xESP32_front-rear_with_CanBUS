@@ -43,8 +43,10 @@
 
 static uint32_t s_lastDallasReq = 0;
 static float    s_dallasTemp    = DALLAS_INVALID_C;
+static float    s_lastGoodTemp  = DALLAS_INVALID_C;   // cache for transient CRC/read errors
 static bool     s_dallasValid   = false;
 static bool     s_dallasPending = false;   // a conversion is in flight
+static uint8_t  s_readFailCount = 0;       // consecutive read failures
 
 // ── Bus primitives ────────────────────────────────────────────────────────────
 // The pin stays an open-drain output for the whole session: pulling low and
@@ -85,7 +87,7 @@ static bool owReset() {
     // guaranteed low only in the 60..75 us window: sample at 70, interrupts off.
     noInterrupts();
     OW_RELEASE();
-    delayMicroseconds(70);
+    delayMicroseconds(75);   // device pulls low at 15-60 us; 75 us adds timing margin
     bool present = !OW_READ();
     interrupts();
     delayMicroseconds(410);            // finish the reset slot
@@ -163,6 +165,12 @@ static bool owStartConversion() {
     return true;
 }
 
+// Sanity check for radiator temperature. Reject obviously corrupted reads
+// (physical bounds for automotive coolant: -40 to +130°C).
+static bool isTempValid(float t) {
+    return t >= -40.0f && t <= 130.0f;
+}
+
 // Read the 9-byte scratchpad and convert (~7 ms of bus time).
 static bool owReadTemp(float* out) {
     if (!owReset()) return false;
@@ -177,7 +185,9 @@ static bool owReadTemp(float* out) {
     // config byte (s[4] bits 6:5 = 9/10/11/12-bit). LSB is 1/16 C regardless.
     static const uint8_t RES_MASK[4] = { 0xF8, 0xFC, 0xFE, 0xFF };
     uint16_t raw = ((uint16_t)s[1] << 8) | (s[0] & RES_MASK[(s[4] >> 5) & 0x03]);
-    *out = (int16_t)raw * 0.0625f;
+    float temp = (int16_t)raw * 0.0625f;
+    if (!isTempValid(temp)) return false;   // CRC passed but value is physically impossible
+    *out = temp;
     return true;
 }
 
@@ -186,7 +196,9 @@ static bool owReadTemp(float* out) {
 void dallasBegin() {
     owInit();
     s_dallasTemp    = DALLAS_INVALID_C;
+    s_lastGoodTemp  = DALLAS_INVALID_C;
     s_dallasValid   = false;
+    s_readFailCount = 0;
     s_dallasPending = owStartConversion();
     s_lastDallasReq = millis();
 }
@@ -195,6 +207,8 @@ void dallasBegin() {
 // time when a sensor is present, ~1 ms when it isn't. A sensor plugged in after
 // boot needs no extra logic: the first tick after it appears starts a
 // conversion, the tick after that reads it, so it self-heals within 2 s.
+// On transient CRC/read errors, holds the last valid temperature instead of
+// immediately reporting "no sensor". Marks invalid only after ~5+ consecutive failures.
 // Returns true when a fresh, CRC-valid reading was taken this call.
 bool dallasUpdate(uint32_t now) {
     if (now - s_lastDallasReq < DALLAS_PERIOD_MS) return false;
@@ -202,7 +216,17 @@ bool dallasUpdate(uint32_t now) {
 
     float t;
     s_dallasValid = s_dallasPending && owReadTemp(&t);
-    s_dallasTemp  = s_dallasValid ? t : DALLAS_INVALID_C;
+    if (s_dallasValid) {
+        s_dallasTemp  = t;
+        s_lastGoodTemp = t;
+        s_readFailCount = 0;
+    } else {
+        if (++s_readFailCount >= 5) {
+            s_dallasTemp = DALLAS_INVALID_C;   // sensor lost after sustained failure
+        } else {
+            s_dallasTemp = s_lastGoodTemp;     // hold last good value through transients
+        }
+    }
 
     s_dallasPending = owStartConversion();
     return s_dallasValid;

@@ -99,6 +99,17 @@ static inline float adcToPercent(uint16_t counts) {
     return (float)counts / ADC_COUNTS_MAX * 100.0f;
 }
 
+// Fuel1 calibration: 0.4Ω @ empty, 191.4Ω @ full
+static inline float fuel1AdcToPercent(uint16_t counts) {
+    static const uint16_t FUEL1_EMPTY = 410;     // empty (0.4Ω)
+    static const uint16_t FUEL1_FULL  = 1179;    // full (191.4Ω)
+
+    if (counts <= FUEL1_EMPTY) return 0.0f;
+    if (counts >= FUEL1_FULL) return 100.0f;
+
+    return (float)(counts - FUEL1_EMPTY) / (FUEL1_FULL - FUEL1_EMPTY) * 100.0f;
+}
+
 // ── Floating-input bias for unwired senders ──────────────────────────────────
 // PA1 (oil pressure), PA2 (TPS), PA3 (fuel1), PA4 (fuel2) have no sender
 // connected yet, so they'd otherwise float and read noise. This variant's
@@ -277,7 +288,7 @@ void loop() {
         reassertAdcPulldown(GPIOA, GPIO_PIN_1);
         g_tps         = adcToPercent(analogRead(PIN_TPS));
         reassertAdcPulldown(GPIOA, GPIO_PIN_2);
-        g_fuel1       = adcToPercent(analogRead(PIN_FUEL_1));
+        g_fuel1       = fuel1AdcToPercent(analogRead(PIN_FUEL_1));
         reassertAdcPulldown(GPIOA, GPIO_PIN_3);
         g_fuel2       = adcToPercent(analogRead(PIN_FUEL_2));
         reassertAdcPulldown(GPIOA, GPIO_PIN_4);
