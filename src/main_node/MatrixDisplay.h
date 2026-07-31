@@ -3,12 +3,51 @@
 
 #include <Arduino.h>
 #include <Adafruit_NeoMatrix.h>
-#include "MatrixStartupAnimation.h"
 
-// Matrix Configuration
+// Matrix Configuration — four 8x8 panels tiled 2x2 into one 16x16 display.
 #define MATRIX_PIN 16
-#define MATRIX_WIDTH 8
-#define MATRIX_HEIGHT 8
+#define PANEL_W  8
+#define PANEL_H  8
+#define TILES_X  2
+#define TILES_Y  2
+#define MATRIX_WIDTH  (PANEL_W * TILES_X)    // 16
+#define MATRIX_HEIGHT (PANEL_H * TILES_Y)    // 16
+
+// Panel/tile geometry, expressed in FRONT-view (LED side) coordinates.
+//
+// The panels have DI at bottom-left and DO at top-right *as seen from the back*,
+// so viewed from the front each panel's first pixel is at its BOTTOM-RIGHT.
+//
+// Chain order, back view: bottom-left -> bottom-right -> top-left -> top-right.
+// Mirrored to the front that is bottom-right first, tiles advancing right-to-left
+// in rows, rows advancing upward, each row restarting on the right = TILE_PROGRESSIVE.
+// Verified correct on hardware via the tile test pattern below.
+//
+// NEO_MATRIX_COLUMNS (the panel's internal scan) was determined empirically, not
+// from the pad positions: ROWS and COLUMNS *both* put DI and DO on diagonally
+// opposite corners, so the pads cannot distinguish them. ROWS was tried first and
+// rendered each panel transposed. Same reason PROGRESSIVE is empirical rather than
+// deduced -- on these clones the DIN pad is not necessarily wired to the LED
+// physically nearest it, so the diagonal pad layout proves nothing on its own.
+//
+// If the image comes up wrong again after a re-wire, this is the line to edit:
+// swap RIGHT<->LEFT / BOTTOM<->TOP for a flip, ROWS<->COLUMNS for a transpose,
+// at the NEO_MATRIX_* level for within-panel faults or NEO_TILE_* for tile order.
+#define MATRIX_LAYOUT_FLAGS ( \
+    NEO_MATRIX_BOTTOM + NEO_MATRIX_RIGHT + NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE + \
+    NEO_TILE_BOTTOM   + NEO_TILE_RIGHT   + NEO_TILE_ROWS      + NEO_TILE_PROGRESSIVE)
+
+// Diagnostic: set to 1 to freeze the display on a tile-identification pattern
+// instead of running normally. Each logical quadrant gets one solid colour plus
+// an asymmetric corner marker -- which physical panel shows which colour gives
+// the NEO_TILE_* flags, and the marker's shape gives each panel's internal
+// orientation. Set back to 0 once the mapping is correct.
+#define MATRIX_TILE_TEST 0
+
+// Layout: 2px-wide tachometer bar down the left edge, gear glyph fills the rest.
+#define TACH_COLS  2
+#define GEAR_X     3     // size-2 glyph is 12px wide -> spans x=3..14
+#define CORNER_SZ  2     // corner status blocks, scaled up from 1px on the old 8x8
 
 class MatrixDisplay {
 private:
@@ -20,8 +59,7 @@ private:
     unsigned long shiftNotificationStart;
     uint8_t notifR, notifG, notifB;
     unsigned long lastRainbowUpdate;
-    uint16_t rainbowOffset;
-    
+
     // Configuration
     static const unsigned long SHIFT_NOTIFICATION_DURATION = 300;
     static const unsigned long CYCLE_TIME = 1000;
@@ -33,48 +71,39 @@ private:
     bool* canGearValid;
     bool* manualModeEnabled;
 
-    volatile bool animRunning = false;
-
-    static void animationTask(void* param) {
-        MatrixDisplay* self = static_cast<MatrixDisplay*>(param);
-        runMatrixStartupAnimation(self->matrix);
-        self->animRunning = false;
-        vTaskDelete(nullptr);
-    }
+    const bool tileTest = (MATRIX_TILE_TEST != 0);
 
 public:
     MatrixDisplay() : matrix(nullptr), showShiftNotification(false),
                      shiftNotificationChar(' '), shiftNotificationStart(0),
                      notifR(255), notifG(255), notifB(255),
-                     lastRainbowUpdate(0), rainbowOffset(0),
+                     lastRainbowUpdate(0),
                      wifiEnabled(nullptr), canGearValid(nullptr),
-                     manualModeEnabled(nullptr), animRunning(false) {}
+                     manualModeEnabled(nullptr) {}
 
-    void begin(bool* wifiEnabledPtr, bool* canGearValidPtr, bool* manualModePtr = nullptr, bool startupAnim = true) {
+    void begin(bool* wifiEnabledPtr, bool* canGearValidPtr, bool* manualModePtr = nullptr) {
         wifiEnabled = wifiEnabledPtr;
         canGearValid = canGearValidPtr;
         manualModeEnabled = manualModePtr;
 
-        matrix = new Adafruit_NeoMatrix(MATRIX_WIDTH, MATRIX_HEIGHT, MATRIX_PIN,
-            NEO_MATRIX_TOP + NEO_MATRIX_LEFT + NEO_MATRIX_ROWS + NEO_MATRIX_PROGRESSIVE,
-            NEO_GRB + NEO_KHZ800);
+        matrix = new Adafruit_NeoMatrix(PANEL_W, PANEL_H, TILES_X, TILES_Y, MATRIX_PIN,
+            MATRIX_LAYOUT_FLAGS, NEO_GRB + NEO_KHZ800);
 
         matrix->begin();
         matrix->setBrightness(50);
         matrix->setTextWrap(false);
         matrix->setTextColor(matrix->Color(255, 255, 255));
-        matrix->setTextSize(1);
+        matrix->setTextSize(2);   // 12x16 glyph cell on the 16x16 display
         matrix->fillScreen(0);
         matrix->show();
 
-        if (startupAnim) {
-            animRunning = true;
-            xTaskCreate(animationTask, "MatrixAnim", 4096, this, 1, nullptr);
+        if (tileTest) {
+            drawTileTestPattern();   // freezes the display; no live updates
         }
     }
     
     void update(const String& currentGearName) {
-        if (animRunning) return;
+        if (tileTest) return;
         unsigned long currentMillis = millis();
 
         // Check if we should stop displaying the shift notification
@@ -86,20 +115,23 @@ public:
         if (currentMillis - lastRainbowUpdate >= 50) {
             lastRainbowUpdate = currentMillis;
             
+            matrix->fillScreen(0); // Clear screen (black)
+            matrix->setTextSize(2);
+
+            // Size-2 glyph is 12x16; centre it across the full 16px width.
+            const int16_t cx = (MATRIX_WIDTH - 12) / 2;
+
             if (showShiftNotification) {
-                matrix->fillScreen(0);
                 matrix->setTextColor(matrix->Color(notifR, notifG, notifB));
-                matrix->setCursor(0, 0);
+                matrix->setCursor(cx, 0);
                 matrix->print(shiftNotificationChar);
-                
+
             } else {
                 // ALWAYS show current gear when not showing notification
-                matrix->fillScreen(0); // Clear screen (black)
-                
                 // Handle gear sensor disconnected state
                 if (!(*canGearValid)) {
                     matrix->setTextColor(matrix->Color(255, 0, 0)); // Red text for error
-                    matrix->setCursor(0, 0);
+                    matrix->setCursor(cx, 0);
                     matrix->print("?");
                 } else {
                     // Set color based on gear: Red for 1-6, Green for N
@@ -108,17 +140,16 @@ public:
                     } else {
                         matrix->setTextColor(matrix->Color(255, 0, 0)); // Red for gear numbers 1-6
                     }
-                    
-                    // Center the gear character on the 8x8 display
-                    matrix->setCursor(0, 0);
+
+                    matrix->setCursor(cx, 0);
                     matrix->print(currentGearName);
                 }
             }
             
-            // ADD MANUAL MODE INDICATOR - Flash bottom row amber
+            // ADD MANUAL MODE INDICATOR - flash the bottom two rows amber
             addManualModeIndicator(currentMillis);
             
-            // ADD HEARTBEAT TO TOP-RIGHT PIXEL (position 7,0)
+            // ADD HEARTBEAT - 2x2 block, top-right corner
             addHeartbeat(currentMillis);
 
             // ADD WIFI INDICATOR - flash the other three corners blue when WiFi on
@@ -129,7 +160,7 @@ public:
     }
     
     void updateWithTachometer(const String& currentGearName, float currentRpm) {
-        if (animRunning) return;
+        if (tileTest) return;
         unsigned long currentMillis = millis();
 
         // Check if we should stop displaying the shift notification
@@ -141,36 +172,25 @@ public:
         if (currentMillis - lastRainbowUpdate >= 50) {
             lastRainbowUpdate = currentMillis;
             
-            // ALWAYS update the tachometer (left column) first
+            // ALWAYS update the tachometer (left columns) first
             updateTachometer(currentRpm);
             
+            // Clear only the gear display area (not the tachometer columns)
+            matrix->fillRect(TACH_COLS, 0, MATRIX_WIDTH - TACH_COLS, MATRIX_HEIGHT, 0);
+            matrix->setTextSize(2);
+
             if (showShiftNotification) {
                 // Display the shift notification (U/D) temporarily in center area
-                // Clear only the gear display area (not the tachometer column)
-                for (int x = 1; x < 8; x++) {
-                    for (int y = 0; y < 8; y++) {
-                        matrix->drawPixel(x, y, matrix->Color(0, 0, 0));
-                    }
-                }
-                
                 matrix->setTextColor(matrix->Color(notifR, notifG, notifB));
-                matrix->setCursor(2, 0);
+                matrix->setCursor(GEAR_X, 0);
                 matrix->print(shiftNotificationChar);
-                
+
             } else {
                 // ALWAYS show current gear when not showing notification
-                // Clear only the gear display area (not the tachometer column)
-                for (int x = 1; x < 8; x++) {
-                    for (int y = 0; y < 8; y++) {
-                        matrix->drawPixel(x, y, matrix->Color(0, 0, 0));
-                    }
-                }
-                
-                // Get current gear name and display it
                 // Handle gear sensor disconnected state
                 if (!(*canGearValid)) {
                     matrix->setTextColor(matrix->Color(255, 0, 0)); // Red text for error
-                    matrix->setCursor(2, 0);  // Adjusted for non-tachometer area
+                    matrix->setCursor(GEAR_X, 0);
                     matrix->print("?");
                 } else {
                     // Set color based on gear: Red for 1-6, Green for N
@@ -179,17 +199,16 @@ public:
                     } else {
                         matrix->setTextColor(matrix->Color(255, 0, 0)); // Red for gear numbers 1-6
                     }
-                    
-                    // Center the gear character in non-tachometer area
-                    matrix->setCursor(2, 0);  // Adjusted for non-tachometer area
+
+                    matrix->setCursor(GEAR_X, 0);
                     matrix->print(currentGearName);
                 }
             }
             
-            // ADD MANUAL MODE INDICATOR - Flash bottom row amber
+            // ADD MANUAL MODE INDICATOR - flash the bottom two rows amber
             addManualModeIndicator(currentMillis);
             
-            // ADD HEARTBEAT TO TOP-RIGHT PIXEL (position 7,0)
+            // ADD HEARTBEAT - 2x2 block, top-right corner
             addHeartbeat(currentMillis);
 
             // ADD WIFI INDICATOR - flash the other three corners blue when WiFi on
@@ -213,7 +232,7 @@ public:
 private:
     void updateTachometer(float rpm) {
         int ledsToLight = 0;
-        uint32_t color = matrix->Color(0, 0, 0);
+        uint16_t color = matrix->Color(0, 0, 0);
         bool shouldFlash = false;
 
         if (rpm >= 100) {
@@ -245,79 +264,91 @@ private:
             }
         }
         
-        // Clear the left column (x=0)
-        for (int y = 0; y < 8; y++) {
-            matrix->drawPixel(0, y, matrix->Color(0, 0, 0));
-        }
-        
-        // Light up the appropriate LEDs from bottom to top
+        // The RPM bands above still resolve to 0-8; the bar is 16 rows tall now,
+        // so each band lights two rows. Keeps the tuned thresholds untouched.
+        ledsToLight *= 2;
+
+        // Clear the tachometer columns (x = 0..TACH_COLS-1)
+        matrix->fillRect(0, 0, TACH_COLS, MATRIX_HEIGHT, 0);
+
+        // Flash the whole bar off every 200ms at redline
+        if (shouldFlash && (millis() / 200) % 2) return;
+
+        // Light up the appropriate rows from bottom to top
         for (int i = 0; i < ledsToLight; i++) {
-            int y = 7 - i; // Bottom to top (y=7 is bottom, y=0 is top)
-            
-            if (shouldFlash && (millis() / 200) % 2) {
-                // Flash by turning off every 200ms for redline
-                matrix->drawPixel(0, y, matrix->Color(0, 0, 0));
-            } else {
-                matrix->drawPixel(0, y, color);
-            }
+            matrix->drawFastHLine(0, (MATRIX_HEIGHT - 1) - i, TACH_COLS, color);
         }
     }
     
     void addManualModeIndicator(unsigned long currentMillis) {
         // Only show manual mode indicator if manual mode is enabled and reference is valid
         if (manualModeEnabled && *manualModeEnabled) {
-            // Flash the bottom row (y=7) amber at 500ms intervals
+            // Flash the bottom two rows amber at 500ms intervals
             bool flashOn = (currentMillis / 500) % 2;
-            uint32_t amberColor = flashOn ? matrix->Color(255, 191, 0) : matrix->Color(0, 0, 0);
-            
-            // Light up entire bottom row (y=7, all x positions)
-            for (int x = 0; x < 8; x++) {
-                matrix->drawPixel(x, 7, amberColor);
-            }
+            uint16_t amberColor = flashOn ? matrix->Color(255, 191, 0) : matrix->Color(0, 0, 0);
+
+            matrix->fillRect(0, MATRIX_HEIGHT - 2, MATRIX_WIDTH, 2, amberColor);
         }
-        // If manual mode is disabled or reference is null, bottom row stays black (already cleared)
+        // If manual mode is disabled or reference is null, bottom rows stay black (already cleared)
     }
     
     void addHeartbeat(unsigned long currentMillis) {
         // Copy the same heartbeat logic from the main LED
         unsigned long elapsed = currentMillis % CYCLE_TIME;
         
-        if (elapsed < FLASH_DURATION || 
-            (elapsed > FLASH_DURATION + FLASH_GAP && 
+        if (elapsed < FLASH_DURATION ||
+            (elapsed > FLASH_DURATION + FLASH_GAP &&
              elapsed < FLASH_DURATION * 2 + FLASH_GAP)) {
             // Heartbeat active - show red
-            matrix->drawPixel(7, 0, matrix->Color(255, 0, 0));
+            drawCorner(MATRIX_WIDTH - CORNER_SZ, 0, matrix->Color(255, 0, 0));
         } else {
             // Heartbeat background - blue intensity based on WiFi status
             int blueLevel = (*wifiEnabled) ? 255 : 5;  // Bright blue if WiFi on, dim if off
-            matrix->drawPixel(7, 0, matrix->Color(0, 10, blueLevel));
+            drawCorner(MATRIX_WIDTH - CORNER_SZ, 0, matrix->Color(0, 10, blueLevel));
         }
     }
 
     void addWifiCornerFlash(unsigned long currentMillis) {
-        // Top-right (7,0) is the steady blue WiFi/heartbeat pixel. When WiFi is on,
+        // The top-right corner is the steady blue WiFi/heartbeat block. When WiFi is on,
         // flash the other three corners blue in sync so status reads from any corner.
         // Drawn only on the "on" phase so tach/gear content shows through between blinks.
         if (wifiEnabled && *wifiEnabled && ((currentMillis / 500) % 2)) {
-            uint32_t blue = matrix->Color(0, 10, 255);
-            matrix->drawPixel(0, 0, blue);  // top-left
-            matrix->drawPixel(0, 7, blue);  // bottom-left
-            matrix->drawPixel(7, 7, blue);  // bottom-right
+            uint16_t blue = matrix->Color(0, 10, 255);
+            drawCorner(0, 0, blue);                                              // top-left
+            drawCorner(0, MATRIX_HEIGHT - CORNER_SZ, blue);                      // bottom-left
+            drawCorner(MATRIX_WIDTH - CORNER_SZ, MATRIX_HEIGHT - CORNER_SZ, blue); // bottom-right
         }
     }
-    
-    // Color wheel function for rainbow colors (kept for potential future use)
-    uint16_t wheel(byte wheelPos) {
-        wheelPos = 255 - wheelPos;
-        if (wheelPos < 85) {
-            return matrix->Color(255 - wheelPos * 3, 0, wheelPos * 3);
+
+    void drawCorner(int16_t x, int16_t y, uint16_t color) {
+        matrix->fillRect(x, y, CORNER_SZ, CORNER_SZ, color);
+    }
+
+    // Tile-identification pattern. Paints each LOGICAL quadrant a distinct colour
+    // and stamps an asymmetric black marker in that quadrant's logical top-left:
+    // 3px across the top, 2px down the side.
+    //
+    // The marker MUST be asymmetric about the diagonal. A square notch (the first
+    // version of this) is invariant under transposition, and so are the solid
+    // colour blocks -- so a square notch cannot detect a transposed panel, which
+    // is exactly the fault these clones turned out to have. 3-across/2-down reads
+    // as 2-across/3-down when transposed.
+    void drawTileTestPattern() {
+        const int16_t hw = MATRIX_WIDTH / 2;
+        const int16_t hh = MATRIX_HEIGHT / 2;
+        const struct { int16_t x, y; uint8_t r, g, b; } quads[4] = {
+            {  0,  0, 255,   0,   0 },   // logical TOP-LEFT     = RED
+            { hw,  0,   0, 255,   0 },   // logical TOP-RIGHT    = GREEN
+            {  0, hh,   0,   0, 255 },   // logical BOTTOM-LEFT  = BLUE
+            { hw, hh, 255, 255, 255 },   // logical BOTTOM-RIGHT = WHITE
+        };
+
+        for (const auto& q : quads) {
+            matrix->fillRect(q.x, q.y, hw, hh, matrix->Color(q.r, q.g, q.b));
+            matrix->fillRect(q.x, q.y, 3, 1, 0);   // 3 across
+            matrix->fillRect(q.x, q.y, 1, 2, 0);   // 2 down
         }
-        if (wheelPos < 170) {
-            wheelPos -= 85;
-            return matrix->Color(0, wheelPos * 3, 255 - wheelPos * 3);
-        }
-        wheelPos -= 170;
-        return matrix->Color(wheelPos * 3, 255 - wheelPos * 3, 0);
+        matrix->show();
     }
 };
 
