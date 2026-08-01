@@ -4,7 +4,7 @@
     "cpu": "cortex-m33",
     "extra_flags": "-DSTM32H5 -DSTM32H5xx -DSTM32H523xx",
     "f_cpu": "250000000L",
-    "mcu": "stm32h523cet6",
+    "mcu": "stm32h523cct6",
     "product_line": "STM32H523xx",
     "variant": "STM32H5xx/H523C(C-E)(T-U)_H533CE(T-U)"
   },
@@ -12,17 +12,17 @@
     "can"
   ],
   "debug": {
-    "jlink_device": "STM32H523CE",
+    "jlink_device": "STM32H523CC",
     "openocd_target": "stm32h5x",
     "svd_path": "STM32H523.svd"
   },
   "frameworks": [
     "arduino"
   ],
-  "name": "Generic STM32H523CET6",
+  "name": "Generic STM32H523CCT6",
   "upload": {
     "maximum_ram_size": 278528,
-    "maximum_size": 524288,
+    "maximum_size": 262144,
     "protocol": "stlink",
     "protocols": [
       "stlink",
@@ -30,6 +30,6 @@
       "cmsis-dap"
     ]
   },
-  "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32h523ce.html",
+  "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32h523cc.html",
   "vendor": "Generic"
 }

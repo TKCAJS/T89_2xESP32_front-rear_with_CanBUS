@@ -1,37 +1,154 @@
-# Sensor Node — STM32H523CET6
+# Sensor Node — STM32H523CCT6
 
 The sensor node, ported from the `sensor_node_f103` PlatformIO env (Blue Pill
 STM32F103C8T6). Shares `lib/can_ids/can_ids.h` with the other nodes.
 
-Board: WeAct BlackPill-style STM32H523CET6, LQFP48, Cortex-M33 @ 250 MHz,
-512 KB flash, 272 KB RAM. No official PlatformIO board definition existed for
-this chip at the time of this port — see `boards/generic_h523cetx.json` in
+Board: WeAct BlackPill-style STM32H523, LQFP48, Cortex-M33 @ 250 MHz,
+256 KB flash, 272 KB RAM. No official PlatformIO board definition existed for
+this chip at the time of this port — see `boards/generic_h523cctx.json` in
 the project root (custom board file, PlatformIO's default `boards_dir`). The
 Arduino_Core_STM32 variant this board maps to (`H523C(C-E)(T-U)_H533CE(T-U)`)
 is itself newly added and had two real packaging gaps this port had to work
 around — see "Upstream packaging gaps" below.
 
-Upload: **ST-Link only**, but NOT via `upload_protocol = stlink` — PlatformIO's
+## Was CET6, now CCT6 (2026-08-01)
+
+This node was originally built on the **STM32H523CET6** (512 KB flash). That
+part died on the bench, and the replacement stocked is the **CCT6** — same
+die, same LQFP48 pinout, same 272 KB RAM, same peripherals, 256 KB flash.
+
+The swap needed **no source, pin map or clock changes whatsoever**: the
+Arduino core variant folder already covers both (`H523C(C-E)…` — the `C` is
+the 256 KB part), the build is 22.5% of 256 KB, and nothing here stores data in
+flash. Verified by building against both board files and diffing the output —
+the two `firmware.bin` files were byte-identical. The entire difference was
+`maximum_size: 262144` in the board file and the pyocd target name.
+
+`boards/h523_ldscript.ld` takes its FLASH/RAM lengths from the board file
+(`LD_MAX_SIZE` / `LD_MAX_DATA_SIZE`), so it needed no edit and would serve any
+other H523 flash size the same way.
+
+### Failure symptoms (2026-08-01)
+
+- Node worked normally on the car the previous day.
+- Powered up the next day, **car not started** (battery only, no cranking, no
+  alternator) — chip totally dead, no power LED.
+- The 3.3 V rail (fed by an external buck) measures **~1.5 V**, not 3.3 V.
+- **With the MCU removed entirely and the board powered from USB, still no
+  power LED.**
+- **The removed MCU measures ~0 Ω from its VDD pin to its VSS pin, out of
+  circuit** — the die itself is internally shorted supply-to-ground.
+
+The MCU is therefore definitively destroyed, and that short also explains the
+1.5 V: with the dead chip still fitted, it was dragging the buck into current
+limit. An internal VDD–VSS short is the classic signature of **overvoltage on
+VDD** (or a latch-up that took the die with it) — not of a chip that simply
+wore out.
+
+- **With the MCU not fitted, the buck reads a correct 3.3 V** — so the buck is
+  regulating properly in steady state, and the board's own rail is not shorted
+  either (a shorted rail would drag the buck down).
+
+That last result rules out the simple story. The buck is not sitting there
+over-volting the rail, so **the cause is not yet found**. Two hypotheses remain
+live, and they need different fixes:
+
+**A — the buck over-volts transiently, not in steady state.** A DC reading
+into no load is weak evidence: a degraded output cap, a cracked feedback-divider
+joint, or an input transient can produce a startup or load-step overshoot that
+never shows on a multimeter. The MCU dying on a *power-up* fits this well.
+
+**B — latch-up through an I/O pin from the 12 V side.** A severe latch-up ends
+in exactly this signature (VDD–VSS short) while leaving the supply innocent.
+The exposed pins are the senders on PA1–PA4 (oil pressure, TPS, fuel 1/2),
+which are the only DC-coupled wires into the 12 V system, then CAN on PB7/PB8.
+
+**The cheapest discriminator: check whether the other parts on the 3.3 V rail
+survived.** If the buck had over-volted the rail, the display module, CAN
+transceiver and DS18B20 should be dead too. If they all still work, the
+overvoltage was localised to the MCU and hypothesis B moves to the front.
+
+What is *not* suspect (confirmed with the builder, 2026-08-01):
+
+- **Pump PWM (PB1) is opto-isolated** — PB1 drives a PC817 LED through a 220 Ω
+  series resistor (~9.5 mA at Vf≈1.2 V, comfortably inside the pin's rating),
+  and the opto's output transistor drives a 2N2222 that drives the pump. No
+  galvanic path from the pump side to the MCU at all, and no pin overstress.
+- **Fan relays (PA11/PA12) are not connected yet**, so no relay coil has ever
+  been switched by this board.
+
+### Diagnostic order (all with the MCU off the board)
+
+Done so far: buck reads a correct 3.3 V unloaded, board rail not shorted.
+Remaining, in order:
+
+1. **Do the other 3.3 V parts still work?** Display, CAN transceiver, DS18B20.
+   This is the free discriminator between hypotheses A and B above — all alive
+   points at an I/O-pin event, not a rail-wide overvoltage.
+2. **Load-test the buck.** Dummy load at roughly the node's normal draw, left
+   running 15–30 min until warm, watching for drift. Unloaded DC is not enough
+   to clear it.
+3. **Scope the rail at power-up** if a scope is available. The startup
+   overshoot is exactly the moment an MCU dies, and it is invisible to a meter.
+   Anything above ~3.6 V is the answer. Also poke the feedback divider and
+   freeze-spray the buck looking for the output jumping.
+4. **Check the sender lines on PA1–PA4** for continuity or leakage to 12 V, and
+   confirm each has a series resistor and a clamp to 3.3 V. This is hypothesis
+   B's mechanism, and the wiring is the fix.
+5. **Confirm USB actually feeds this rail** before reading anything into the
+   earlier "no LED on USB" result — on WeAct-style boards that path can be
+   jumper- or solder-bridge-selected, and if it was never connected, that
+   observation proves nothing. (With the buck now reading 3.3 V, check whether
+   the power LED lights on *buck* power; if not, the LED itself likely went.)
+
+Regardless of which hypothesis wins, fit the protection before the next chip:
+a TVS or zener clamp on the 3.3 V rail, a polyfuse upstream, and series
+resistors plus clamp diodes on the four sender inputs. A chip died of
+overvoltage and the cause is not proven — that is the case for protecting
+against both paths rather than picking one.
+
+### Longer-term exposure (not implicated in this failure)
+
+1. **The analog senders on PA1–PA4** (oil pressure, TPS, fuel 1/2) — the only
+   DC-coupled wires running into the 12 V system. A sender line touching 12 V,
+   or a chassis-ground offset during cranking, puts the pin well past
+   VDD+0.3 V, and the internal clamp diodes are only good for a few mA. Each
+   wants a series resistor and a clamp to the 3.3 V rail. The two NTC inputs
+   (PA5/PA6) are *not* in this group — per `NtcTemp.h` those sensors are 2-wire
+   to board GND with no vehicle ground reference.
+2. **CAN on PB7/PB8** — a 5 V transceiver (MCP2551/TJA1050) driving RXD at 5 V
+   into a pin that may not be 5 V tolerant on this part; check the datasheet's
+   FT/TT column for PB8 before assuming it is.
+
+## Upload
+
+**ST-Link only**, but NOT via `upload_protocol = stlink` — PlatformIO's
 bundled OpenOCD (checked up to tool-openocd 3.1200.7, the latest available)
 has no `target/stm32h5x.cfg` and no `stm32h5x` flash driver at all, so that
 protocol fails outright ("Can't find target/stm32h5x.cfg"). The env instead
-uses `upload_protocol = custom` with `pyocd flash -t stm32h523cetx` — pyocd
-uses the STM32H523CETx CMSIS-Pack (Keil.STM32H5xx_DFP) for flash algorithms
-instead of OpenOCD's target scripts, so it doesn't hit the same gap.
+uses `upload_protocol = custom` with `pyocd flash -t stm32h523cctx` — pyocd
+uses the CMSIS-Pack (Keil.STM32H5xx_DFP) for flash algorithms instead of
+OpenOCD's target scripts, so it doesn't hit the same gap.
 
 One-time setup on a new machine: `~/.platformio/penv/bin/pip install pyocd`,
-then `~/.platformio/penv/bin/pyocd pack install stm32h523cetx` to fetch the
+then `~/.platformio/penv/bin/pyocd pack install stm32h523cctx` to fetch the
 CMSIS pack (pyocd will also fetch it automatically on first flash if missing,
 just slower). After that, `pio run -e sensor_node_h523 -t upload` works
-exactly like any other env.
+exactly like any other env. If that target name doesn't resolve,
+`pyocd pack find stm32h523` lists the exact spellings in the DFP — the CCT6
+target has not been flashed yet, only built.
 
-Build-verified (`pio run -e sensor_node_h523` succeeds, RAM 0.8% / Flash
-11.4%) and bench-flashes cleanly via pyocd — but a clean flash is not the
-same as working hardware: the display didn't actually come up until
+Build-verified (`pio run -e sensor_node_h523` succeeds — sizes in "Flash/RAM
+budget" below) and bench-flashes cleanly via pyocd — but a clean flash is not
+the same as working hardware: the display didn't actually come up until
 2026-07-25 (see "Arduino pin-map ALT traps" below), so treat anything not
 listed under "Confirmed on real hardware" as unverified.
 
 ## Confirmed on real hardware (2026-07-25)
+
+Everything in this section was confirmed on the **CET6** board, before it
+died. The CCT6 is the same die and the firmware binary is identical, so these
+results carry over — but nothing has been re-confirmed on a CCT6 yet.
 
 - Display (2.4" ST7789 over SPI2) — boots and renders after the ALT-pin fix
   below.
@@ -84,8 +201,9 @@ framework package edits:
    link time. Fixed by committing a copy of the sibling STM32H503CB variant's
    linker script (same H5xx family, parametrized via `LD_MAX_SIZE` /
    `LD_MAX_DATA_SIZE` / `LD_FLASH_OFFSET` so it needs no chip-specific
-   numbers) as `boards/h523cetx_ldscript.ld`, pointed at via
-   `board_build.ldscript` in `platformio.ini`.
+   numbers, so the CC and CE envs share one copy) as
+   `boards/h523_ldscript.ld`, pointed at via `board_build.ldscript` in
+   `platformio.ini`.
 2. **`stm32h5xx_ll_dlyb.c`'s guard** (`HAL_SD_MODULE_ENABLED` /
    `HAL_OSPI_MODULE_ENABLED` / `HAL_XSPI_MODULE_ENABLED`) is satisfied by
    default on this chip, but the `LL_DLYB_CfgTypeDef` type it needs ends up
@@ -137,19 +255,19 @@ assume otherwise since so much else *is* enabled by default on this chip.
 
 ## Pin map (differences from the F103 build)
 
-| Function | F103C8T6 | H523CET6 | Notes |
+| Function | F103C8T6 | H523Cx | Notes |
 |----------|----------|----------|-------|
 | CAN TX / RX | PB9 / PB8 | **PB7** / PB8 | FDCAN1 has no PB9 TX option on this chip — PB9 isn't even a usable Arduino pin name on this variant at all. RX unchanged. (Briefly moved to PA12/PA11 to free PB7/PB8 for the fan relays; moved back and the fans went to PA11/PA12 instead — see FanControl.h.) |
 | Display SCK / MOSI | PB13 / PB15 | PB13 / **PB15_ALT1** | plain PB15 resolves to SPI1 on this variant, not SPI2 — see "Arduino pin-map ALT traps" |
 | Display CS / DC | PB12 / PB10 | PB12 / **PA15** | PB11 isn't a usable Arduino pin name on this variant (skipped in `variant_generic.h`, same as PB9 above); DC moved to PA15 so all six display lines sit on the same header edge as the SPI2 block. |
 | Display RST | PB11 | **PB3** | Moved to the nearest free GPIO on that same header edge, next to DC. |
-| Fan relays (FAN1 / FAN2) | PB3 / PB5 | **PA11 / PA12** | No USB on this node (unlike the H723 transmitter, where these are USB-C), so they're free here. Kept off PB3/PB5 (the F103's fan pins) since PB3 is this board's TFT_RST. |
+| Fan relays (FAN1 / FAN2) | PB3 / PB5 | **PA11 / PA12** | No USB on this node (unlike the H723 transmitter, where these are USB-C), so they're free here. Kept off PB3/PB5 (the F103's fan pins) since PB3 is this board's TFT_RST. **Not physically connected yet** (as of 2026-08-01) — the firmware drives them, but nothing is on the other end. |
 | Oil pressure | PA0 | **PA1** | ADC — shifted off PA0 (see button note above) |
 | TPS | PA1 | **PA2** | ADC |
 | Fuel 1 / Fuel 2 | PA2 / PA3 | **PA3 / PA4** | ADC |
 | Engine temp NTC | PA4 | **PA5** | ADC — renamed from "water temp" upstream (can_ids.h `MSGTYPE_SENS_ENGINE_TEMP`), same divider/table |
 | Rad-out temp NTC | PA5 | **PA6** | ADC — new second NTC added upstream (`MSGTYPE_SENS_RAD_OUT_TEMP`); F103 had PA5 free, H523 doesn't (button-shift above), so it lands on PA6 instead |
-| Pump PWM | PB1 | PB1 | unchanged — TIM3_CH4 on both parts, 100 Hz |
+| Pump PWM | PB1 | PB1 | unchanged — TIM3_CH4 on both parts, 100 Hz. Drives a PC817 opto LED via 220 Ω (~9.5 mA); the opto's output drives a 2N2222 to the pump — the MCU is galvanically isolated from the pump side. |
 | Dallas OneWire | PB0 | PB0 | unchanged — any GPIO |
 | Debug UART | PA9 / PA10 | **PA9_ALT1 / PA10_ALT1** | plain names resolve to LPUART1 on this variant, not USART1 — see "Arduino pin-map ALT traps"; routed through a dedicated `DebugSerial`, not the framework's default `Serial` |
 | SWD | PA13 / PA14 | PA13 / PA14 | never touch |
@@ -237,8 +355,18 @@ as an output in `setup()`.
 
 ## Flash/RAM budget
 
-512 KB flash / 272 KB RAM — both roughly 8x the F103's 64 KB / 20 KB. Actual
-build uses 58.6 KB flash / 2.2 KB RAM, so no budget pressure at all; unlike
-the F103 node, `_printf_float` isn't worth avoiding here, though the display
-code hasn't been changed to use it since the integer fixed-point renderer
-already works and there's no reason to touch it.
+Actual build (2026-08-01): **58,892 bytes flash / 2,540 bytes RAM** — 22.5% of
+the CCT6's 256 KB and 0.9% of its 272 KB RAM, leaving ~203 KB of flash free.
+Still far beyond the F103's 64 KB / 20 KB, so dropping from the CET6's 512 KB
+cost nothing in practice.
+
+Most of that 59 KB is fixed cost that doesn't grow with application code —
+`.text` ~53.9 KB (Adafruit GFX/ST7789 plus the STM32 HAL), `.rodata` ~4.7 KB
+(mostly the GFX font), vectors 596 B. Nothing here stores anything *in* flash:
+the only `FLASH` reference in `main.cpp` is `__HAL_FLASH_SET_PROGRAM_DELAY`
+(wait-state config), there is no EEPROM emulation and no code that assumes a
+512 KB-based address, which is why the shrink needs no source changes.
+
+Unlike the F103 node, `_printf_float` isn't worth avoiding on either part,
+though the display code hasn't been changed to use it since the integer
+fixed-point renderer already works and there's no reason to touch it.

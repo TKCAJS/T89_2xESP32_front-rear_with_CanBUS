@@ -1,18 +1,20 @@
 /*
 ******************************************************************************
 **
-** @file        : h523cetx_ldscript.ld
+** @file        : h523_ldscript.ld
 **
-** @brief       : Linker script for STM32H523CETx — copied from the sibling
-**                STM32H503CB(T-U) variant shipped with Arduino_Core_STM32
-**                (same H5xx family). The H523C(C-E)(T-U)_H533CE(T-U) variant
-**                folder that PlatformIO would normally pull this from is
-**                missing ldscript.ld entirely (upstream packaging gap for
-**                this newly-added variant) — see src/sensor_node_h523/
-**                CLAUDE.md. FLASH/RAM sizes are parametrized via
-**                LD_MAX_SIZE / LD_MAX_DATA_SIZE / LD_FLASH_OFFSET, injected
-**                by the platform from this board's upload.maximum_size /
-**                maximum_ram_size, so no chip-specific numbers needed here.
+** @brief       : Linker script for the STM32H523Cx (currently the CCT6) —
+**                copied from the sibling STM32H503CB(T-U) variant shipped
+**                with Arduino_Core_STM32 (same H5xx family). The
+**                H523C(C-E)(T-U)_H533CE(T-U) variant folder that PlatformIO
+**                would normally pull this from is missing ldscript.ld
+**                entirely (upstream packaging gap for this newly-added
+**                variant) — see src/sensor_node_h523/CLAUDE.md.
+**                FLASH/RAM sizes are parametrized via LD_MAX_SIZE /
+**                LD_MAX_DATA_SIZE / LD_FLASH_OFFSET, injected by the
+**                platform from the selected board's upload.maximum_size /
+**                maximum_ram_size, so this file carries no chip-specific
+**                numbers and serves any flash size in the family.
 **
 **                Set heap size, stack size and stack location according
 **                to application requirements.
