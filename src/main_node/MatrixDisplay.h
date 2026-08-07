@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_NeoMatrix.h>
+#include "GearFont.h"
 
 // Matrix Configuration — four 8x8 panels tiled 2x2 into one 16x16 display.
 #define MATRIX_PIN 16
@@ -46,7 +47,6 @@
 
 // Layout: 2px-wide tachometer bar down the left edge, gear glyph fills the rest.
 #define TACH_COLS  2
-#define GEAR_X     3     // size-2 glyph is 12px wide -> spans x=3..14
 #define CORNER_SZ  2     // corner status blocks, scaled up from 1px on the old 8x8
 
 class MatrixDisplay {
@@ -91,9 +91,6 @@ public:
 
         matrix->begin();
         matrix->setBrightness(50);
-        matrix->setTextWrap(false);
-        matrix->setTextColor(matrix->Color(255, 255, 255));
-        matrix->setTextSize(2);   // 12x16 glyph cell on the 16x16 display
         matrix->fillScreen(0);
         matrix->show();
 
@@ -116,33 +113,21 @@ public:
             lastRainbowUpdate = currentMillis;
             
             matrix->fillScreen(0); // Clear screen (black)
-            matrix->setTextSize(2);
-
-            // Size-2 glyph is 12x16; centre it across the full 16px width.
-            const int16_t cx = (MATRIX_WIDTH - 12) / 2;
 
             if (showShiftNotification) {
-                matrix->setTextColor(matrix->Color(notifR, notifG, notifB));
-                matrix->setCursor(cx, 0);
-                matrix->print(shiftNotificationChar);
+                drawCenteredChar(shiftNotificationChar, 0, MATRIX_WIDTH,
+                                  matrix->Color(notifR, notifG, notifB));
 
             } else {
                 // ALWAYS show current gear when not showing notification
                 // Handle gear sensor disconnected state
                 if (!(*canGearValid)) {
-                    matrix->setTextColor(matrix->Color(255, 0, 0)); // Red text for error
-                    matrix->setCursor(cx, 0);
-                    matrix->print("?");
+                    drawCenteredChar('?', 0, MATRIX_WIDTH, matrix->Color(255, 0, 0)); // Red text for error
                 } else {
                     // Set color based on gear: Red for 1-6, Green for N
-                    if (currentGearName == "N") {
-                        matrix->setTextColor(matrix->Color(0, 255, 0)); // Green for Neutral
-                    } else {
-                        matrix->setTextColor(matrix->Color(255, 0, 0)); // Red for gear numbers 1-6
-                    }
-
-                    matrix->setCursor(cx, 0);
-                    matrix->print(currentGearName);
+                    uint16_t color = (currentGearName == "N") ? matrix->Color(0, 255, 0)   // Green for Neutral
+                                                               : matrix->Color(255, 0, 0);  // Red for gear numbers 1-6
+                    drawCenteredChar(currentGearName[0], 0, MATRIX_WIDTH, color);
                 }
             }
             
@@ -177,31 +162,22 @@ public:
             
             // Clear only the gear display area (not the tachometer columns)
             matrix->fillRect(TACH_COLS, 0, MATRIX_WIDTH - TACH_COLS, MATRIX_HEIGHT, 0);
-            matrix->setTextSize(2);
 
             if (showShiftNotification) {
                 // Display the shift notification (U/D) temporarily in center area
-                matrix->setTextColor(matrix->Color(notifR, notifG, notifB));
-                matrix->setCursor(GEAR_X, 0);
-                matrix->print(shiftNotificationChar);
+                drawCenteredChar(shiftNotificationChar, TACH_COLS, MATRIX_WIDTH - TACH_COLS,
+                                  matrix->Color(notifR, notifG, notifB));
 
             } else {
                 // ALWAYS show current gear when not showing notification
                 // Handle gear sensor disconnected state
                 if (!(*canGearValid)) {
-                    matrix->setTextColor(matrix->Color(255, 0, 0)); // Red text for error
-                    matrix->setCursor(GEAR_X, 0);
-                    matrix->print("?");
+                    drawCenteredChar('?', TACH_COLS, MATRIX_WIDTH - TACH_COLS, matrix->Color(255, 0, 0)); // Red text for error
                 } else {
                     // Set color based on gear: Red for 1-6, Green for N
-                    if (currentGearName == "N") {
-                        matrix->setTextColor(matrix->Color(0, 255, 0)); // Green for Neutral
-                    } else {
-                        matrix->setTextColor(matrix->Color(255, 0, 0)); // Red for gear numbers 1-6
-                    }
-
-                    matrix->setCursor(GEAR_X, 0);
-                    matrix->print(currentGearName);
+                    uint16_t color = (currentGearName == "N") ? matrix->Color(0, 255, 0)   // Green for Neutral
+                                                               : matrix->Color(255, 0, 0);  // Red for gear numbers 1-6
+                    drawCenteredChar(currentGearName[0], TACH_COLS, MATRIX_WIDTH - TACH_COLS, color);
                 }
             }
             
@@ -322,6 +298,24 @@ private:
 
     void drawCorner(int16_t x, int16_t y, uint16_t color) {
         matrix->fillRect(x, y, CORNER_SZ, CORNER_SZ, color);
+    }
+
+    // Draws a GearFont glyph (see GearFont.h), centred within [originX,
+    // originX + availWidth). Glyphs vary in width, so centre per-glyph
+    // rather than assuming a fixed cell.
+    void drawCenteredChar(char c, int16_t originX, int16_t availWidth, uint16_t color) {
+        const GearGlyph* g = gearFontFind(c);
+        if (!g) return;
+
+        int16_t cx = originX + (availWidth - (int16_t)g->width) / 2;
+        for (int16_t y = 0; y < GEAR_FONT_HEIGHT; y++) {
+            uint16_t rowBits = g->rows[y];
+            for (int16_t x = 0; x < g->width; x++) {
+                if (rowBits & (1 << (g->width - 1 - x))) {
+                    matrix->drawPixel(cx + x, y, color);
+                }
+            }
+        }
     }
 
     // Tile-identification pattern. Paints each LOGICAL quadrant a distinct colour
