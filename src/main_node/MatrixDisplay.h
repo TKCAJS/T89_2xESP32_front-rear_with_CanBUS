@@ -211,38 +211,64 @@ private:
         uint16_t color = matrix->Color(0, 0, 0);
         bool shouldFlash = false;
 
+        // 16 bands, one per row, now that the bar is 16 rows tall (was 8 bands
+        // doubled to fill 16 rows). Every original tuned threshold -- 3000,
+        // 5000, 7500, 9000, 10500, 12000, 13500 -- is still here exactly; one
+        // extra step was inserted in each original gap (two in the last gap,
+        // to land on 15 thresholds for 16 bands) so the green/yellow/orange/
+        // red proportions are unchanged, just finer-grained.
         if (rpm >= 100) {
-            if (rpm < 3000) {
+            if (rpm < 1500) {
                 ledsToLight = 1;
                 color = matrix->Color(0, 255, 0); // Green
-            } else if (rpm < 5000) {
+            } else if (rpm < 3000) {
                 ledsToLight = 2;
                 color = matrix->Color(0, 255, 0); // Green
-            } else if (rpm < 7500) {
+            } else if (rpm < 4000) {
                 ledsToLight = 3;
                 color = matrix->Color(0, 255, 0); // Green
-            } else if (rpm < 9000) {
+            } else if (rpm < 5000) {
                 ledsToLight = 4;
-                color = matrix->Color(0, 255, 0); // Yellow
-            } else if (rpm < 10500) {
+                color = matrix->Color(0, 255, 0); // Green
+            } else if (rpm < 6250) {
                 ledsToLight = 5;
-                color = matrix->Color(255, 255, 0); // Yellow
-            } else if (rpm < 12000) {
+                color = matrix->Color(0, 255, 0); // Green
+            } else if (rpm < 7500) {
                 ledsToLight = 6;
-                color = matrix->Color(255, 165, 0); // Orange
-            } else if (rpm < 13500) {
+                color = matrix->Color(0, 255, 0); // Green
+            } else if (rpm < 8250) {
                 ledsToLight = 7;
+                color = matrix->Color(0, 255, 0); // Green
+            } else if (rpm < 9000) {
+                ledsToLight = 8;
+                color = matrix->Color(0, 255, 0); // Green (was mislabeled "Yellow")
+            } else if (rpm < 9750) {
+                ledsToLight = 9;
+                color = matrix->Color(255, 255, 0); // Yellow
+            } else if (rpm < 10500) {
+                ledsToLight = 10;
+                color = matrix->Color(255, 255, 0); // Yellow
+            } else if (rpm < 11250) {
+                ledsToLight = 11;
+                color = matrix->Color(255, 165, 0); // Orange
+            } else if (rpm < 12000) {
+                ledsToLight = 12;
+                color = matrix->Color(255, 165, 0); // Orange
+            } else if (rpm < 12500) {
+                ledsToLight = 13;
+                color = matrix->Color(255, 0, 0); // Red
+            } else if (rpm < 13000) {
+                ledsToLight = 14;
+                color = matrix->Color(255, 0, 0); // Red
+            } else if (rpm < 13500) {
+                ledsToLight = 15;
                 color = matrix->Color(255, 0, 0); // Red
             } else {
-                ledsToLight = 8;
+                ledsToLight = 16;
                 color = matrix->Color(255, 0, 0); // Red
                 shouldFlash = true;
             }
         }
-        
-        // The RPM bands above still resolve to 0-8; the bar is 16 rows tall now,
-        // so each band lights two rows. Keeps the tuned thresholds untouched.
-        ledsToLight *= 2;
 
         // Clear the tachometer columns (x = 0..TACH_COLS-1)
         matrix->fillRect(0, 0, TACH_COLS, MATRIX_HEIGHT, 0);
@@ -290,14 +316,25 @@ private:
         // Drawn only on the "on" phase so tach/gear content shows through between blinks.
         if (wifiEnabled && *wifiEnabled && ((currentMillis / 500) % 2)) {
             uint16_t blue = matrix->Color(0, 10, 255);
-            drawCorner(0, 0, blue);                                              // top-left
-            drawCorner(0, MATRIX_HEIGHT - CORNER_SZ, blue);                      // bottom-left
-            drawCorner(MATRIX_WIDTH - CORNER_SZ, MATRIX_HEIGHT - CORNER_SZ, blue); // bottom-right
+            drawCornerTriangle(0, 0, 1, 1, blue);                                   // top-left
+            drawCornerTriangle(0, MATRIX_HEIGHT - 1, 1, -1, blue);                  // bottom-left
+            drawCornerTriangle(MATRIX_WIDTH - 1, MATRIX_HEIGHT - 1, -1, -1, blue);  // bottom-right
         }
     }
 
     void drawCorner(int16_t x, int16_t y, uint16_t color) {
         matrix->fillRect(x, y, CORNER_SZ, CORNER_SZ, color);
+    }
+
+    // 6-dot right triangle spanning a corner: 3 pixels along the edge, then 2,
+    // then 1, hypotenuse facing into the matrix. (cornerX, cornerY) is the
+    // pixel at the actual corner; dx/dy (+1 or -1) pick which way it grows.
+    void drawCornerTriangle(int16_t cornerX, int16_t cornerY, int8_t dx, int8_t dy, uint16_t color) {
+        for (int8_t i = 0; i < 3; i++) {
+            for (int8_t j = 0; j < 3 - i; j++) {
+                matrix->drawPixel(cornerX + dx * j, cornerY + dy * i, color);
+            }
+        }
     }
 
     // Draws a GearFont glyph (see GearFont.h), centred within [originX,
