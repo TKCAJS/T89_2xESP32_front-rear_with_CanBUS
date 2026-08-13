@@ -7,9 +7,7 @@
     <style>
         * { box-sizing: border-box; }
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #1a1a1a; color: white; }
-        .container { max-width: 620px; margin: 0 auto; }
-        h1 { margin: 0 0 4px; font-size: 1.4em; color: white; }
-        .subtitle { color: #888; font-size: 0.85em; margin: 0 0 20px; }
+        .container { max-width: 620px; margin: 0 auto; }
         .card {
             background: #2a2a2a;
             padding: 20px;
@@ -62,18 +60,55 @@
         .ok  { background: #1b3a1b; border: 1px solid #4CAF50; color: #81C784; }
         .err { background: #3a1b1b; border: 1px solid #F44336; color: #EF9A9A; }
         .meta { font-size: 11px; color: #555; margin-top: 10px; }
+    
+        /* ---- shared page chrome: identical on all four pages ---- */
+        .navbar { display: flex; gap: 4px; align-items: flex-end; }
+        .navbar a {
+            flex: 0 0 auto;
+            padding: 11px 20px;
+            border-radius: 7px 7px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+            line-height: 1;
+            opacity: 0.45;
+            transition: opacity 0.15s;
+        }
+        .navbar a:hover { opacity: 0.75; }
+        /* The active tab spreads across the row, and every tab has square bottom
+           corners, so the active one runs straight into the rail below it and the
+           two read as a single shape. */
+        .navbar a.active {
+            flex: 1 1 auto;
+            padding: 15px 20px;
+            text-align: center;
+            opacity: 1;
+            pointer-events: none;
+            cursor: default;
+        }
+        /* Carries the active page's colour across the full width, under the tabs. */
+        .nav-rail { height: 6px; border-radius: 0 0 4px 4px; margin-bottom: 20px; }
+        .tab-home, .rail-home { background: #2196F3; }
+        .tab-cal,  .rail-cal  { background: #FF9800; }
+        .tab-nvs,  .rail-nvs  { background: #9C27B0; }
+        .tab-pw,   .rail-pw   { background: #4CAF50; }
+        .page-title { margin: 0 0 5px; font-size: 1.5em; color: white; }
+        .page-sub { color: #888; font-size: 0.9em; margin: 0 0 22px; line-height: 1.45; }
     </style>
 </head>
 <body>
 <div class="container">
-    <div style='display:flex;gap:8px;margin-bottom:16px;'>
-        <a href='/' class='btn' style='background:#2196F3;'>Home</a>
-        <a href='/calibration' class='btn' style='background:#FF9800;'>Calibration</a>
-        <a class='btn' style='background:#9C27B0;opacity:0.5;pointer-events:none;'>NVS Config</a>
-        <a href='/piecewise' class='btn' style='background:#4CAF50;'>Piecewise</a>
+    <div class="navbar">
+        <a href="/" class="tab-home">Home</a>
+        <a href="/calibration" class="tab-cal">Calibration</a>
+        <a class="tab-nvs active">NVS Config</a>
+        <a href="/piecewise" class="tab-pw">Piecewise</a>
     </div>
-    <h1>T89 NVS Config</h1>
-    <p class="subtitle">
+    <div class="nav-rail rail-nvs"></div>
+
+    <h1 class="page-title">T89 NVS Config</h1>
+    <p class="page-sub">
         Calibration values stored as a CRC-verified blob in NVS flash.<br>
         Save is transactional — values are written then read back before applying.
     </p>

@@ -202,24 +202,61 @@
                 grid-template-columns: 1fr;
             }
         }
+    
+        /* ---- shared page chrome: identical on all four pages ---- */
+        .navbar { display: flex; gap: 4px; align-items: flex-end; }
+        .navbar a {
+            flex: 0 0 auto;
+            padding: 11px 20px;
+            border-radius: 7px 7px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+            line-height: 1;
+            opacity: 0.45;
+            transition: opacity 0.15s;
+        }
+        .navbar a:hover { opacity: 0.75; }
+        /* The active tab spreads across the row, and every tab has square bottom
+           corners, so the active one runs straight into the rail below it and the
+           two read as a single shape. */
+        .navbar a.active {
+            flex: 1 1 auto;
+            padding: 15px 20px;
+            text-align: center;
+            opacity: 1;
+            pointer-events: none;
+            cursor: default;
+        }
+        /* Carries the active page's colour across the full width, under the tabs. */
+        .nav-rail { height: 6px; border-radius: 0 0 4px 4px; margin-bottom: 20px; }
+        .tab-home, .rail-home { background: #2196F3; }
+        .tab-cal,  .rail-cal  { background: #FF9800; }
+        .tab-nvs,  .rail-nvs  { background: #9C27B0; }
+        .tab-pw,   .rail-pw   { background: #4CAF50; }
+        .page-title { margin: 0 0 5px; font-size: 1.5em; color: white; }
+        .page-sub { color: #888; font-size: 0.9em; margin: 0 0 22px; line-height: 1.45; }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="navbar">
+            <a href="/" class="tab-home">Home</a>
+            <a class="tab-cal active">Calibration</a>
+            <a href="/nvsconfig" class="tab-nvs">NVS Config</a>
+            <a href="/piecewise" class="tab-pw">Piecewise</a>
+        </div>
+        <div class="nav-rail rail-cal"></div>
+
+        <h1 class="page-title">T89 Gearbox Calibration Wizard</h1>
+        <p class="page-sub">Step-by-step calibration for optimal gearbox performance</p>
+
         <div class="wizard-header">
-            <h1>T89 Gearbox Calibration Wizard</h1>
-            <p>Step-by-step calibration for optimal gearbox performance</p>
             <div class="progress-bar">
                 <div class="progress-fill" id="overallProgress" style="width: 0%"></div>
             </div>
             <p id="progressText">Ready to start calibration</p>
-        </div>
-
-        <div style='display:flex;gap:8px;margin-bottom:16px;'>
-            <a href='/' class='btn' style='background:#2196F3;'>Home</a>
-            <a class='btn' style='background:#FF9800;opacity:0.5;pointer-events:none;'>Calibration</a>
-            <a href='/nvsconfig' class='btn' style='background:#9C27B0;'>NVS Config</a>
-            <a href='/piecewise' class='btn' style='background:#4CAF50;'>Piecewise</a>
         </div>
         <div style='margin-bottom:16px;'>
             <button class="btn" onclick="startFullCalibration()">Start Full Calibration</button>

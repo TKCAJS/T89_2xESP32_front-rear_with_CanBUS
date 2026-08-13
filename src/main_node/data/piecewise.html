@@ -17,36 +17,6 @@
             max-width: 900px;
             margin: 0 auto;
         }
-        h1 {
-            margin: 0 0 8px;
-            font-size: 1.6em;
-        }
-        .subtitle {
-            color: #888;
-            font-size: 0.9em;
-            margin: 0 0 24px;
-        }
-        .nav-buttons {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 24px;
-        }
-        .nav-btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .nav-btn-home { background: #2196F3; color: white; }
-        .nav-btn-home:hover { background: #1976D2; }
-        .nav-btn-cal { background: #FF9800; color: white; }
-        .nav-btn-cal:hover { background: #F57C00; }
-        .nav-btn-nvs { background: #9C27B0; color: white; }
-        .nav-btn-nvs:hover { background: #7B1FA2; }
-        .nav-btn-pw { background: #4CAF50; color: white; opacity: 0.5; pointer-events: none; }
 
         .section {
             background: #2a2a2a;
@@ -340,19 +310,55 @@
             color: #aaa;
             margin-bottom: 16px;
         }
+    
+        /* ---- shared page chrome: identical on all four pages ---- */
+        .navbar { display: flex; gap: 4px; align-items: flex-end; }
+        .navbar a {
+            flex: 0 0 auto;
+            padding: 11px 20px;
+            border-radius: 7px 7px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+            line-height: 1;
+            opacity: 0.45;
+            transition: opacity 0.15s;
+        }
+        .navbar a:hover { opacity: 0.75; }
+        /* The active tab spreads across the row, and every tab has square bottom
+           corners, so the active one runs straight into the rail below it and the
+           two read as a single shape. */
+        .navbar a.active {
+            flex: 1 1 auto;
+            padding: 15px 20px;
+            text-align: center;
+            opacity: 1;
+            pointer-events: none;
+            cursor: default;
+        }
+        /* Carries the active page's colour across the full width, under the tabs. */
+        .nav-rail { height: 6px; border-radius: 0 0 4px 4px; margin-bottom: 20px; }
+        .tab-home, .rail-home { background: #2196F3; }
+        .tab-cal,  .rail-cal  { background: #FF9800; }
+        .tab-nvs,  .rail-nvs  { background: #9C27B0; }
+        .tab-pw,   .rail-pw   { background: #4CAF50; }
+        .page-title { margin: 0 0 5px; font-size: 1.5em; color: white; }
+        .page-sub { color: #888; font-size: 0.9em; margin: 0 0 22px; line-height: 1.45; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Piecewise Mapping</h1>
-        <p class="subtitle">Define the biting zone and servo response curve</p>
-
-        <div class="nav-buttons">
-            <a href="/" class="nav-btn nav-btn-home">Home</a>
-            <a href="/calibration" class="nav-btn nav-btn-cal">Calibration</a>
-            <a href="/nvsconfig" class="nav-btn nav-btn-nvs">NVS Config</a>
-            <button class="nav-btn nav-btn-pw">Piecewise</button>
+        <div class="navbar">
+            <a href="/" class="tab-home">Home</a>
+            <a href="/calibration" class="tab-cal">Calibration</a>
+            <a href="/nvsconfig" class="tab-nvs">NVS Config</a>
+            <a class="tab-pw active">Piecewise</a>
         </div>
+        <div class="nav-rail rail-pw"></div>
+
+        <h1 class="page-title">Piecewise Mapping</h1>
+        <p class="page-sub">Define the biting zone and servo response curve</p>
 
         <!-- Both bars share a positioned wrapper so the A-to-A / B-to-B connector
              lines can be drawn across the gap between the two sections. -->
