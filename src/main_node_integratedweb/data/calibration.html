@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <title>T89 Calibration Wizard</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #333;
+            border-radius: 10px;
+        }
+        .wizard-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+        }
+        .calibration-section {
+            background: #2a2a2a;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+        }
+        .hall-section {
+            border-left-color: #9C27B0;
+        }
+        .clutch-section {
+            border-left-color: #FF9800;
+        }
+        .relay-section {
+            border-left-color: #F44336;
+        }
+        .sensor-section {
+            border-left-color: #4CAF50;
+        }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            margin: 8px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: #45a049;
+        }
+        .btn-secondary {
+            background: #2196F3;
+        }
+        .btn-secondary:hover {
+            background: #1976D2;
+        }
+        .btn-warning {
+            background: #FF9800;
+        }
+        .btn-warning:hover {
+            background: #F57C00;
+        }
+        .btn-danger {
+            background: #F44336;
+        }
+        .btn-danger:hover {
+            background: #D32F2F;
+        }
+        .btn-ignition {
+            background: #9C27B0;
+        }
+        .btn-ignition:hover {
+            background: #7B1FA2;
+        }
+        .data-display {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            border: 1px solid #555;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-good {
+            background: #4CAF50;
+        }
+        .status-warning {
+            background: #FF9800;
+        }
+        .status-error {
+            background: #F44336;
+        }
+        .calibration-step {
+            background: #3a3a3a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 3px solid #4CAF50;
+        }
+        .step-number {
+            background: #4CAF50;
+            color: white;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #555;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #2196F3);
+            transition: width 0.3s ease;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .triple-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+        }
+        @media(max-width: 900px) {
+            .triple-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media(max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .gauge-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .test-active {
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        .value-highlight {
+            background: #4CAF50;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .instruction-box {
+            background: #2a4d3a;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .warning-box {
+            background: #4d3a2a;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #FF9800;
+        }
+        .relay-test-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        @media(max-width: 600px) {
+            .relay-test-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="wizard-header">
+            <h1>T89 Gearbox Calibration Wizard</h1>
+            <p>Step-by-step calibration for optimal gearbox performance</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="overallProgress" style="width: 0%"></div>
+            </div>
+            <p id="progressText">Ready to start calibration</p>
+        </div>
+
+        <div style='display:flex;gap:8px;margin-bottom:16px;'>
+            <a href='/' class='btn' style='background:#2196F3;'>Home</a>
+            <a class='btn' style='background:#FF9800;opacity:0.5;pointer-events:none;'>Calibration</a>
+            <a href='/nvsconfig' class='btn' style='background:#9C27B0;'>NVS Config</a>
+        </div>
+        <div style='margin-bottom:16px;'>
+            <button class="btn" onclick="startFullCalibration()">Start Full Calibration</button>
+            <button class="btn btn-secondary" onclick="refreshData()">Refresh Data</button>
+        </div>
+
+        <!-- Hall Sensor Calibration -->
+        <div class="calibration-section hall-section">
+            <h2>Hall Sensor Calibration</h2>
+            <div class="instruction-box">
+                <strong>Purpose:</strong> Calibrate clutch lever position sensing for optimal response curve
+            </div>
+
+            <div class="grid">
+                <div>
+                    <h3>Live Hall Sensor Data</h3>
+                    <div class="data-display" id="hallData">
+                        Left Paddle: <span id="hallLeft">Loading...</span><br>
+                        Right Paddle: <span id="hallRight">Loading...</span><br>
+                        Paddle (result): <span id="hallRaw">Loading...</span><br>
+                        Linear Servo: <span id="hallLinear">Loading...</span>&deg;<br>
+                        Curved Servo: <span id="hallCurved">Loading...</span>&deg;<br>
+                        Current Curve: <span id="hallCurveType">Loading...</span><br>
+                        Curve Strength: <span id="hallCurveStrength">Loading...</span><br>
+                        Calibrated Min: <span id="hallMinDisplay">Loading...</span><br>
+                        Calibrated Max: <span id="hallMaxDisplay">Loading...</span>
+                    </div>
+
+                    <div style="margin-top:16px;">
+                        <div style="margin-bottom:14px;">
+                            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                                <span style="color:#9C27B0;font-weight:bold;">Hall Raw</span>
+                                <span id="hbarRawVal" style="color:#fff;">--</span>
+                                <span style="color:#888;">/ 4095</span>
+                            </div>
+                            <div style="height:18px;background:#444;border-radius:4px;overflow:hidden;">
+                                <div id="hbarRaw" style="height:100%;background:#9C27B0;width:0%;transition:width 0.15s;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:14px;">
+                            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                                <span style="color:#FF9800;font-weight:bold;">Servo Command</span>
+                                <span id="hbarDegVal" style="color:#fff;">--</span>
+                                <span style="color:#888;">&deg; / 180&deg;</span>
+                            </div>
+                            <div style="height:18px;background:#444;border-radius:4px;overflow:hidden;">
+                                <div id="hbarDeg" style="height:100%;background:#FF9800;width:0%;transition:width 0.15s;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                                <span style="color:#4CAF50;font-weight:bold;">Clutch Voltage</span>
+                                <span id="hbarVoltVal" style="color:#fff;">--</span>
+                                <span style="color:#888;">V / 3.3 V</span>
+                            </div>
+                            <div style="height:18px;background:#444;border-radius:4px;overflow:hidden;">
+                                <div id="hbarVolt" style="height:100%;background:#4CAF50;width:0%;transition:width 0.15s;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3>Calibration Steps</h3>
+                    <div class="calibration-step">
+                        <span class="step-number">1</span>
+                        <strong>Find Clutch Range:</strong>
+                        <button class="btn btn-secondary" onclick="startHallRangeTest()">Start Range Test</button>
+                        <div id="hallRangeResults"></div>
+                    </div>
+
+                    <div class="calibration-step">
+                        <span class="step-number">2</span>
+                        <strong>Test Response Curves:</strong>
+                        <button class="btn btn-secondary" onclick="startHallCurveTest()">Test Curves</button>
+                        <div id="hallCurveResults"></div>
+                    </div>
+
+                    <div class="calibration-step">
+                        <span class="step-number">3</span>
+                        <strong>Save Range:</strong>
+                        Use <a href="/nvsconfig" style="color:#9C27B0;">NVS Config</a> to capture and persist the hall min/max.
+                    </div>
+
+                    <div class="calibration-step" style="margin-top:12px;">
+                        <span class="step-number">4</span>
+                        <strong>Piecewise Biting Zone</strong>
+                        <div style="font-size:12px;color:#aaa;margin:6px 0;">
+                            Hall ADC range assigned to biting zone servo travel
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">
+                            <label style="font-size:12px;">Hall bite start (ADC)<br>
+                                <input id="hBiteStart" type="number" min="0" max="4095" value="1000"
+                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                            </label>
+                            <label style="font-size:12px;">Hall bite end (ADC)<br>
+                                <input id="hBiteEnd" type="number" min="0" max="4095" value="3000"
+                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                            </label>
+                            <label style="font-size:12px;">Servo bite start (&deg;) &mdash; just-engaged<br>
+                                <input id="sBiteStart" type="number" min="0" max="180" value="98"
+                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                            </label>
+                            <label style="font-size:12px;">Servo bite end (&deg;) &mdash; just-disengaged<br>
+                                <input id="sBiteEnd" type="number" min="0" max="180" value="115"
+                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                            </label>
+                        </div>
+                        <label style="font-size:12px;display:block;margin:8px 0;">Corner smoothing &mdash; blend half-width (ADC counts), 0 = sharp<br>
+                            <input id="pwBlend" type="number" min="0" max="2000" value="120"
+                                   style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
+                        </label>
+                        <button class="btn" onclick="savePiecewiseZone()">Save Piecewise Zone</button>
+                        <button class="btn btn-secondary" id="activatePiecewiseBtn"
+                                onclick="activatePiecewiseMapping()"
+                                style="margin-left:4px;">Use Piecewise Mapping</button>
+                        <div id="piecewiseSaveResult" style="margin-top:6px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clutch Servo Calibration -->
+        <div class="calibration-section clutch-section">
+            <h2>Clutch Servo &amp; Voltage Calibration</h2>
+            <div class="instruction-box">
+                <strong>Purpose:</strong> Find exact servo positions and clutch voltage thresholds using live feedback
+            </div>
+
+            <!-- Mode toggle -->
+            <div style="margin-bottom:16px;padding:12px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;gap:16px;">
+                <button id="overrideToggle" class="btn btn-secondary" onclick="toggleServoOverride()"
+                        style="min-width:180px;font-size:15px;">
+                    Enable Slider Mode
+                </button>
+                <span id="overrideStatus" style="color:#aaa;font-size:13px;">
+                    Paddle controls servo
+                </span>
+            </div>
+
+            <!-- Servo slider -->
+            <h3>Manual Servo Control</h3>
+            <div style="padding:16px 0 8px;">
+                <div style="position:relative; height:36px;">
+                    <!-- coloured track: dead zones grey, active range green -->
+                    <div id="sliderTrack" style="position:absolute;top:50%;transform:translateY(-50%);
+                         width:100%;height:10px;border-radius:5px;pointer-events:none;z-index:0;
+                         background:#555;"></div>
+                    <input type="range" id="servoSlider" min="0" max="180" value="90"
+                           style="position:relative;z-index:1;width:100%;cursor:pointer;
+                                  background:transparent;appearance:none;-webkit-appearance:none;"
+                           oninput="onServoSlider(this.value)">
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px;">
+                    <span style="color:#888;">0&deg; (dead)</span>
+                    <span style="color:#fff;">Servo: <strong id="sliderAngle">90</strong>&deg;</span>
+                    <span style="color:#888;">(dead) 180&deg;</span>
+                </div>
+                <div id="sliderLimitLabel" style="text-align:center;font-size:12px;color:#4CAF50;margin-top:2px;">
+                    Active range: loading...
+                </div>
+            </div>
+            <div style="margin:8px 0;">
+                <button class="btn btn-warning" onclick="sliderToIdle()">&larr; Jump to Saved Idle</button>
+                <button class="btn btn-warning" onclick="sliderToEngage()">Jump to Saved Engage &rarr;</button>
+            </div>
+
+            <!-- Live voltage bar -->
+            <h3>Live Clutch Voltage</h3>
+            <div class="data-display" style="padding:15px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                    <span>Voltage: <strong id="clutchVoltDisplay">--</strong> V &nbsp;
+                        <span id="clutchStateLabel" style="padding:2px 8px;border-radius:3px;font-weight:bold;">--</span>
+                        <span id="biteLabel" style="padding:2px 8px;border-radius:3px;font-weight:bold;margin-left:6px;display:none;">BITING</span>
+                    </span>
+                    <span style="font-size:12px;color:#aaa;">0 V &larr;&rarr; 3.3 V</span>
+                </div>
+                <div style="position:relative;height:28px;background:#444;border-radius:6px;overflow:visible;">
+                    <!-- fill -->
+                    <div id="voltFill" style="position:absolute;top:0;left:0;height:100%;background:#4CAF50;border-radius:6px;transition:width 0.1s;"></div>
+                    <!-- disengage marker -->
+                    <div id="disengMarker" style="position:absolute;top:-6px;height:calc(100% + 12px);width:3px;background:#F44336;border-radius:2px;"></div>
+                    <!-- just-engaged marker -->
+                    <div id="biteMarker" style="position:absolute;top:-6px;height:calc(100% + 12px);width:3px;background:#FF9800;border-radius:2px;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;">
+                    <span style="color:#FF9800;">&#9646; Just-Engaged: <strong id="biteVDisplay">--</strong> V</span>
+                    <span style="color:#F44336;">&#9646; Disengage: <strong id="disengVDisplay">--</strong> V</span>
+                </div>
+            </div>
+
+            <!-- Threshold calibration -->
+            <div class="grid" style="margin-top:16px;">
+                <div>
+                    <h3>Disengage Threshold <span style="color:#F44336;">&#9646;</span></h3>
+                    <div class="calibration-step">
+                        <p style="margin:4px 0 8px;">Pull lever to the point where the clutch is <strong>just disengaged</strong> (relay-safe). Watch voltage, then capture.</p>
+                        <button class="btn btn-danger" onclick="captureDisengageV()">Capture Disengage Threshold</button>
+                        <div id="disengResult" style="margin-top:6px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <h3>Just-Engaged Threshold <span style="color:#FF9800;">&#9646;</span></h3>
+                    <div class="calibration-step">
+                        <p style="margin:4px 0 8px;">Release lever slowly until clutch is at <strong>biting point</strong> (just starting to engage). Capture when voltage is stable.</p>
+                        <button class="btn btn-warning" onclick="captureJustEngagedV()">Capture Just-Engaged Threshold</button>
+                        <div id="biteResult" style="margin-top:6px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Servo endpoint calibration -->
+            <h3 style="margin-top:20px;">Servo Endpoint Calibration</h3>
+            <div class="grid">
+                <div>
+                    <div class="calibration-step">
+                        <span class="step-number">1</span>
+                        <strong>Idle Position</strong> (lever released, clutch fully engaged)<br>
+                        <small style="color:#aaa;">Use slider above to find the angle, then enter it in <a href="/nvsconfig" style="color:#FF9800;">NVS Config</a>.</small><br>
+                        <span style="font-size:13px;">Saved: <strong id="clutchIdle">--</strong>&deg;</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="calibration-step">
+                        <span class="step-number">2</span>
+                        <strong>Engage Position</strong> (lever pulled, clutch fully disengaged)<br>
+                        <small style="color:#aaa;">Use slider above to find the angle, then enter it in <a href="/nvsconfig" style="color:#FF9800;">NVS Config</a>.</small><br>
+                        <span style="font-size:13px;">Saved: <strong id="clutchEngage">--</strong>&deg;</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="calibration-step" style="margin-top:12px;">
+                <span class="step-number">3</span>
+                <strong>Test Cycle:</strong>
+                <button class="btn btn-secondary" onclick="testClutchCycle()">Test Idle &rarr; Engage &rarr; Idle</button>
+                <div id="clutchTestResult"></div>
+            </div>
+
+            <div class="warning-box">
+                <strong>Safety:</strong> Ensure engine is OFF during clutch calibration
+            </div>
+        </div>
+
+        <!-- Relay Timing Calibration -->
+        <div class="calibration-section relay-section">
+            <h2>Relay Timing Calibration</h2>
+            <div class="instruction-box">
+                <strong>Purpose:</strong> Optimize shift timing for quick, smooth gear changes
+            </div>
+
+            <div class="grid">
+                <div>
+                    <h3>Current Timing Settings</h3>
+                    <div class="data-display" id="relayData">
+                        Neutral Down: <span id="neutralDownMs">Loading...</span>ms<br>
+                        Neutral Up: <span id="neutralUpMs">Loading...</span>ms<br>
+                        Shift Down: <span id="shiftDownMs">Loading...</span>ms<br>
+                        Shift Up: <span id="shiftUpMs">Loading...</span>ms<br>
+                        Last Shift Time: <span id="lastShiftTime">Loading...</span>ms
+                    </div>
+
+                    <h3>Relay Test Controls</h3>
+                    <div class="relay-test-grid">
+                        <button class="btn btn-danger" onclick="testDownshiftRelay()">Test Downshift Relay</button>
+                        <button class="btn btn-danger" onclick="testUpshiftRelay()">Test Upshift Relay</button>
+                        <button class="btn btn-ignition" onclick="testIgnitionCutRelay()">Ignition Cut Relay</button>
+                    </div>
+                    <div id="relayTestStatus"></div>
+                </div>
+
+                <div>
+                    <h3>Timing Optimization</h3>
+                    <div class="calibration-step">
+                        <span class="step-number">1</span>
+                        <strong>Test Current Settings:</strong>
+                        <button class="btn btn-secondary" onclick="startTimingTest()">Run Timing Test</button>
+                        <div id="timingTestResults"></div>
+                    </div>
+
+                    <div class="calibration-step">
+                        <span class="step-number">2</span>
+                        <strong>Auto-Optimize:</strong>
+                        <button class="btn" onclick="autoOptimizeTiming()">Auto-Optimize Timing</button>
+                        <div id="optimizationResults"></div>
+                    </div>
+
+                    <div class="calibration-step">
+                        <span class="step-number">3</span>
+                        <strong>Manual Adjustment:</strong>
+                        <button class="btn btn-secondary" onclick="openTimingAdjust()">Manual Timing Adjust</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sensor Verification -->
+        <div class="calibration-section sensor-section">
+            <h2>Sensor System Verification</h2>
+            <div class="instruction-box">
+                <strong>Purpose:</strong> Verify all sensors are connected and functioning correctly
+            </div>
+
+            <div class="triple-grid">
+                <div>
+                    <h3>Gear Position Sensor</h3>
+                    <div class="data-display" id="gearSensorData">
+                        <div id="gearSensorStatus">
+                            <span class="status-indicator status-error"></span>Checking...
+                        </div>
+                        Current Gear: <span id="currentGear">Loading...</span><br>
+                        PCF8575 Address: <span id="pcfAddress">0x20</span><br>
+                        Raw Data: <span id="pcfRawData">Loading...</span><br>
+                        Connection: <span id="pcfConnection">Loading...</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="testGearSensor()">Test Gear Sensor</button>
+                    <div id="gearSensorTest"></div>
+                </div>
+
+                <div>
+                    <h3>Speed & RPM Sensors</h3>
+                    <div class="data-display" id="speedRpmData">
+                        <div id="speedSensorStatus">
+                            <span class="status-indicator status-error"></span>Checking...
+                        </div>
+                        Current Speed: <span id="currentSpeed">Loading...</span> MPH<br>
+                        Current RPM: <span id="currentRpm">Loading...</span><br>
+                        Speed Pulses: <span id="speedPulses">Loading...</span><br>
+                        RPM Pulses: <span id="rpmPulses">Loading...</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="testSpeedRpmSensors()">Test Speed/RPM</button>
+                    <div id="speedRpmTest"></div>
+                </div>
+
+                <div>
+                    <h3>Temperature Sensor</h3>
+                    <div class="data-display" id="tempSensorData">
+                        <div id="tempSensorStatus">
+                            <span class="status-indicator status-error"></span>Checking...
+                        </div>
+                        Current Temp: <span id="currentTemp">Loading...</span>&deg;C<br>
+                        Target Temp: <span id="targetTemp">Loading...</span>&deg;C<br>
+                        Engine Status: <span id="engineStatus">Loading...</span><br>
+                        Pump PWM: <span id="pumpPwm">Loading...</span>%
+                    </div>
+                    <button class="btn btn-secondary" onclick="testTempSensor()">Test Temperature</button>
+                    <div id="tempSensorTest"></div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn" onclick="runFullSensorTest()">Run Complete Sensor Test</button>
+                <div id="fullSensorTestResults"></div>
+            </div>
+        </div>
+
+        <!-- Calibration Summary -->
+        <div class="calibration-section">
+            <h2>Calibration Summary</h2>
+            <div id="calibrationSummary">
+                <div class="data-display">
+                    <strong>Calibration Status:</strong><br>
+                    Hall Sensor: <span id="summaryHall">Not Calibrated</span><br>
+                    Clutch Servo: <span id="summaryClutch">Not Calibrated</span><br>
+                    Relay Timing: <span id="summaryRelay">Not Calibrated</span><br>
+                    Sensor Verification: <span id="summarySensors">Not Verified</span><br>
+                    <br>
+                    <strong>Overall Status:</strong> <span id="overallStatus">Calibration Required</span>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn" onclick="generateCalibrationReport()">Generate Calibration Report</button>
+                <button class="btn btn-secondary" onclick="exportCalibrationData()">Export Calibration Data</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/calibration.js"></script>
+</body>
+</html>
