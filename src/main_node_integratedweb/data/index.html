@@ -184,14 +184,14 @@
 <body>
     <div class='container'>
         <h1>T89 Sequential Gearbox Control</h1>
-
+        
         <div style='display:flex;gap:8px;margin-bottom:16px;'>
             <a class='btn' style='background:#2196F3;opacity:0.5;pointer-events:none;'>Home</a>
             <a href='/calibration' class='btn' style='background:#FF9800;'>Calibration</a>
-            <a href='/piecewise' class='btn' style='background:#4CAF50;'>Piecewise</a>
             <a href='/nvsconfig' class='btn' style='background:#9C27B0;'>NVS Config</a>
+            <a href='/piecewise' class='btn' style='background:#4CAF50;'>Piecewise</a>
         </div>
-
+        
         <!-- Gauges section -->
         <div class='gauges-container'>
             <div class='gauge-row'>
@@ -223,7 +223,7 @@
                 </div>
             </div>
         </div>
-
+        
         <!-- Status section -->
         <div class='grid'>
             <div class='status'>
@@ -235,7 +235,7 @@
                 <div id='tempStatus'>Loading...</div>
             </div>
         </div>
-
+        
         <!-- Shift logger section -->
         <div class='grid'>
             <div class='shift-status'>
@@ -247,14 +247,14 @@
                 <div id='shiftLogs'>Loading...</div>
             </div>
         </div>
-
+        
         <!-- Control buttons -->
         <h3>Manual Control</h3>
         <button class='btn' onclick='sendCmd("shiftDown")'>Shift Down</button>
         <button class='btn' onclick='sendCmd("neutralDown")'>Neutral Down</button>
         <button class='btn' onclick='sendCmd("neutralUp")'>Neutral Up</button>
         <button class='btn' onclick='sendCmd("shiftUp")'>Shift Up</button>
-
+        
 
         <!-- Downshift trigger threshold -->
         <h3>Auto-Downshift Trigger</h3>
@@ -275,64 +275,64 @@
 
     <script>
         let lastValues = {};
-
+        
         function drawGauge(canvasId, value, maxValue, label, color, unit, decimals = 1, reverseArc = false) {
             const canvas = document.getElementById(canvasId);
             const ctx = canvas.getContext('2d');
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
             const radius = 80;
-
+            
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+            
             // Background circle
             ctx.beginPath();
             ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
             ctx.strokeStyle = '#555';
             ctx.lineWidth = 8;
             ctx.stroke();
-
+            
             // Value arc
             const startAngle = -Math.PI * 0.75;
             const endAngle = Math.PI * 0.75;
             const totalAngle = endAngle - startAngle;
             const frac = reverseArc ? (1 - value / maxValue) : (value / maxValue);
             const valueAngle = startAngle + frac * totalAngle;
-
+            
             ctx.beginPath();
             ctx.arc(centerX, centerY, radius, startAngle, valueAngle);
             ctx.strokeStyle = color;
             ctx.lineWidth = 8;
             ctx.stroke();
-
+            
             // Needle
             const needleLength = radius - 10;
             const needleX = centerX + needleLength * Math.cos(valueAngle);
             const needleY = centerY + needleLength * Math.sin(valueAngle);
-
+            
             ctx.beginPath();
             ctx.moveTo(centerX, centerY);
             ctx.lineTo(needleX, needleY);
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 3;
             ctx.stroke();
-
+            
             // Center dot
             ctx.beginPath();
             ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI);
             ctx.fillStyle = '#fff';
             ctx.fill();
-
+            
             // Value text
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
             ctx.fillText(value.toFixed(decimals) + unit, centerX, centerY + 40);
-
+            
             ctx.font = '12px Arial';
             ctx.fillText('Max: ' + maxValue + unit, centerX, centerY + 60);
         }
-
+        
         // Temp gauge with a concentric inner ring for pump PWM %.
         // Outer arc = radiator temp (orange), inner arc = pump duty (cyan).
         function drawTempPumpGauge(canvasId, temp, tempMax, pump) {
@@ -377,7 +377,7 @@
                 updateStatus();
             });
         }
-
+        
 function updateStatus() {
             fetch('/sensorData').then(r => r.json()).then(d => {
                 if(lastValues.mph !== d.currentMph) {
@@ -407,7 +407,7 @@ function updateStatus() {
                     drawGauge('positionGauge', d.servoPosition, 180, 'Position', '#607D8B', '°');
                     lastValues.position = d.servoPosition;
                 }
-
+                
                 let status = 'System: ' + (d.shiftInProgress ? 'SHIFTING' : (d.waitingForClutch ? 'WAITING FOR CLUTCH' : 'Ready'));
                 let gearClass = d.currentGear.includes('DISCONNECTED') ? 'gear-disconnected' : 'gear-display';
                 status += '<br>Current Gear: <span class="' + gearClass + '">' + d.currentGear + '</span>';
@@ -421,7 +421,7 @@ function updateStatus() {
                 status += '<br>Hall Curve: ' + d.hallCurveName + ' (' + d.hallCurveStrength + ')';
                 document.getElementById('status').innerHTML = status;
                 document.getElementById('bitePointDisplay').textContent = d.clutchJustEngagedV.toFixed(3) + ' V  (live: ' + d.clutchVoltage.toPrecision(3) + ' V)';
-
+                
                 let tempStatus = '<div class="temp-reading temp-current">Current: ' + d.currentTemp.toFixed(1) + '°C</div>';
                 tempStatus += '<div class="temp-reading temp-target">Target: ' + d.targetTemp.toFixed(1) + '°C</div>';
                 tempStatus += '<div class="temp-reading pump-status">Pump PWM: ' + d.pumpPwmPercent + '%</div>';
@@ -429,12 +429,12 @@ function updateStatus() {
                 document.getElementById('tempStatus').innerHTML = tempStatus;
             }).catch(e => console.error('Sensor data error:', e));
         }
-
+        
         function updateShiftData() {
             fetch('/shiftStats').then(r => r.text()).then(d => {
                 document.getElementById('shiftStats').innerHTML = '<pre>' + d + '</pre>';
             }).catch(e => console.error('Shift stats error:', e));
-
+            
             fetch('/shiftLogs').then(r => r.json()).then(logs => {
                 let html = '';
                 logs.slice(-10).forEach(log => {
@@ -444,7 +444,7 @@ function updateStatus() {
                 document.getElementById('shiftLogs').innerHTML = html;
             }).catch(e => console.error('Shift logs error:', e));
         }
-
+        
         function loadConfig() {
             fetch('/configData').then(r => r.json()).then(d => {
                 let displayedBiteV = d.clutchJustEngagedV.toFixed(3);
@@ -452,7 +452,7 @@ function updateStatus() {
                 document.getElementById('bitePointInput').value = displayedBiteV;
             }).catch(e => console.error('Config load error:', e));
         }
-
+        
         function saveDownshiftTrigger() {
             let displayedV = parseFloat(document.getElementById('bitePointInput').value);
             if (isNaN(displayedV) || displayedV < 0 || displayedV > 3.3) {

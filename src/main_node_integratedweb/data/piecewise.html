@@ -60,6 +60,9 @@
             font-size: 1.2em;
             color: #4CAF50;
         }
+        /* Servo section is mirrored like its bar: bar first, then description,
+           then title last, so the block reads outward from the bar. */
+        .section.mirrored h2 { margin: 0; }
 
         .bar-group {
             margin-bottom: 32px;
@@ -111,6 +114,26 @@
         }
         .btn-max:hover { background: #D32F2F; }
 
+        /* Travel extents shown at the bar ends. Read-only here — the bar's axis runs
+           between them, and they are edited on the NVS Config page. */
+        .extent {
+            font-size: 11px;
+            color: #777;
+            text-align: center;
+            line-height: 1.35;
+            min-width: 58px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .extent strong {
+            display: block;
+            font-size: 15px;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .extent-idle strong { color: #64B5F6; }
+        .extent-max strong  { color: #E57373; }
+
         .bar-info {
             font-size: 12px;
             color: #aaa;
@@ -154,7 +177,12 @@
             z-index: 1;
             pointer-events: none;
         }
-        input[type="range"] {
+        /* A and B are stacked full-width one on top of the other. With a full-width
+           hit area, whichever is painted last (B) swallows every press — including
+           presses aimed at A's thumb. So the tracks take no pointer events and only
+           the thumbs do. Scoped to .bar-container so the standalone servo-control
+           slider further down keeps its normal inline behaviour. */
+        .bar-container input[type="range"] {
             position: absolute;
             width: 100%;
             height: 48px;
@@ -163,30 +191,71 @@
             margin: 0;
             padding: 0;
             background: transparent;
-            cursor: pointer;
             z-index: 3;
             appearance: none;
             -webkit-appearance: none;
+            pointer-events: none;
         }
-        input[type="range"]::-webkit-slider-thumb {
+        /* Full-height rectangles so each one reads as a hard edge of the zone.
+           Width must stay in sync with THUMB_W in the script. */
+        .bar-container input[type="range"]::-webkit-slider-thumb {
             appearance: none;
             -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 8px;
-            background: white;
+            width: 8px;
+            height: 46px;
+            border-radius: 2px;
+            background: #4CAF50;
             cursor: pointer;
-            box-shadow: 0 0 4px rgba(0,0,0,0.5);
-            border: 2px solid #4CAF50;
+            pointer-events: auto;
+            border: none;
+            box-shadow: 0 0 5px rgba(0,0,0,0.7);
         }
-        input[type="range"]::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            border-radius: 8px;
-            background: white;
+        .bar-container input[type="range"]::-moz-range-thumb {
+            width: 8px;
+            height: 46px;
+            border-radius: 2px;
+            background: #4CAF50;
             cursor: pointer;
-            box-shadow: 0 0 4px rgba(0,0,0,0.5);
-            border: 2px solid #4CAF50;
+            pointer-events: auto;
+            border: none;
+            box-shadow: 0 0 5px rgba(0,0,0,0.7);
+        }
+        .bar-container input[type="range"]::-moz-range-track {
+            height: 46px;
+            background: transparent;
+            border: none;
+        }
+
+        /* Shaded band spanning A to B. Sits under the thumbs and the puck. */
+        .zone-fill {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(76, 175, 80, 0.28);
+            border-top: 1px solid rgba(76, 175, 80, 0.55);
+            border-bottom: 1px solid rgba(76, 175, 80, 0.55);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Overlay spanning both sections, so a line can be drawn from the hall bar
+           across the section boundary to the servo bar. */
+        #mapWrap { position: relative; }
+        #zoneLinks {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 6;
+        }
+        .zone-link {
+            stroke: #4CAF50;
+            stroke-width: 2;
+            stroke-dasharray: 6 4;
+            opacity: 0.9;
         }
 
         /* A/B zone markers ride the bar at their slider positions. Hall's sit above
@@ -285,17 +354,24 @@
             <button class="nav-btn nav-btn-pw">Piecewise</button>
         </div>
 
+        <!-- Both bars share a positioned wrapper so the A-to-A / B-to-B connector
+             lines can be drawn across the gap between the two sections. -->
+        <div id="mapWrap">
+
         <!-- Hall Sensor Biting Zone -->
         <div class="section">
             <h2>Hall Sensor Biting Zone (ADC 0–4095)</h2>
             <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
-                Define which hall range maps to the clutch biting zone. The sliders A (left) and B (right) mark the zone boundaries.
+                The bar spans the calibrated travel, idle to max. A and B mark the biting
+                zone inside it and cannot pass those limits. Set the travel extents on the
+                <a href="/nvsconfig" style="color:#9C27B0;">NVS Config</a> page.
             </p>
 
             <div class="bar-group">
                 <div class="bar-row">
-                    <button class="btn-small btn-idle" onclick="setHallIdle()">← Idle</button>
+                    <div class="extent extent-idle">Idle<strong id="hallIdleLabel">--</strong></div>
                     <div class="bar-container" id="hallBarContainer" style="flex:1;">
+                        <div class="zone-fill" id="hallZoneFill"></div>
                         <div class="zone-marker above" id="hallAMarker">A: <strong id="hallALabel">1000</strong></div>
                         <div class="zone-marker above" id="hallBMarker">B: <strong id="hallBLabel">3000</strong></div>
                         <div class="puck" id="hallPuck"><span class="puck-value below" id="hallLiveValue">--</span></div>
@@ -304,22 +380,18 @@
                         <input type="range" id="hallSliderB" min="0" max="4095" value="3000"
                                oninput="updateHallB(this.value)">
                     </div>
-                    <button class="btn-small btn-max" onclick="setHallMax()">Max →</button>
+                    <div class="extent extent-max">Max<strong id="hallMaxLabel">--</strong></div>
                 </div>
             </div>
         </div>
 
         <!-- Servo Endpoint Biting Zone -->
-        <div class="section">
-            <h2>Servo Endpoint Biting Zone (0–180°)</h2>
-            <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
-                Servo angles that correspond to the hall biting zone. Sliders map to Hall's A and B. A cannot cross B.
-            </p>
-
+        <div class="section mirrored">
             <div class="bar-group">
                 <div class="bar-row">
-                    <button class="btn-small btn-idle" onclick="setServoIdle()">← Idle</button>
+                    <div class="extent extent-idle">Idle<strong id="servoIdleLabel">--</strong></div>
                     <div class="bar-container" id="servoBarContainer" style="flex:1;">
+                        <div class="zone-fill" id="servoZoneFill"></div>
                         <div class="zone-marker below" id="servoAMarker">A: <strong id="servoALabel">98°</strong></div>
                         <div class="zone-marker below" id="servoBMarker">B: <strong id="servoBLabel">115°</strong></div>
                         <div class="puck" id="servoPuck"><span class="puck-value above" id="servoLiveValue">-- V</span></div>
@@ -328,10 +400,22 @@
                         <input type="range" id="servoSliderB" min="0" max="180" value="115"
                                oninput="updateServoB(this.value)">
                     </div>
-                    <button class="btn-small btn-max" onclick="setServoMax()">Max →</button>
+                    <div class="extent extent-max">Max<strong id="servoMaxLabel">--</strong></div>
                 </div>
             </div>
+
+            <p style="color:#aaa;font-size:13px;margin:0 0 6px;">
+                Servo angles that correspond to the hall biting zone. The bar spans the
+                clutch servo's idle and engage angles; A and B cannot pass those limits.
+            </p>
+            <h2>Servo Endpoint Biting Zone (0–180°)</h2>
         </div>
+
+        <svg id="zoneLinks" aria-hidden="true">
+            <line id="linkA" class="zone-link" />
+            <line id="linkB" class="zone-link" />
+        </svg>
+        </div><!-- /mapWrap -->
 
         <!-- Corner Smoothing -->
         <div class="section">
@@ -386,15 +470,37 @@
         let currentValues = {};
         let servoControlActive = false;
 
+        // Travel extents. These are NOT edited here — they are the calibrated limits
+        // read from NVS (hall range, and the clutch servo's idle/engage angles), and
+        // they define each bar's axis: the left edge IS idle, the right edge IS max.
+        // A and B are zone boundaries that live inside them.
+        // Change them on the NVS Config page, not this one.
+        let extents = { hIdle: 0, hMax: 4095, sIdle: 0, sMax: 180 };
+
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
         function loadConfig() {
             fetch('/configData')
                 .then(r => r.json())
                 .then(cfg => {
-                    // Load piecewise values
-                    const hA = cfg.hallBiteStart ?? 1000;
-                    const hB = cfg.hallBiteEnd ?? 3000;
-                    const sA = cfg.servoBiteStart ?? 98;
-                    const sB = cfg.servoBiteEnd ?? 115;
+                    // Travel extents. Ordered low..high because a servo may be set up
+                    // to travel in either direction (idle angle above or below engage).
+                    const hLo = cfg.hallMin ?? 0;
+                    const hHi = cfg.hallMax ?? 4095;
+                    const sLo = cfg.clutchIdlePos ?? 0;
+                    const sHi = cfg.clutchFullyPull ?? 180;
+                    extents = {
+                        hIdle: Math.min(hLo, hHi), hMax: Math.max(hLo, hHi),
+                        sIdle: Math.min(sLo, sHi), sMax: Math.max(sLo, sHi)
+                    };
+                    applyExtents();
+
+                    // Piecewise values, clamped into the travel range in case the
+                    // stored zone predates a narrower calibration.
+                    const hA = clamp(cfg.hallBiteStart  ?? extents.hIdle, extents.hIdle, extents.hMax);
+                    const hB = clamp(cfg.hallBiteEnd    ?? extents.hMax,  extents.hIdle, extents.hMax);
+                    const sA = clamp(cfg.servoBiteStart ?? extents.sIdle, extents.sIdle, extents.sMax);
+                    const sB = clamp(cfg.servoBiteEnd   ?? extents.sMax,  extents.sIdle, extents.sMax);
                     const blend = cfg.pwBlend ?? 120;
 
                     originalValues = { hA, hB, sA, sB, blend };
@@ -412,6 +518,25 @@
                     disableSaveIfUnchanged();
                 })
                 .catch(e => console.error('Config load error:', e));
+        }
+
+        // Push the extents onto the sliders so the browser itself stops A going below
+        // idle or B going above max, and show them at the ends of each bar.
+        function applyExtents() {
+            ['hallSliderA', 'hallSliderB'].forEach(id => {
+                const el = document.getElementById(id);
+                el.min = extents.hIdle;
+                el.max = extents.hMax;
+            });
+            ['servoSliderA', 'servoSliderB'].forEach(id => {
+                const el = document.getElementById(id);
+                el.min = extents.sIdle;
+                el.max = extents.sMax;
+            });
+            document.getElementById('hallIdleLabel').textContent  = extents.hIdle;
+            document.getElementById('hallMaxLabel').textContent   = extents.hMax;
+            document.getElementById('servoIdleLabel').textContent = extents.sIdle + '°';
+            document.getElementById('servoMaxLabel').textContent  = extents.sMax + '°';
         }
 
         function updateHallA(val) {
@@ -472,28 +597,88 @@
             disableSaveIfUnchanged();
         }
 
-        // Markers sit at a percentage of the bar width so they track their slider
-        // thumb. These maxima mirror the slider min/max attributes in the HTML.
-        const HALL_MAX = 4095;
-        const SERVO_MAX = 180;
+        const THUMB_W = 8;   // must match the ::-*-thumb width in the CSS
 
-        function placeMarker(id, value, max) {
-            document.getElementById(id).style.left = (value / max) * 100 + '%';
+        // Fraction along a bar whose axis runs idle..max, not 0..max.
+        // A range thumb never reaches the track's outer edges — the browser insets it
+        // by half its width at each end. The markers, the zone fill and the connector
+        // lines all anchor to a thumb, so they need the same inset maths or they drift
+        // off it by up to THUMB_W/2 towards the extremes.
+        function thumbFrac(value, lo, hi, trackW) {
+            const f = clamp((value - lo) / ((hi - lo) || 1), 0, 1);
+            if (!trackW) return f;
+            return (THUMB_W / 2 + f * (trackW - THUMB_W)) / trackW;
+        }
+
+        // Plain fraction with no thumb inset — for the live puck, which is an
+        // indicator rather than a draggable thumb and so spans the full bar.
+        function valueFrac(value, lo, hi) {
+            return clamp((value - lo) / ((hi - lo) || 1), 0, 1);
+        }
+
+        // Positions both markers and the shaded A-to-B band for one bar.
+        function paintBar(barId, aMarkerId, bMarkerId, fillId, a, b, lo, hi) {
+            const trackW = document.getElementById(barId).getBoundingClientRect().width;
+            const aPct = thumbFrac(a, lo, hi, trackW) * 100;
+            const bPct = thumbFrac(b, lo, hi, trackW) * 100;
+            document.getElementById(aMarkerId).style.left = aPct + '%';
+            document.getElementById(bMarkerId).style.left = bPct + '%';
+            const fill = document.getElementById(fillId);
+            fill.style.left = aPct + '%';
+            fill.style.width = (bPct - aPct) + '%';
+        }
+
+        // Connector lines run from the hall bar's lower edge to the servo bar's upper
+        // edge, A to A and B to B. Measured live because both bars are fluid width.
+        function drawZoneLinks() {
+            const wrap = document.getElementById('mapWrap');
+            const hallBar = document.getElementById('hallBarContainer');
+            const servoBar = document.getElementById('servoBarContainer');
+            if (!wrap || !hallBar || !servoBar) return;
+
+            const w = wrap.getBoundingClientRect();
+            const h = hallBar.getBoundingClientRect();
+            const s = servoBar.getBoundingClientRect();
+
+            function setLink(id, hallVal, servoVal) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.setAttribute('x1', (h.left - w.left) + thumbFrac(hallVal, extents.hIdle, extents.hMax, h.width) * h.width);
+                el.setAttribute('y1', h.bottom - w.top);
+                el.setAttribute('x2', (s.left - w.left) + thumbFrac(servoVal, extents.sIdle, extents.sMax, s.width) * s.width);
+                el.setAttribute('y2', s.top - w.top);
+            }
+
+            setLink('linkA', currentValues.hA, currentValues.sA);
+            setLink('linkB', currentValues.hB, currentValues.sB);
         }
 
         function updateHallLabels() {
             document.getElementById('hallALabel').textContent = currentValues.hA;
             document.getElementById('hallBLabel').textContent = currentValues.hB;
-            placeMarker('hallAMarker', currentValues.hA, HALL_MAX);
-            placeMarker('hallBMarker', currentValues.hB, HALL_MAX);
+            paintBar('hallBarContainer', 'hallAMarker', 'hallBMarker', 'hallZoneFill',
+                     currentValues.hA, currentValues.hB, extents.hIdle, extents.hMax);
+            drawZoneLinks();
         }
 
         function updateServoLabels() {
             document.getElementById('servoALabel').textContent = currentValues.sA + '°';
             document.getElementById('servoBLabel').textContent = currentValues.sB + '°';
-            placeMarker('servoAMarker', currentValues.sA, SERVO_MAX);
-            placeMarker('servoBMarker', currentValues.sB, SERVO_MAX);
+            paintBar('servoBarContainer', 'servoAMarker', 'servoBMarker', 'servoZoneFill',
+                     currentValues.sA, currentValues.sB, extents.sIdle, extents.sMax);
+            drawZoneLinks();
         }
+
+        // Geometry depends on measured widths, so redo it once fonts/layout settle
+        // and again whenever the viewport changes.
+        window.addEventListener('load', function () {
+            updateHallLabels();
+            updateServoLabels();
+        });
+        window.addEventListener('resize', function () {
+            updateHallLabels();
+            updateServoLabels();
+        });
 
         function updateBlendLabel() {
             document.getElementById('blendLabel').textContent = currentValues.blend;
@@ -514,7 +699,9 @@
                 .then(d => {
                     const val = d.hallValue || 0;
                     document.getElementById('hallLiveValue').textContent = val;
-                    const pct = (val / 4095) * 100;
+                    // Pinned to the bar ends if the reading falls outside the
+                    // calibrated travel, rather than flying off the bar.
+                    const pct = valueFrac(val, extents.hIdle, extents.hMax) * 100;
                     document.getElementById('hallPuck').style.left = pct + '%';
                 })
                 .catch(e => console.error('Sensor data error:', e));
@@ -527,74 +714,10 @@
                     const volts = d.clutchVoltage || 0;
                     const deg = d.servoPosition || 0;
                     document.getElementById('servoLiveValue').textContent = volts.toFixed(2) + ' V (' + deg.toFixed(0) + '°)';
-                    const pct = (deg / 180) * 100;
+                    const pct = valueFrac(deg, extents.sIdle, extents.sMax) * 100;
                     document.getElementById('servoPuck').style.left = pct + '%';
                 })
                 .catch(e => console.error('Sensor data error:', e));
-        }
-
-        function setHallIdle() {
-            fetch('/sensorData')
-                .then(r => r.json())
-                .then(d => {
-                    const val = d.hallValue || 0;
-                    const b = parseInt(document.getElementById('hallSliderB').value);
-                    if (val < b) {
-                        document.getElementById('hallSliderA').value = val;
-                        updateHallA(val);
-                    } else {
-                        alert('Hall value must be less than B slider');
-                    }
-                })
-                .catch(e => alert('Failed to read sensor'));
-        }
-
-        function setHallMax() {
-            fetch('/sensorData')
-                .then(r => r.json())
-                .then(d => {
-                    const val = d.hallValue || 0;
-                    const a = parseInt(document.getElementById('hallSliderA').value);
-                    if (val > a) {
-                        document.getElementById('hallSliderB').value = val;
-                        updateHallB(val);
-                    } else {
-                        alert('Hall value must be greater than A slider');
-                    }
-                })
-                .catch(e => alert('Failed to read sensor'));
-        }
-
-        function setServoIdle() {
-            fetch('/sensorData')
-                .then(r => r.json())
-                .then(d => {
-                    const deg = Math.round(d.servoPosition || 0);
-                    const b = parseInt(document.getElementById('servoSliderB').value);
-                    if (deg < b) {
-                        document.getElementById('servoSliderA').value = deg;
-                        updateServoA(deg);
-                    } else {
-                        alert('Servo position must be less than B slider');
-                    }
-                })
-                .catch(e => alert('Failed to read sensor'));
-        }
-
-        function setServoMax() {
-            fetch('/sensorData')
-                .then(r => r.json())
-                .then(d => {
-                    const deg = Math.round(d.servoPosition || 0);
-                    const a = parseInt(document.getElementById('servoSliderA').value);
-                    if (deg > a) {
-                        document.getElementById('servoSliderB').value = deg;
-                        updateServoB(deg);
-                    } else {
-                        alert('Servo position must be greater than A slider');
-                    }
-                })
-                .catch(e => alert('Failed to read sensor'));
         }
 
         function toggleServoControl() {

@@ -21,7 +21,38 @@ expected, check `git branch -r` for stray branches before concluding work is mis
 
 ## Web UI
 
-Pages live in `src/main_node/data/`. Deploy changes with PlatformIO **Upload Filesystem Image** — no recompile needed.
+### Two copies, two deploy paths
+
+Pages live in `src/main_node/data/`, with a **byte-identical copy** in
+`src/main_node_integratedweb/data/` that the embedded build compiles into the firmware
+via `board_build.embed_txtfiles`. **Edit one, then copy it to the other.**
+
+| Env | Serves pages from | Deploy |
+|---|---|---|
+| `main_node` | LittleFS | **Upload Filesystem Image** — no recompile |
+| `main_node_integratedweb` | firmware image | full rebuild + **Upload** |
+
+These are not interchangeable. Flashing `main_node` without also running Upload
+Filesystem Image leaves the old pages in place, which reads exactly like "my changes
+didn't apply".
+
+The two directories drifted once and it was expensive: the embedded `calibration.html`
+had been split to load a `/calibration.js` that was never created and never routed, so
+it silently lost ~760 lines of JavaScript. The embedded build served a dead page while
+LittleFS served a working one. If a page misbehaves on only one env, diff the two
+copies first.
+
+### Embedded build gotchas (`main_node_integratedweb`)
+
+- Needs `-DWEBINTERFACE_USE_EMBEDDED` in `build_flags`. Without it the build compiles
+  the LittleFS path instead and serves nothing — `embed_txtfiles` alone does nothing.
+- objcopy derives symbol names from the **file path**, so the externs are
+  `_binary_src_main_node_integratedweb_data_<name>_html_start` / `_end`. Moving or
+  renaming that directory renames every symbol.
+- Serve embedded bytes with `setContentLength()` + `sendContent()`. `sendHeader()`
+  appends rather than replaces, and `send()` adds its own `Content-Length`, so setting
+  it by hand emits two conflicting values and browsers reject the page. JSON endpoints
+  are unaffected, so the tell is live data working while no page loads.
 
 ### Page roles
 
@@ -30,12 +61,14 @@ Pages live in `src/main_node/data/`. Deploy changes with PlatformIO **Upload Fil
 | `index.html` | Live status, gauges, bite-point voltage only. No config forms. |
 | `calibration.html` | Live testing/discovery wizard. No NVS writes except piecewise zone. |
 | `nvsconfig.html` | Single authority for all NVS saves. |
+| `piecewise.html` | Visual hall/servo zone editor. Reads travel extents; writes only the piecewise zone. |
 
 ### Nav bar
-All three pages share the same 3-button flex row at the top:
+All four pages share the same 4-button flex row at the top, **in this order**:
 - **Home** — `#2196F3` blue
 - **Calibration** — `#FF9800` orange
 - **NVS Config** — `#9C27B0` purple
+- **Piecewise** — `#4CAF50` green
 
 Current page button is muted (`opacity:0.5; pointer-events:none;`).
 
