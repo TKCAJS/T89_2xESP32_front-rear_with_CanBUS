@@ -270,6 +270,11 @@
                     <span class="bar-label-left">Live Value</span>
                     <span id="hallLiveValue">--</span>
                 </div>
+                <div class="slider-labels" style="margin-bottom:8px;">
+                    <span>A: <strong id="hallALabel">1000</strong></span>
+                    <span style="flex:1;"></span>
+                    <span>B: <strong id="hallBLabel">3000</strong></span>
+                </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                     <button class="btn-small btn-idle" onclick="setHallIdle()">← Idle</button>
                     <div class="bar-container" id="hallBarContainer" style="flex:1;">
@@ -280,12 +285,6 @@
                                oninput="updateHallB(this.value)">
                     </div>
                     <button class="btn-small btn-max" onclick="setHallMax()">Max →</button>
-                </div>
-                <div class="slider-labels">
-                    <span>0</span>
-                    <span>A: <strong id="hallALabel">1000</strong></span>
-                    <span>B: <strong id="hallBLabel">3000</strong></span>
-                    <span>4095</span>
                 </div>
             </div>
         </div>
@@ -302,6 +301,11 @@
                     <span class="bar-label-left">Live Value</span>
                     <span id="servoLiveValue">-- V</span>
                 </div>
+                <div class="slider-labels" style="margin-bottom:8px;">
+                    <span>A: <strong id="servoALabel">98°</strong></span>
+                    <span style="flex:1;"></span>
+                    <span>B: <strong id="servoBLabel">115°</strong></span>
+                </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                     <button class="btn-small btn-idle" onclick="setServoIdle()">← Idle</button>
                     <div class="bar-container" id="servoBarContainer" style="flex:1;">
@@ -312,12 +316,6 @@
                                oninput="updateServoB(this.value)">
                     </div>
                     <button class="btn-small btn-max" onclick="setServoMax()">Max →</button>
-                </div>
-                <div class="slider-labels">
-                    <span>0°</span>
-                    <span>A: <strong id="servoALabel">98°</strong></span>
-                    <span>B: <strong id="servoBLabel">115°</strong></span>
-                    <span>180°</span>
                 </div>
             </div>
         </div>
