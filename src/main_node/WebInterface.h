@@ -8,13 +8,64 @@
 #include "MainCan.h"
 #include "CalConfig.h"
 
+// Define embedded file symbols if using embedded web pages
+#ifdef WEBINTERFACE_USE_EMBEDDED
+  extern const uint8_t _binary_index_html_start[];
+  extern const uint8_t _binary_index_html_end[];
+  extern const uint8_t _binary_calibration_html_start[];
+  extern const uint8_t _binary_calibration_html_end[];
+  extern const uint8_t _binary_nvsconfig_html_start[];
+  extern const uint8_t _binary_nvsconfig_html_end[];
+#endif
+
 class WebInterface {
 private:
     WebServer* server;
     
 public:
     WebInterface(WebServer* webServer) : server(webServer) {}
-    
+
+private:
+    void serveEmbeddedFile(const uint8_t* dataStart, const uint8_t* dataEnd, const char* filename, const char* mimetype) {
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        size_t size = dataEnd - dataStart;
+        server->sendHeader("Content-Length", String(size));
+        server->send(200, mimetype, "");
+        server->client().write(dataStart, size);
+        Serial.println(String("Served ") + filename + " from embedded data");
+      #else
+        server->send(404, "text/plain", String("File not found: ") + filename);
+      #endif
+    }
+
+    void servePage(const char* filename, const uint8_t* embeddedStart, const uint8_t* embeddedEnd) {
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        serveEmbeddedFile(embeddedStart, embeddedEnd, filename, "text/html");
+      #else
+        if (LittleFS.exists(filename)) {
+            File file = LittleFS.open(filename, "r");
+            if (file) {
+                server->streamFile(file, "text/html");
+                file.close();
+                Serial.println(String("Served ") + filename + " from LittleFS");
+            } else {
+                server->send(500, "text/plain", String("Error reading ") + filename);
+                Serial.println(String("Error: Could not read ") + filename);
+            }
+        } else {
+            server->send(404, "text/html",
+                "<html><body style='background:#1a1a1a;color:white;font-family:Arial;text-align:center;padding:50px;'>"
+                "<h1>File Not Found</h1>"
+                "<p>" + String(filename) + " not found</p>"
+                "<p>Please upload the file to the ESP32 file system</p>"
+                "<a href='/' style='color:#4CAF50;'>Return to Main Page</a>"
+                "</body></html>");
+            Serial.println(String("Error: ") + filename + " not found in LittleFS");
+        }
+      #endif
+    }
+
+public:
     void setupRoutes() {
         server->on("/", HTTP_GET, [this]() { this->handleRoot(); });
         server->on("/index.html", HTTP_GET, [this]() { this->handleRoot(); });
@@ -35,73 +86,23 @@ public:
     }
     
     void handleRoot() {
-        if (LittleFS.exists("/index.html")) {
-            File file = LittleFS.open("/index.html", "r");
-            if (file) {
-                server->streamFile(file, "text/html");
-                file.close();
-                Serial.println("Served index.html from LittleFS");
-            } else {
-                server->send(500, "text/plain", "Error reading index.html file");
-                Serial.println("Error: Could not read index.html file");
-            }
-        } else {
-            server->send(404, "text/html", 
-                "<html><body style='background:#1a1a1a;color:white;font-family:Arial;text-align:center;padding:50px;'>"
-                "<h1>File Not Found</h1>"
-                "<p>index.html not found in LittleFS</p>"
-                "<p>Please upload the file to the ESP32 file system</p>"
-                "<a href='/hello' style='color:#4CAF50;'>Hello Page</a> | "
-                "<a href='/calibration' style='color:#4CAF50;'>Calibration Page</a>"
-                "</body></html>");
-            Serial.println("Error: index.html not found in LittleFS");
-        }
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        servePage("/index.html", _binary_index_html_start, _binary_index_html_end);
+      #else
+        servePage("/index.html", nullptr, nullptr);
+      #endif
     }
     
     void handleHelloPage() {
-        if (LittleFS.exists("/hello.html")) {
-            File file = LittleFS.open("/hello.html", "r");
-            if (file) {
-                server->streamFile(file, "text/html");
-                file.close();
-                Serial.println("Served hello.html from LittleFS");
-            } else {
-                server->send(500, "text/plain", "Error reading hello.html file");
-                Serial.println("Error: Could not read hello.html file");
-            }
-        } else {
-            server->send(404, "text/html", 
-                "<html><body style='background:#1a1a1a;color:white;font-family:Arial;text-align:center;padding:50px;'>"
-                "<h1>File Not Found</h1>"
-                "<p>hello.html not found in LittleFS</p>"
-                "<p>Please upload the file to the ESP32 file system</p>"
-                "<a href='/' style='color:#4CAF50;'>Return to Main Page</a>"
-                "</body></html>");
-            Serial.println("Error: hello.html not found in LittleFS");
-        }
+        servePage("/hello.html", nullptr, nullptr);
     }
 
     void handleCalibrationPage() {
-        if (LittleFS.exists("/calibration.html")) {
-            File file = LittleFS.open("/calibration.html", "r");
-            if (file) {
-                server->streamFile(file, "text/html");
-                file.close();
-                Serial.println("Served calibration.html from LittleFS");
-            } else {
-                server->send(500, "text/plain", "Error reading calibration.html file");
-                Serial.println("Error: Could not read calibration.html file");
-            }
-        } else {
-            server->send(404, "text/html", 
-                "<html><body style='background:#1a1a1a;color:white;font-family:Arial;text-align:center;padding:50px;'>"
-                "<h1>File Not Found</h1>"
-                "<p>calibration.html not found in LittleFS</p>"
-                "<p>Please upload the file to the ESP32 file system</p>"
-                "<a href='/' style='color:#4CAF50;'>Return to Main Page</a>"
-                "</body></html>");
-            Serial.println("Error: calibration.html not found in LittleFS");
-        }
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        servePage("/calibration.html", _binary_calibration_html_start, _binary_calibration_html_end);
+      #else
+        servePage("/calibration.html", nullptr, nullptr);
+      #endif
     }
     
     void handleUpdate();
@@ -617,6 +618,9 @@ void WebInterface::handleApiDefaults() {
 // GET /nvsconfig — serve nvsconfig.html from LittleFS.
 // Upload instruction: PlatformIO → "Upload Filesystem Image" (env:main_node)
 void WebInterface::handleNvsConfigPage() {
+  #ifdef WEBINTERFACE_USE_EMBEDDED
+    servePage("/nvsconfig.html", _binary_nvsconfig_html_start, _binary_nvsconfig_html_end);
+  #else
     if (LittleFS.exists("/nvsconfig.html")) {
         File file = LittleFS.open("/nvsconfig.html", "r");
         if (file) {
@@ -628,6 +632,7 @@ void WebInterface::handleNvsConfigPage() {
     server->send(404, "text/plain",
         "nvsconfig.html not found in LittleFS.\n"
         "Run PlatformIO 'Upload Filesystem Image' (env: main_node) to upload the data/ folder.");
+  #endif
 }
 
 #endif
