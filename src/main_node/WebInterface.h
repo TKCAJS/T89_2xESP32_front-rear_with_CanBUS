@@ -10,14 +10,14 @@
 
 // Define embedded file symbols if using embedded web pages
 #ifdef WEBINTERFACE_USE_EMBEDDED
-  extern const uint8_t _binary_index_html_start[];
-  extern const uint8_t _binary_index_html_end[];
-  extern const uint8_t _binary_calibration_html_start[];
-  extern const uint8_t _binary_calibration_html_end[];
-  extern const uint8_t _binary_nvsconfig_html_start[];
-  extern const uint8_t _binary_nvsconfig_html_end[];
-  extern const uint8_t _binary_piecewise_html_start[];
-  extern const uint8_t _binary_piecewise_html_end[];
+  extern const uint8_t _binary_src_main_node_integratedweb_data_index_html_start[];
+  extern const uint8_t _binary_src_main_node_integratedweb_data_index_html_end[];
+  extern const uint8_t _binary_src_main_node_integratedweb_data_calibration_html_start[];
+  extern const uint8_t _binary_src_main_node_integratedweb_data_calibration_html_end[];
+  extern const uint8_t _binary_src_main_node_integratedweb_data_nvsconfig_html_start[];
+  extern const uint8_t _binary_src_main_node_integratedweb_data_nvsconfig_html_end[];
+  extern const uint8_t _binary_src_main_node_integratedweb_data_piecewise_html_start[];
+  extern const uint8_t _binary_src_main_node_integratedweb_data_piecewise_html_end[];
 #endif
 
 class WebInterface {
@@ -30,11 +30,23 @@ public:
 private:
     void serveEmbeddedFile(const uint8_t* dataStart, const uint8_t* dataEnd, const char* filename, const char* mimetype) {
       #ifdef WEBINTERFACE_USE_EMBEDDED
+        if (!dataStart || dataEnd <= dataStart) {
+            server->send(404, "text/plain", String("Not embedded: ") + filename);
+            Serial.println(String("Error: ") + filename + " has no embedded data");
+            return;
+        }
+        // embed_txtfiles appends a NUL terminator that is not part of the document.
         size_t size = dataEnd - dataStart;
-        server->sendHeader("Content-Length", String(size));
+        if (dataStart[size - 1] == 0) size--;
+
+        // setContentLength() must own the Content-Length header. Setting it by hand with
+        // sendHeader() does NOT replace anything — sendHeader appends, and _prepareHeader
+        // then appends its own Content-Length too. Two conflicting values in one response
+        // make browsers reject the whole page.
+        server->setContentLength(size);
         server->send(200, mimetype, "");
-        server->client().write(dataStart, size);
-        Serial.println(String("Served ") + filename + " from embedded data");
+        server->sendContent(reinterpret_cast<const char*>(dataStart), size);
+        Serial.println(String("Served ") + filename + " from embedded data, " + size + " bytes");
       #else
         server->send(404, "text/plain", String("File not found: ") + filename);
       #endif
@@ -90,7 +102,7 @@ public:
     
     void handleRoot() {
       #ifdef WEBINTERFACE_USE_EMBEDDED
-        servePage("/index.html", _binary_index_html_start, _binary_index_html_end);
+        servePage("/index.html", _binary_src_main_node_integratedweb_data_index_html_start, _binary_src_main_node_integratedweb_data_index_html_end);
       #else
         servePage("/index.html", nullptr, nullptr);
       #endif
@@ -102,7 +114,7 @@ public:
 
     void handleCalibrationPage() {
       #ifdef WEBINTERFACE_USE_EMBEDDED
-        servePage("/calibration.html", _binary_calibration_html_start, _binary_calibration_html_end);
+        servePage("/calibration.html", _binary_src_main_node_integratedweb_data_calibration_html_start, _binary_src_main_node_integratedweb_data_calibration_html_end);
       #else
         servePage("/calibration.html", nullptr, nullptr);
       #endif
@@ -110,7 +122,7 @@ public:
 
     void handlePiecewisePage() {
       #ifdef WEBINTERFACE_USE_EMBEDDED
-        servePage("/piecewise.html", _binary_piecewise_html_start, _binary_piecewise_html_end);
+        servePage("/piecewise.html", _binary_src_main_node_integratedweb_data_piecewise_html_start, _binary_src_main_node_integratedweb_data_piecewise_html_end);
       #else
         servePage("/piecewise.html", nullptr, nullptr);
       #endif
@@ -630,7 +642,7 @@ void WebInterface::handleApiDefaults() {
 // Upload instruction: PlatformIO → "Upload Filesystem Image" (env:main_node)
 void WebInterface::handleNvsConfigPage() {
   #ifdef WEBINTERFACE_USE_EMBEDDED
-    servePage("/nvsconfig.html", _binary_nvsconfig_html_start, _binary_nvsconfig_html_end);
+    servePage("/nvsconfig.html", _binary_src_main_node_integratedweb_data_nvsconfig_html_start, _binary_src_main_node_integratedweb_data_nvsconfig_html_end);
   #else
     if (LittleFS.exists("/nvsconfig.html")) {
         File file = LittleFS.open("/nvsconfig.html", "r");

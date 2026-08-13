@@ -64,15 +64,17 @@
         .bar-group {
             margin-bottom: 32px;
         }
-        .bar-label {
+        /* Every bar carries floating labels both above and below it, so reserve
+           clearance on both sides. */
+        .bar-row {
             display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 13px;
-            color: #aaa;
+            gap: 8px;
+            align-items: center;
+            margin-top: 30px;
+            margin-bottom: 30px;
         }
-        .bar-label-left { font-weight: bold; color: white; }
 
+        /* No overflow:hidden — the puck's badge has to escape the top of the bar. */
         .bar-container {
             position: relative;
             height: 48px;
@@ -82,7 +84,6 @@
             margin-bottom: 8px;
             display: flex;
             align-items: center;
-            overflow: hidden;
         }
 
         .bar-buttons {
@@ -116,16 +117,32 @@
             margin-top: 4px;
         }
 
-        /* Puck (live value indicator) */
+        /* Puck (live value indicator). The readout is nested inside so it tracks
+           the puck's left offset for free — no extra positioning in the JS. */
         .puck {
             position: absolute;
             width: 3px;
             height: 100%;
             background: #FFD700;
-            z-index: 2;
+            z-index: 4;
             pointer-events: none;
             transition: left 0.05s linear;
         }
+        .puck-value {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 3px 8px;
+            background: #FFD700;
+            color: #1a1a1a;
+            border-radius: 3px;
+            font-size: 14px;
+            font-weight: bold;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+        .puck-value.above { bottom: 100%; margin-bottom: 6px; }
+        .puck-value.below { top: 100%;    margin-top: 6px; }
 
         /* Sliders A and B (piecewise zone boundaries) */
         .slider-track {
@@ -172,13 +189,23 @@
             border: 2px solid #4CAF50;
         }
 
-        .slider-labels {
-            display: flex;
-            justify-content: space-between;
-            font-size: 11px;
-            color: #666;
-            margin-top: 4px;
+        /* A/B zone markers ride the bar at their slider positions. Hall's sit above
+           its bar and servo's below, so the gap between the two bars stays clear for
+           the A-to-A / B-to-B connector lines. Text stays upright in both. */
+        .zone-marker {
+            position: absolute;
+            left: 0;
+            transform: translateX(-50%);
+            font-size: 14px;
+            color: #aaa;
+            line-height: 1.2;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 5;
         }
+        .zone-marker strong { color: white; font-size: 16px; }
+        .zone-marker.above { bottom: 100%; margin-bottom: 6px; }
+        .zone-marker.below { top: 100%;    margin-top: 6px; }
 
         .save-button {
             background: #4CAF50;
@@ -266,19 +293,12 @@
             </p>
 
             <div class="bar-group">
-                <div class="bar-label">
-                    <span class="bar-label-left">Live Value</span>
-                    <span id="hallLiveValue">--</span>
-                </div>
-                <div class="slider-labels" style="margin-bottom:8px;">
-                    <span>A: <strong id="hallALabel">1000</strong></span>
-                    <span style="flex:1;"></span>
-                    <span>B: <strong id="hallBLabel">3000</strong></span>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;">
+                <div class="bar-row">
                     <button class="btn-small btn-idle" onclick="setHallIdle()">← Idle</button>
                     <div class="bar-container" id="hallBarContainer" style="flex:1;">
-                        <div class="puck" id="hallPuck"></div>
+                        <div class="zone-marker above" id="hallAMarker">A: <strong id="hallALabel">1000</strong></div>
+                        <div class="zone-marker above" id="hallBMarker">B: <strong id="hallBLabel">3000</strong></div>
+                        <div class="puck" id="hallPuck"><span class="puck-value below" id="hallLiveValue">--</span></div>
                         <input type="range" id="hallSliderA" min="0" max="4095" value="1000"
                                oninput="updateHallA(this.value)">
                         <input type="range" id="hallSliderB" min="0" max="4095" value="3000"
@@ -297,19 +317,12 @@
             </p>
 
             <div class="bar-group">
-                <div class="bar-label">
-                    <span class="bar-label-left">Live Value</span>
-                    <span id="servoLiveValue">-- V</span>
-                </div>
-                <div class="slider-labels" style="margin-bottom:8px;">
-                    <span>A: <strong id="servoALabel">98°</strong></span>
-                    <span style="flex:1;"></span>
-                    <span>B: <strong id="servoBLabel">115°</strong></span>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;">
+                <div class="bar-row">
                     <button class="btn-small btn-idle" onclick="setServoIdle()">← Idle</button>
                     <div class="bar-container" id="servoBarContainer" style="flex:1;">
-                        <div class="puck" id="servoPuck"></div>
+                        <div class="zone-marker below" id="servoAMarker">A: <strong id="servoALabel">98°</strong></div>
+                        <div class="zone-marker below" id="servoBMarker">B: <strong id="servoBLabel">115°</strong></div>
+                        <div class="puck" id="servoPuck"><span class="puck-value above" id="servoLiveValue">-- V</span></div>
                         <input type="range" id="servoSliderA" min="0" max="180" value="98"
                                oninput="updateServoA(this.value)">
                         <input type="range" id="servoSliderB" min="0" max="180" value="115"
@@ -459,14 +472,27 @@
             disableSaveIfUnchanged();
         }
 
+        // Markers sit at a percentage of the bar width so they track their slider
+        // thumb. These maxima mirror the slider min/max attributes in the HTML.
+        const HALL_MAX = 4095;
+        const SERVO_MAX = 180;
+
+        function placeMarker(id, value, max) {
+            document.getElementById(id).style.left = (value / max) * 100 + '%';
+        }
+
         function updateHallLabels() {
             document.getElementById('hallALabel').textContent = currentValues.hA;
             document.getElementById('hallBLabel').textContent = currentValues.hB;
+            placeMarker('hallAMarker', currentValues.hA, HALL_MAX);
+            placeMarker('hallBMarker', currentValues.hB, HALL_MAX);
         }
 
         function updateServoLabels() {
             document.getElementById('servoALabel').textContent = currentValues.sA + '°';
             document.getElementById('servoBLabel').textContent = currentValues.sB + '°';
+            placeMarker('servoAMarker', currentValues.sA, SERVO_MAX);
+            placeMarker('servoBMarker', currentValues.sB, SERVO_MAX);
         }
 
         function updateBlendLabel() {
