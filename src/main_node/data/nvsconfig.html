@@ -7,7 +7,10 @@
     <style>
         * { box-sizing: border-box; }
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #1a1a1a; color: white; }
-        .container { max-width: 620px; margin: 0 auto; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        /* Container is full width so the tab bar lines up with the other pages, but
+           this is a settings form — the form column itself stays narrow to read well. */
+        .card, .actions, #feedback, .meta, .page-sub { max-width: 620px; }
         .card {
             background: #2a2a2a;
             padding: 20px;
