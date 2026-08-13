@@ -270,16 +270,16 @@
                     <span class="bar-label-left">Live Value</span>
                     <span id="hallLiveValue">--</span>
                 </div>
-                <div style="display:flex;gap:8px;">
+                <div style="display:flex;gap:8px;align-items:center;">
                     <button class="btn-small btn-idle" onclick="setHallIdle()">← Idle</button>
+                    <div class="bar-container" id="hallBarContainer" style="flex:1;">
+                        <div class="puck" id="hallPuck"></div>
+                        <input type="range" id="hallSliderA" min="0" max="4095" value="1000"
+                               oninput="updateHallA(this.value)">
+                        <input type="range" id="hallSliderB" min="0" max="4095" value="3000"
+                               oninput="updateHallB(this.value)">
+                    </div>
                     <button class="btn-small btn-max" onclick="setHallMax()">Max →</button>
-                </div>
-                <div class="bar-container" id="hallBarContainer">
-                    <div class="puck" id="hallPuck"></div>
-                    <input type="range" id="hallSliderA" min="0" max="4095" value="1000"
-                           oninput="updateHallA(this.value)">
-                    <input type="range" id="hallSliderB" min="0" max="4095" value="3000"
-                           oninput="updateHallB(this.value)">
                 </div>
                 <div class="slider-labels">
                     <span>0</span>
@@ -302,16 +302,16 @@
                     <span class="bar-label-left">Live Value</span>
                     <span id="servoLiveValue">-- V</span>
                 </div>
-                <div style="display:flex;gap:8px;">
+                <div style="display:flex;gap:8px;align-items:center;">
                     <button class="btn-small btn-idle" onclick="setServoIdle()">← Idle</button>
+                    <div class="bar-container" id="servoBarContainer" style="flex:1;">
+                        <div class="puck" id="servoPuck"></div>
+                        <input type="range" id="servoSliderA" min="0" max="180" value="98"
+                               oninput="updateServoA(this.value)">
+                        <input type="range" id="servoSliderB" min="0" max="180" value="115"
+                               oninput="updateServoB(this.value)">
+                    </div>
                     <button class="btn-small btn-max" onclick="setServoMax()">Max →</button>
-                </div>
-                <div class="bar-container" id="servoBarContainer">
-                    <div class="puck" id="servoPuck"></div>
-                    <input type="range" id="servoSliderA" min="0" max="180" value="98"
-                           oninput="updateServoA(this.value)">
-                    <input type="range" id="servoSliderB" min="0" max="180" value="115"
-                           oninput="updateServoB(this.value)">
                 </div>
                 <div class="slider-labels">
                     <span>0°</span>
