@@ -21,34 +21,38 @@ expected, check `git branch -r` for stray branches before concluding work is mis
 
 ## Web UI
 
-### Two copies, two deploy paths
+### One copy of the pages, two envs
 
-Pages live in `src/main_node/data/`, with a **byte-identical copy** in
-`src/main_node_integratedweb/data/` that the embedded build compiles into the firmware
-via `board_build.embed_txtfiles`. **Edit one, then copy it to the other.**
+Pages live in `src/main_node/data/` — **one copy, used by both envs.**
 
 | Env | Serves pages from | Deploy |
 |---|---|---|
+| `main_node_integratedweb` | firmware image | **lead build** — rebuild + **Upload** |
 | `main_node` | LittleFS | **Upload Filesystem Image** — no recompile |
-| `main_node_integratedweb` | firmware image | full rebuild + **Upload** |
 
-These are not interchangeable. Flashing `main_node` without also running Upload
-Filesystem Image leaves the old pages in place, which reads exactly like "my changes
-didn't apply".
+`main_node_integratedweb` is the build to use. It compiles the pages into the firmware
+with `board_build.embed_txtfiles`, so a single Upload ships firmware and pages together
+and they cannot fall out of step. `main_node` is kept as the LittleFS fallback; it needs
+a separate Upload Filesystem Image, and flashing it without one leaves the old pages in
+place, which reads exactly like "my changes didn't apply".
 
-The two directories drifted once and it was expensive: the embedded `calibration.html`
-had been split to load a `/calibration.js` that was never created and never routed, so
-it silently lost ~760 lines of JavaScript. The embedded build served a dead page while
-LittleFS served a working one. If a page misbehaves on only one env, diff the two
-copies first.
+There used to be a second, duplicate copy of the pages under
+`src/main_node_integratedweb/data/` for the embedded build to compile. It drifted, and
+it was expensive: that copy of `calibration.html` had been split to load a
+`/calibration.js` that was never created and never routed, so it silently lost ~760
+lines of JavaScript — the embedded build served a dead page while LittleFS served a
+working one. Both envs now embed/serve the same directory. **Do not reintroduce a second
+copy.**
 
 ### Embedded build gotchas (`main_node_integratedweb`)
 
 - Needs `-DWEBINTERFACE_USE_EMBEDDED` in `build_flags`. Without it the build compiles
   the LittleFS path instead and serves nothing — `embed_txtfiles` alone does nothing.
 - objcopy derives symbol names from the **file path**, so the externs are
-  `_binary_src_main_node_integratedweb_data_<name>_html_start` / `_end`. Moving or
-  renaming that directory renames every symbol.
+  `_binary_src_main_node_data_<name>_html_start` / `_end`. Moving or renaming
+  `src/main_node/data/` renames every symbol and breaks the link.
+- Adding a page means three edits: the file, its `embed_txtfiles` line in
+  `platformio.ini`, and its extern pair + route in `WebInterface.h`.
 - Serve embedded bytes with `setContentLength()` + `sendContent()`. `sendHeader()`
   appends rather than replaces, and `send()` adds its own `Content-Length`, so setting
   it by hand emits two conflicting values and browsers reject the page. JSON endpoints
