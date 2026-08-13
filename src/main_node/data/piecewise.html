@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <title>T89 Piecewise Mapping</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-size: 1.6em;
+        }
+        .subtitle {
+            color: #888;
+            font-size: 0.9em;
+            margin: 0 0 24px;
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        .nav-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .nav-btn-home { background: #2196F3; color: white; }
+        .nav-btn-home:hover { background: #1976D2; }
+        .nav-btn-cal { background: #FF9800; color: white; }
+        .nav-btn-cal:hover { background: #F57C00; }
+        .nav-btn-nvs { background: #9C27B0; color: white; }
+        .nav-btn-nvs:hover { background: #7B1FA2; }
+        .nav-btn-pw { background: #4CAF50; color: white; opacity: 0.5; pointer-events: none; }
+
+        .section {
+            background: #2a2a2a;
+            padding: 24px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+        }
+        .section h2 {
+            margin: 0 0 16px;
+            font-size: 1.2em;
+            color: #4CAF50;
+        }
+
+        .bar-group {
+            margin-bottom: 32px;
+        }
+        .bar-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #aaa;
+        }
+        .bar-label-left { font-weight: bold; color: white; }
+
+        .bar-container {
+            position: relative;
+            height: 48px;
+            background: #1a1a1a;
+            border-radius: 6px;
+            border: 1px solid #444;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .bar-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .btn-small {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn-idle {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-idle:hover { background: #1976D2; }
+        .btn-max {
+            background: #F44336;
+            color: white;
+        }
+        .btn-max:hover { background: #D32F2F; }
+
+        .bar-info {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 4px;
+        }
+
+        /* Puck (live value indicator) */
+        .puck {
+            position: absolute;
+            width: 3px;
+            height: 100%;
+            background: #FFD700;
+            z-index: 2;
+            pointer-events: none;
+            transition: left 0.05s linear;
+        }
+
+        /* Sliders A and B (piecewise zone boundaries) */
+        .slider-track {
+            position: absolute;
+            width: 100%;
+            height: 48px;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            pointer-events: none;
+        }
+        input[type="range"] {
+            position: absolute;
+            width: 100%;
+            height: 48px;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            cursor: pointer;
+            z-index: 3;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+            border: 2px solid #4CAF50;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+            border: 2px solid #4CAF50;
+        }
+
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .save-button {
+            background: #4CAF50;
+            color: white;
+            padding: 14px 32px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+            transition: all 0.2s;
+        }
+        .save-button:hover:not(:disabled) { background: #45a049; }
+        .save-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .save-status {
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            text-align: center;
+            min-height: 18px;
+        }
+        .save-status.ok {
+            background: #1b3a1b;
+            color: #81C784;
+            display: none;
+        }
+        .save-status.ok.show { display: block; }
+        .save-status.error {
+            background: #3a1b1b;
+            color: #EF9A9A;
+            display: none;
+        }
+        .save-status.error.show { display: block; }
+
+        .servo-control-section {
+            background: #2a3a2a;
+            border-left-color: #FF9800;
+        }
+        .servo-control-toggle {
+            background: #FF9800;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+        .servo-control-toggle.active {
+            background: #F44336;
+        }
+        .servo-control-toggle:hover { opacity: 0.9; }
+
+        .control-status {
+            font-size: 13px;
+            color: #aaa;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Piecewise Mapping</h1>
+        <p class="subtitle">Define the biting zone and servo response curve</p>
+
+        <div class="nav-buttons">
+            <a href="/" class="nav-btn nav-btn-home">Home</a>
+            <a href="/calibration" class="nav-btn nav-btn-cal">Calibration</a>
+            <a href="/nvsconfig" class="nav-btn nav-btn-nvs">NVS Config</a>
+            <button class="nav-btn nav-btn-pw">Piecewise</button>
+        </div>
+
+        <!-- Hall Sensor Biting Zone -->
+        <div class="section">
+            <h2>Hall Sensor Biting Zone (ADC 0–4095)</h2>
+            <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
+                Define which hall range maps to the clutch biting zone. The sliders A (left) and B (right) mark the zone boundaries.
+            </p>
+
+            <div class="bar-group">
+                <div class="bar-label">
+                    <span class="bar-label-left">Live Value</span>
+                    <span id="hallLiveValue">--</span>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-small btn-idle" onclick="setHallIdle()">← Idle</button>
+                    <button class="btn-small btn-max" onclick="setHallMax()">Max →</button>
+                </div>
+                <div class="bar-container" id="hallBarContainer">
+                    <div class="puck" id="hallPuck"></div>
+                    <input type="range" id="hallSliderA" min="0" max="4095" value="1000"
+                           oninput="updateHallA(this.value)">
+                    <input type="range" id="hallSliderB" min="0" max="4095" value="3000"
+                           oninput="updateHallB(this.value)">
+                </div>
+                <div class="slider-labels">
+                    <span>0</span>
+                    <span>A: <strong id="hallALabel">1000</strong></span>
+                    <span>B: <strong id="hallBLabel">3000</strong></span>
+                    <span>4095</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Servo Endpoint Biting Zone -->
+        <div class="section">
+            <h2>Servo Endpoint Biting Zone (0–180°)</h2>
+            <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
+                Servo angles that correspond to the hall biting zone. Sliders map to Hall's A and B. A cannot cross B.
+            </p>
+
+            <div class="bar-group">
+                <div class="bar-label">
+                    <span class="bar-label-left">Live Value</span>
+                    <span id="servoLiveValue">-- V</span>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-small btn-idle" onclick="setServoIdle()">← Idle</button>
+                    <button class="btn-small btn-max" onclick="setServoMax()">Max →</button>
+                </div>
+                <div class="bar-container" id="servoBarContainer">
+                    <div class="puck" id="servoPuck"></div>
+                    <input type="range" id="servoSliderA" min="0" max="180" value="98"
+                           oninput="updateServoA(this.value)">
+                    <input type="range" id="servoSliderB" min="0" max="180" value="115"
+                           oninput="updateServoB(this.value)">
+                </div>
+                <div class="slider-labels">
+                    <span>0°</span>
+                    <span>A: <strong id="servoALabel">98°</strong></span>
+                    <span>B: <strong id="servoBLabel">115°</strong></span>
+                    <span>180°</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Corner Smoothing -->
+        <div class="section">
+            <h2>Corner Smoothing</h2>
+            <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
+                Blend width at the zone boundaries (ADC counts). Higher = smoother transitions. 0 = sharp corners.
+            </p>
+            <div style="display:flex;gap:16px;align-items:center;">
+                <input type="number" id="pwBlend" min="0" max="2000" value="120"
+                       style="width:120px;padding:8px;background:#1a1a1a;color:white;border:1px solid #555;border-radius:4px;font-size:14px;"
+                       oninput="updateBlend(this.value)">
+                <span style="color:#aaa;font-size:13px;">ADC counts (0–2000)</span>
+                <span id="blendLabel" style="color:#4CAF50;font-weight:bold;">120</span>
+            </div>
+        </div>
+
+        <!-- Servo Control (Manual Test) -->
+        <div class="section servo-control-section">
+            <h2>Servo Control (Test Only)</h2>
+            <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
+                Enable to directly control the servo with a slider. Use for testing. Disabled when paddles control servo.
+            </p>
+            <button class="servo-control-toggle" id="servoToggle" onclick="toggleServoControl()">
+                Enable Servo Control
+            </button>
+            <div class="control-status" id="controlStatus">Paddle controls servo</div>
+
+            <div id="servoControlBar" style="display:none;">
+                <div style="display:flex;align-items:center;gap:16px;">
+                    <span style="color:#aaa;font-size:13px;">0°</span>
+                    <input type="range" id="servoControlSlider" min="0" max="180" value="90"
+                           style="flex:1;cursor:pointer;"
+                           oninput="updateServoControl(this.value)">
+                    <span style="color:#aaa;font-size:13px;">180°</span>
+                </div>
+                <div style="text-align:center;margin-top:12px;color:#FF9800;font-weight:bold;">
+                    Position: <span id="servoControlLabel">90</span>°
+                </div>
+            </div>
+        </div>
+
+        <!-- Save -->
+        <button class="save-button" id="saveBtn" onclick="saveValues()" disabled>
+            Save to Memory
+        </button>
+        <div class="save-status ok" id="saveOk">✓ Saved successfully</div>
+        <div class="save-status error" id="saveError">✗ Save failed</div>
+    </div>
+
+    <script>
+        let originalValues = {};
+        let currentValues = {};
+        let servoControlActive = false;
+
+        function loadConfig() {
+            fetch('/configData')
+                .then(r => r.json())
+                .then(cfg => {
+                    // Load piecewise values
+                    const hA = cfg.hallBiteStart ?? 1000;
+                    const hB = cfg.hallBiteEnd ?? 3000;
+                    const sA = cfg.servoBiteStart ?? 98;
+                    const sB = cfg.servoBiteEnd ?? 115;
+                    const blend = cfg.pwBlend ?? 120;
+
+                    originalValues = { hA, hB, sA, sB, blend };
+                    currentValues = { hA, hB, sA, sB, blend };
+
+                    document.getElementById('hallSliderA').value = hA;
+                    document.getElementById('hallSliderB').value = hB;
+                    document.getElementById('servoSliderA').value = sA;
+                    document.getElementById('servoSliderB').value = sB;
+                    document.getElementById('pwBlend').value = blend;
+
+                    updateHallLabels();
+                    updateServoLabels();
+                    updateBlendLabel();
+                    disableSaveIfUnchanged();
+                })
+                .catch(e => console.error('Config load error:', e));
+        }
+
+        function updateHallA(val) {
+            const b = parseInt(document.getElementById('hallSliderB').value);
+            const a = parseInt(val);
+            if (a >= b) {
+                document.getElementById('hallSliderA').value = b - 1;
+                return;
+            }
+            currentValues.hA = a;
+            updateHallLabels();
+            updateLiveHall();
+            disableSaveIfUnchanged();
+        }
+
+        function updateHallB(val) {
+            const a = parseInt(document.getElementById('hallSliderA').value);
+            const b = parseInt(val);
+            if (b <= a) {
+                document.getElementById('hallSliderB').value = a + 1;
+                return;
+            }
+            currentValues.hB = b;
+            updateHallLabels();
+            updateLiveHall();
+            disableSaveIfUnchanged();
+        }
+
+        function updateServoA(val) {
+            const b = parseInt(document.getElementById('servoSliderB').value);
+            const a = parseInt(val);
+            if (a >= b) {
+                document.getElementById('servoSliderA').value = b - 1;
+                return;
+            }
+            currentValues.sA = a;
+            updateServoLabels();
+            updateLiveServo();
+            disableSaveIfUnchanged();
+        }
+
+        function updateServoB(val) {
+            const a = parseInt(document.getElementById('servoSliderA').value);
+            const b = parseInt(val);
+            if (b <= a) {
+                document.getElementById('servoSliderB').value = a + 1;
+                return;
+            }
+            currentValues.sB = b;
+            updateServoLabels();
+            updateLiveServo();
+            disableSaveIfUnchanged();
+        }
+
+        function updateBlend(val) {
+            currentValues.blend = parseInt(val);
+            updateBlendLabel();
+            disableSaveIfUnchanged();
+        }
+
+        function updateHallLabels() {
+            document.getElementById('hallALabel').textContent = currentValues.hA;
+            document.getElementById('hallBLabel').textContent = currentValues.hB;
+        }
+
+        function updateServoLabels() {
+            document.getElementById('servoALabel').textContent = currentValues.sA + '°';
+            document.getElementById('servoBLabel').textContent = currentValues.sB + '°';
+        }
+
+        function updateBlendLabel() {
+            document.getElementById('blendLabel').textContent = currentValues.blend;
+        }
+
+        function disableSaveIfUnchanged() {
+            const changed = originalValues.hA !== currentValues.hA ||
+                           originalValues.hB !== currentValues.hB ||
+                           originalValues.sA !== currentValues.sA ||
+                           originalValues.sB !== currentValues.sB ||
+                           originalValues.blend !== currentValues.blend;
+            document.getElementById('saveBtn').disabled = !changed;
+        }
+
+        function updateLiveHall() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(d => {
+                    const val = d.hallValue || 0;
+                    document.getElementById('hallLiveValue').textContent = val;
+                    const pct = (val / 4095) * 100;
+                    document.getElementById('hallPuck').style.left = pct + '%';
+                })
+                .catch(e => console.error('Sensor data error:', e));
+        }
+
+        function updateLiveServo() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(d => {
+                    const volts = d.clutchVoltage || 0;
+                    const deg = d.servoPosition || 0;
+                    document.getElementById('servoLiveValue').textContent = volts.toFixed(2) + ' V (' + deg.toFixed(0) + '°)';
+                    const pct = (deg / 180) * 100;
+                    document.getElementById('servoPuck').style.left = pct + '%';
+                })
+                .catch(e => console.error('Sensor data error:', e));
+        }
+
+        function setHallIdle() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(d => {
+                    const val = d.hallValue || 0;
+                    const b = parseInt(document.getElementById('hallSliderB').value);
+                    if (val < b) {
+                        document.getElementById('hallSliderA').value = val;
+                        updateHallA(val);
+                    } else {
+                        alert('Hall value must be less than B slider');
+                    }
+                })
+                .catch(e => alert('Failed to read sensor'));
+        }
+
+        function setHallMax() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(d => {
+                    const val = d.hallValue || 0;
+                    const a = parseInt(document.getElementById('hallSliderA').value);
+                    if (val > a) {
+                        document.getElementById('hallSliderB').value = val;
+                        updateHallB(val);
+                    } else {
+                        alert('Hall value must be greater than A slider');
+                    }
+                })
+                .catch(e => alert('Failed to read sensor'));
+        }
+
+        function setServoIdle() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(d => {
+                    const deg = Math.round(d.servoPosition || 0);
+                    const b = parseInt(document.getElementById('servoSliderB').value);
+                    if (deg < b) {
+                        document.getElementById('servoSliderA').value = deg;
+                        updateServoA(deg);
+                    } else {
+                        alert('Servo position must be less than B slider');
+                    }
+                })
+                .catch(e => alert('Failed to read sensor'));
+        }
+
+        function setServoMax() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(d => {
+                    const deg = Math.round(d.servoPosition || 0);
+                    const a = parseInt(document.getElementById('servoSliderA').value);
+                    if (deg > a) {
+                        document.getElementById('servoSliderB').value = deg;
+                        updateServoB(deg);
+                    } else {
+                        alert('Servo position must be greater than A slider');
+                    }
+                })
+                .catch(e => alert('Failed to read sensor'));
+        }
+
+        function toggleServoControl() {
+            servoControlActive = !servoControlActive;
+            const toggle = document.getElementById('servoToggle');
+            const bar = document.getElementById('servoControlBar');
+            const status = document.getElementById('controlStatus');
+
+            if (servoControlActive) {
+                fetch('/cmd?action=enableServoOverride')
+                    .then(r => r.text())
+                    .then(() => {
+                        toggle.classList.add('active');
+                        toggle.textContent = 'Disable Servo Control';
+                        bar.style.display = 'block';
+                        status.textContent = 'Slider controls servo (paddle ignored)';
+                    })
+                    .catch(() => {
+                        alert('Failed to enable servo control');
+                        servoControlActive = false;
+                    });
+            } else {
+                fetch('/cmd?action=disableServoOverride')
+                    .then(r => r.text())
+                    .then(() => {
+                        toggle.classList.remove('active');
+                        toggle.textContent = 'Enable Servo Control';
+                        bar.style.display = 'none';
+                        status.textContent = 'Paddle controls servo';
+                    })
+                    .catch(() => alert('Failed to disable servo control'));
+            }
+        }
+
+        function updateServoControl(val) {
+            document.getElementById('servoControlLabel').textContent = val;
+            fetch('/cmd?action=setServoPos&pos=' + val).catch(() => {});
+        }
+
+        function saveValues() {
+            const params = new URLSearchParams({
+                hBiteStart: currentValues.hA,
+                hBiteEnd: currentValues.hB,
+                sBiteStart: currentValues.sA,
+                sBiteEnd: currentValues.sB,
+                blend: currentValues.blend
+            });
+
+            document.getElementById('saveBtn').disabled = true;
+            document.getElementById('saveOk').classList.remove('show');
+            document.getElementById('saveError').classList.remove('show');
+
+            fetch('/cmd?action=savePiecewiseZone&' + params.toString())
+                .then(r => r.text())
+                .then(() => {
+                    originalValues = { ...currentValues };
+                    document.getElementById('saveOk').classList.add('show');
+                    setTimeout(() => {
+                        document.getElementById('saveOk').classList.remove('show');
+                        disableSaveIfUnchanged();
+                    }, 3000);
+                })
+                .catch(() => {
+                    document.getElementById('saveError').classList.add('show');
+                    document.getElementById('saveBtn').disabled = false;
+                    setTimeout(() => {
+                        document.getElementById('saveError').classList.remove('show');
+                    }, 3000);
+                });
+        }
+
+        // Poll live values
+        loadConfig();
+        setInterval(updateLiveHall, 200);
+        setInterval(updateLiveServo, 200);
+    </script>
+</body>
+</html>

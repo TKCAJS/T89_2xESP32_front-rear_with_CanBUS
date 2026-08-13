@@ -16,6 +16,8 @@
   extern const uint8_t _binary_calibration_html_end[];
   extern const uint8_t _binary_nvsconfig_html_start[];
   extern const uint8_t _binary_nvsconfig_html_end[];
+  extern const uint8_t _binary_piecewise_html_start[];
+  extern const uint8_t _binary_piecewise_html_end[];
 #endif
 
 class WebInterface {
@@ -78,6 +80,7 @@ public:
         server->on("/shiftLogs", HTTP_GET, [this]() { this->handleShiftLogs(); });
         server->on("/hello", HTTP_GET, [this]() { this->handleHelloPage(); });
         server->on("/calibration", HTTP_GET, [this]() { this->handleCalibrationPage(); });
+        server->on("/piecewise", HTTP_GET, [this]() { this->handlePiecewisePage(); });
         // NVS calibration config API (CalConfig blob, CRC-verified)
         server->on("/api/config",   HTTP_GET,  [this]() { this->handleApiGetConfig(); });
         server->on("/api/config",   HTTP_POST, [this]() { this->handleApiPostConfig(); });
@@ -104,7 +107,15 @@ public:
         servePage("/calibration.html", nullptr, nullptr);
       #endif
     }
-    
+
+    void handlePiecewisePage() {
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        servePage("/piecewise.html", _binary_piecewise_html_start, _binary_piecewise_html_end);
+      #else
+        servePage("/piecewise.html", nullptr, nullptr);
+      #endif
+    }
+
     void handleUpdate();
     void handleHallCurveUpdate();
     void handleCommand();
