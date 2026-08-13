@@ -1,6 +1,22 @@
 {
+    // Editor here is VSCodium, which uses the Open VSX registry rather than the
+    // Microsoft marketplace. Extension IDs below must exist on Open VSX or they
+    // silently never install. In particular "platformio.platformio-ide" is
+    // MS-marketplace-only and is NOT a valid recommendation here.
+    //
+    // Install exactly ONE PlatformIO IDE extension. Two of them both manage
+    // ~/.platformio and both register build tasks, which is where the version
+    // and toolbar fights come from. pioarduino is the one to keep: this repo
+    // builds the ESP32 nodes on the pioarduino platform fork (see platformio.ini).
+    // The pioarduino *platform* is selected by URL in platformio.ini and works
+    // under the stock PlatformIO core either way.
+    //
+    // cpptools is unwanted because C/C++ intellisense comes from clangd, which
+    // reads the generated compile_commands.json (gitignored - each machine
+    // generates its own, with its own absolute paths).
     "recommendations": [
-        "pioarduino.pioarduino-ide"
+        "pioarduino.pioarduino-ide",
+        "llvm-vs-code-extensions.vscode-clangd"
     ],
     "unwantedRecommendations": [
         "ms-vscode.cpptools-extension-pack"
