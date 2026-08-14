@@ -496,8 +496,10 @@ void WebInterface::handleConfigData() {
     json += "\"hallMax\":" + String(hallMax) + ",";
     json += "\"clutchDisengageV\":" + String(clutchDisengageV, 3) + ",";
     json += "\"clutchJustEngagedV\":" + String(clutchJustEngagedV, 3) + ",";
-    json += "\"clutchServoMin\":" + String(CLUTCH_SERVO_MIN) + ",";
-    json += "\"clutchServoMax\":" + String(CLUTCH_SERVO_MAX) + ",";
+    // Live limits, not the factory defaults: the saved idle/max angles ARE the travel
+    // limits, so this is what the manual slider track should show.
+    json += "\"clutchServoMin\":" + String(min(clutchIdlePos, clutchFullyPull)) + ",";
+    json += "\"clutchServoMax\":" + String(max(clutchIdlePos, clutchFullyPull)) + ",";
     json += "\"hallBiteStart\":"  + String(hallSensor.getHallBiteStart())  + ",";
     json += "\"hallBiteEnd\":"    + String(hallSensor.getHallBiteEnd())    + ",";
     json += "\"servoBiteStart\":" + String(hallSensor.getServoBiteStart()) + ",";

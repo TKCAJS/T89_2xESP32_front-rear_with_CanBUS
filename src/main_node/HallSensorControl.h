@@ -34,8 +34,8 @@ private:
 public:
     HallSensorControl(int pin, int pin2) : hallPin(pin), hallPin2(pin2), curveType(HALL_LOGARITHMIC),
                                 curveStrength(2.0), clutchServo(nullptr),
-                                // Placeholders until setConfiguration(); inside
-                                // CLUTCH_SERVO_MIN/MAX (CalConfig.h)
+                                // Placeholders until setConfiguration();
+                                // factory travel from CalConfig.h
                                 clutchIdlePos(42), clutchFullyPull(137),
                                 hallMin(780), hallMax(3330),
                                 pin2RawMin(1000), pin2RawMax(3600), servoOverride(false),

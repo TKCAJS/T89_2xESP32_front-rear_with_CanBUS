@@ -127,7 +127,7 @@ public:
         : currentState(IDLE_NEUTRAL),
           stateStartTime(0),
           neutralDownMs(40), neutralUpMs(40), shiftDownMs(150), shiftUpMs(150),
-          // Placeholders until setConfiguration(); inside CLUTCH_SERVO_MIN/MAX (CalConfig.h)
+          // Placeholders until setConfiguration(); factory travel from CalConfig.h
           clutchIdlePos(42), clutchFullyPull(137),
           shiftLogger(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
           relayActive(false), lastBiteStepMs(0),

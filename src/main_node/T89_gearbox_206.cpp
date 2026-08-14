@@ -43,8 +43,8 @@
 // do NOT scale it back to the source. Bite-point thresholds are captured live in these same
 // (post-divider) volts, so the absolute scale is irrelevant — only relative position matters.
 
-// Clutch servo travel limits (CLUTCH_SERVO_MIN / CLUTCH_SERVO_MAX) now live in
-// CalConfig.h, so calValidate() can reject stored angles the servo cannot reach.
+// Clutch servo travel limits are clutchIdlePos / clutchFullyPull, applied to the servo
+// by applyServoLimits(). CalConfig.h holds only the factory defaults for a blank NVS.
 
 // Clutch voltage thresholds — calibrated via web interface
 // Downshift trigger. Feedback is inverted: paddle max (clutch DISENGAGED) is the LOW
@@ -116,8 +116,8 @@ int shiftUpMs = 150;
 // Placeholders until loadConfig() runs. Kept inside the servo's real travel — the old
 // 185 was past even the nominal 180, so any use before configuration commanded an angle
 // that SimpleServo would silently clamp.
-int clutchIdlePos = CLUTCH_SERVO_MIN;
-int clutchFullyPull = CLUTCH_SERVO_MAX;
+int clutchIdlePos = CLUTCH_SERVO_DEFAULT_MIN;
+int clutchFullyPull = CLUTCH_SERVO_DEFAULT_MAX;
 
 // WiFi state
 bool wifiEnabled = false;
@@ -179,6 +179,7 @@ void checkWiFiToggleSwitch();
 void toggleWiFi();
 void loadConfig();
 void saveConfig();
+void applyServoLimits();
 void processInputs();
 void checkServoPosition();
 void setupWeb();
@@ -364,7 +365,7 @@ void setup() {
     // shaves that acquisition window. clutchIdlePos is still default here; loadConfig()
     // + clutchControlTask refine it once NVS is read.
     clutchServo.attach(PIN_CLUTCH_SERVO);
-    clutchServo.setLimits(CLUTCH_SERVO_MIN, CLUTCH_SERVO_MAX);
+    applyServoLimits();
     clutchServo.write(clutchIdlePos);
 
     Serial.begin(115200);
@@ -704,8 +705,8 @@ void loadConfig() {
     neutralUpMs      = prefs.getInt("neutralUpMs", 40);
     shiftDownMs      = prefs.getInt("shiftDownMs", 150);
     shiftUpMs        = prefs.getInt("shiftUpMs", 150);
-    clutchIdlePos    = prefs.getInt("clutchIdlePos",   CLUTCH_SERVO_MIN);
-    clutchFullyPull  = prefs.getInt("clutchFullyPull", CLUTCH_SERVO_MAX);
+    clutchIdlePos    = prefs.getInt("clutchIdlePos",   CLUTCH_SERVO_DEFAULT_MIN);
+    clutchFullyPull  = prefs.getInt("clutchFullyPull", CLUTCH_SERVO_DEFAULT_MAX);
     clutchDisengageV   = prefs.getFloat("clutchDisengV", 1.8f);
     clutchJustEngagedV = prefs.getFloat("clutchBiteV",   1.8f);
     prefs.end();
@@ -716,10 +717,24 @@ void loadConfig() {
     Serial.println("  Shift Down: " + String(shiftDownMs) + "ms");
     Serial.println("  Shift Up: " + String(shiftUpMs) + "ms");
     Serial.println("  Clutch Idle: " + String(clutchIdlePos) + "°");
-    Serial.println("  Clutch Engage: " + String(clutchFullyPull) + "°");
+    Serial.println("  Clutch Max:  " + String(clutchFullyPull) + "°");
+
+    // setup() applied the defaults before this ran, so re-apply now the stored angles
+    // are in — otherwise the servo stays clamped to the factory range.
+    applyServoLimits();
+}
+
+// The saved idle/max angles ARE the travel limits, so SimpleServo's clamp is driven
+// from them rather than from a fixed constant. Ordered low..high because a servo may be
+// set up to travel either way round, and setLimits() expects min then max.
+void applyServoLimits() {
+    int lo = min(clutchIdlePos, clutchFullyPull);
+    int hi = max(clutchIdlePos, clutchFullyPull);
+    clutchServo.setLimits(lo, hi);
 }
 
 void saveConfig() {
+    applyServoLimits();   // every path that changes the angles comes through here
     prefs.begin("gearbox", false);
     
     prefs.putInt("neutralDownMs", neutralDownMs);

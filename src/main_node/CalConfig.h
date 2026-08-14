@@ -15,12 +15,17 @@
 
 static const uint16_t CAL_VERSION = 1;
 
-// Clutch servo travel limits — physically measured, never exceed these.
-// They live here rather than in T89_gearbox_206.cpp so calValidate() can enforce them:
-// SimpleServo::write() constrains to this range silently, so a stored angle outside it
-// would persist and read back fine while the servo quietly ignored it.
-#define CLUTCH_SERVO_MIN  42
-#define CLUTCH_SERVO_MAX  137
+// Factory-default clutch servo travel, used only until NVS is read. The live limits are
+// clutchIdlePos / clutchFullyPull, which are fed straight to SimpleServo::setLimits() —
+// they ARE the travel limits, not operating points inside some fixed range.
+//
+// They must stay settable across the servo's whole 0-180: as the clutch wears, the real
+// stop moves, and finding it means deliberately widening the limits, then easing the
+// manual slider out while watching the arm until it stops moving. Bounding these to a
+// compile-time range would make that impossible — and the servo has enough torque to
+// break the linkage, so the recorded limit is what protects it afterwards.
+#define CLUTCH_SERVO_DEFAULT_MIN  42
+#define CLUTCH_SERVO_DEFAULT_MAX  137
 
 struct CalConfig {
     uint16_t version;
@@ -31,7 +36,7 @@ struct CalConfig {
     uint16_t shiftUpMs;        // upshift relay pulse (20-1000 ms)
     uint16_t shiftDownMs;      // downshift relay pulse (20-1000 ms)
 
-    // --- clutch servo angles (CLUTCH_SERVO_MIN..MAX, not 0-180) ---
+    // --- clutch servo angles: these ARE the travel limits, fed to setLimits() ---
     uint16_t clutchIdlePos;    // paddle idle  -> clutch ENGAGED  (high feedback V)
     uint16_t clutchFullyPull;  // paddle max   -> clutch DISENGAGED (low feedback V)
 
@@ -45,8 +50,8 @@ static void calLoadDefaults(CalConfig &c) {
     c.neutralUpMs    = 40;
     c.shiftUpMs      = 150;
     c.shiftDownMs    = 150;
-    c.clutchIdlePos  = CLUTCH_SERVO_MIN;   // 0/180 would be outside real travel
-    c.clutchFullyPull = CLUTCH_SERVO_MAX;
+    c.clutchIdlePos  = CLUTCH_SERVO_DEFAULT_MIN;
+    c.clutchFullyPull = CLUTCH_SERVO_DEFAULT_MAX;
     c.crc            = 0;
 }
 
@@ -57,13 +62,14 @@ static String calValidate(const CalConfig &c) {
     if (c.neutralUpMs    < 20 || c.neutralUpMs    > 1000) return "neutralUpMs out of range (20-1000)";
     if (c.shiftUpMs      < 20 || c.shiftUpMs      > 1000) return "shiftUpMs out of range (20-1000)";
     if (c.shiftDownMs    < 20 || c.shiftDownMs    > 1000) return "shiftDownMs out of range (20-1000)";
-    // Enforce the servo's real travel, not 0-180. SimpleServo::write() clamps to these
-    // limits without complaint, so accepting a wider range would store an angle the
-    // servo never actually reaches — stored value and real travel silently disagreeing.
-    if (c.clutchIdlePos < CLUTCH_SERVO_MIN || c.clutchIdlePos > CLUTCH_SERVO_MAX)
-        return "clutchIdlePos out of range (" + String(CLUTCH_SERVO_MIN) + "-" + String(CLUTCH_SERVO_MAX) + ")";
-    if (c.clutchFullyPull < CLUTCH_SERVO_MIN || c.clutchFullyPull > CLUTCH_SERVO_MAX)
-        return "clutchFullyPull out of range (" + String(CLUTCH_SERVO_MIN) + "-" + String(CLUTCH_SERVO_MAX) + ")";
+    // Bounded only by what the servo can physically be commanded to. These two ARE the
+    // travel limits and are fed to SimpleServo::setLimits(), so they must be free to
+    // move across the whole range — finding a worn clutch's new stop means widening
+    // them first, then easing the slider out to see where the arm actually stops.
+    if (c.clutchIdlePos > 180)   return "clutchIdlePos out of range (0-180)";
+    if (c.clutchFullyPull > 180) return "clutchFullyPull out of range (0-180)";
+    if (c.clutchIdlePos == c.clutchFullyPull)
+        return "clutchIdlePos and clutchFullyPull must differ";
     return "";
 }
 

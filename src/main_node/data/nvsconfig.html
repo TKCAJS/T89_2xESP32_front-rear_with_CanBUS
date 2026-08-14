@@ -215,27 +215,34 @@
         <h3 style="color:#FF9800;">Clutch Servo Angles</h3>
 
         <p style="color:#888;font-size:12px;margin:0 0 16px;">
-            Bounds are the servo's physically measured travel, not 0&ndash;180. The servo
-            clamps to this range silently, so an angle outside it would be stored and read
-            back happily while never actually being reached.
+            These two <strong>are</strong> the servo's travel limits &mdash; the servo is clamped
+            to them, so it can never be driven past whatever you set here.
+        </p>
+        <p style="color:#888;font-size:12px;margin:0 0 16px;background:#332b1a;padding:10px;border-radius:4px;border-left:3px solid #FF9800;">
+            <strong style="color:#FFB74D;">Re-finding the stop after clutch wear:</strong>
+            widen the limit past where you expect the stop, Save, then on
+            <a href="/calibration" style="color:#FF9800;">Calibration</a> ease the manual servo
+            slider out while watching the clutch arm. When the arm stops moving, record that
+            slider position here and Save. The servo has enough torque to break the linkage,
+            so the value you record is what protects it.
         </p>
 
         <div class="field">
             <label>Idle Angle (°) &mdash; paddle idle, clutch engaged</label>
             <div class="input-row">
-                <input type="number" id="clutchIdlePos" min="42" max="137" step="1">
+                <input type="number" id="clutchIdlePos" min="0" max="180" step="1">
                 <span class="unit">°</span>
             </div>
-            <div class="bounds">Range: 42 – 137</div>
+            <div class="bounds">0 – 180 (servo range)</div>
         </div>
 
         <div class="field">
             <label>Max Angle (°) &mdash; paddle max, clutch disengaged</label>
             <div class="input-row">
-                <input type="number" id="clutchFullyPull" min="42" max="137" step="1">
+                <input type="number" id="clutchFullyPull" min="0" max="180" step="1">
                 <span class="unit">°</span>
             </div>
-            <div class="bounds">Range: 42 – 137</div>
+            <div class="bounds">0 – 180 (servo range)</div>
         </div>
     </div>
 
@@ -258,9 +265,10 @@
         neutralUpMs:     { min: 20,  max: 1000 },
         shiftDownMs:     { min: 20,  max: 1000 },
         shiftUpMs:       { min: 20,  max: 1000 },
-        // Servo travel limits — must match CLUTCH_SERVO_MIN/MAX in CalConfig.h.
-        clutchIdlePos:   { min: 42,  max: 137  },
-        clutchFullyPull: { min: 42,  max: 137  }
+        // These ARE the travel limits and drive SimpleServo::setLimits(), so they must
+        // stay settable across the servo's whole range — see the note on the page.
+        clutchIdlePos:   { min: 0,   max: 180  },
+        clutchFullyPull: { min: 0,   max: 180  }
     };
 
     function showFeedback(msg, isErr) {
