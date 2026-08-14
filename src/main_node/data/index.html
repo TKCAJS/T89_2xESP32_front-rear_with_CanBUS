@@ -240,7 +240,7 @@
                 </div>
                 <div class='gauge-item'>
                     <canvas id='tempGauge' width='200' height='200'></canvas>
-                    <div class='gauge-label'>Radiator °C / Pump %</div>
+                    <div class='gauge-label'>Engine Out °C / Pump %</div>
                 </div>
             </div>
             <div class='gauge-row'>
@@ -372,7 +372,9 @@
         }
         
         // Temp gauge with a concentric inner ring for pump PWM %.
-        // Outer arc = radiator temp (orange), inner arc = pump duty (cyan).
+        // Outer arc = engine-out temp (orange), inner arc = pump duty (cyan).
+        // "Engine out" because the Dallas sensor feeding it sits directly after the
+        // engine, not at the radiator — the CAN id and MainCan still say radiator.
         function drawTempPumpGauge(canvasId, temp, tempMax, pump) {
             const canvas = document.getElementById(canvasId);
             const ctx = canvas.getContext('2d');
@@ -384,7 +386,7 @@
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Outer ring — radiator temperature
+            // Outer ring — engine-out temperature
             const rOuter = 80;
             ctx.lineWidth = 10;
             ctx.beginPath(); ctx.arc(cx, cy, rOuter, startAngle, endAngle);
@@ -460,7 +462,7 @@ function updateStatus() {
                 document.getElementById('status').innerHTML = status;
                 document.getElementById('bitePointDisplay').textContent = d.clutchDisengageV.toFixed(3) + ' V  (live: ' + d.clutchVoltage.toPrecision(3) + ' V)';
                 
-                let tempStatus = '<div class="temp-reading temp-current">Current: ' + d.currentTemp.toFixed(1) + '°C</div>';
+                let tempStatus = '<div class="temp-reading temp-current">Engine Out: ' + d.currentTemp.toFixed(1) + '°C</div>';
                 tempStatus += '<div class="temp-reading temp-target">Target: ' + d.targetTemp.toFixed(1) + '°C</div>';
                 tempStatus += '<div class="temp-reading pump-status">Pump PWM: ' + d.pumpPwmPercent + '%</div>';
                 tempStatus += '<div class="temp-reading engine-status">Engine: ' + (d.engineRunning ? 'RUNNING' : 'STOPPED') + '</div>';
