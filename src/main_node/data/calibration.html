@@ -441,11 +441,17 @@
                     <h3>Downshift Trigger <span style="color:#F44336;">&#9646;</span></h3>
                     <div class="calibration-step">
                         <p style="margin:4px 0 8px;">
-                            The voltage the servo must pass before the downshift is sent. It now
-                            gates every downshift, so it lives in one place only:
-                            <a href="/" style="color:#2196F3;">Home</a> &rarr; Downshift Trigger
-                            Voltage, where you can capture it live or type it.
+                            Gates every downshift: the servo pulls toward max until the feedback
+                            falls past this, and only then is the DS sent. Drive the servo to the
+                            point where the clutch is just disengaged, then Capture.
                         </p>
+                        <div style="display:flex;gap:6px;align-items:center;margin:8px 0;">
+                            <input type="number" id="disengInput" min="0" max="3.3" step="0.001"
+                                   style="flex:1;background:#1a1a1a;color:white;border:1px solid #555;padding:5px;border-radius:3px;">
+                            <span style="font-size:12px;color:#aaa;">V</span>
+                        </div>
+                        <button class="btn btn-danger" onclick="captureDisengageV()">Capture Live</button>
+                        <button class="btn btn-secondary" onclick="saveDisengageV()">Save Typed</button>
                         <div id="disengResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
@@ -453,11 +459,18 @@
                     <h3>Just-Engaged Threshold <span style="color:#FF9800;">&#9646;</span></h3>
                     <div class="calibration-step">
                         <p style="margin:4px 0 8px;">
-                            Bite point used as the return target for stacked downshifts, so the
-                            clutch skips the dead travel back to idle. Set it on
-                            <a href="/" style="color:#2196F3;">Home</a> &rarr; Clutch Voltage
-                            Thresholds, alongside the downshift trigger.
+                            Bite point, and the return target between stacked downshifts so the
+                            clutch skips the dead travel back to idle. Sits <strong>above</strong>
+                            the trigger. Drive the servo back until the clutch just starts to
+                            bite, then Capture.
                         </p>
+                        <div style="display:flex;gap:6px;align-items:center;margin:8px 0;">
+                            <input type="number" id="biteInput" min="0" max="3.3" step="0.001"
+                                   style="flex:1;background:#1a1a1a;color:white;border:1px solid #555;padding:5px;border-radius:3px;">
+                            <span style="font-size:12px;color:#aaa;">V</span>
+                        </div>
+                        <button class="btn btn-warning" onclick="captureJustEngagedV()">Capture Live</button>
+                        <button class="btn btn-secondary" onclick="saveJustEngagedV()">Save Typed</button>
                         <div id="biteResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
@@ -697,6 +710,11 @@
                     document.getElementById('voltFill').style.width    = ((rawV    / 3.3) * 100).toFixed(1) + '%';
                     document.getElementById('disengVDisplay').textContent = disengV.toFixed(3);
                     document.getElementById('biteVDisplay').textContent   = biteV.toFixed(3);
+                    // Don't stamp over a box the user is typing into.
+                    const dIn = document.getElementById('disengInput');
+                    const bIn = document.getElementById('biteInput');
+                    if (document.activeElement !== dIn) dIn.value = disengV.toFixed(3);
+                    if (document.activeElement !== bIn) bIn.value = biteV.toFixed(3);
 
                     // Sync override toggle state
                     if (data.servoOverride !== undefined && data.servoOverride !== servoOverrideActive) {
@@ -1004,6 +1022,60 @@
             fetch('/cmd?action=setServoPos&pos=' + pos).catch(() => {});
         }
 
+
+        function captureDisengageV() {
+            fetch('/cmd?action=captureDisengageV').then(r => r.text()).then(v => {
+                document.getElementById('disengResult').innerHTML =
+                    '<span style="color:#4CAF50;">Captured: ' + parseFloat(v).toFixed(3) + ' V</span>';
+            }).catch(() => {
+                document.getElementById('disengResult').innerHTML =
+                    '<span style="color:#F44336;">Capture failed</span>';
+            });
+        }
+
+        function saveDisengageV() {
+            const v = parseFloat(document.getElementById('disengInput').value);
+            if (isNaN(v) || v < 0 || v > 3.3) {
+                document.getElementById('disengResult').innerHTML =
+                    '<span style="color:#F44336;">Invalid value (0.000-3.300 V)</span>';
+                return;
+            }
+            fetch('/cmd?action=setDisengageV&v=' + v.toFixed(3)).then(r => {
+                document.getElementById('disengResult').innerHTML = r.ok
+                    ? '<span style="color:#4CAF50;">Saved: ' + v.toFixed(3) + ' V</span>'
+                    : '<span style="color:#F44336;">Save failed</span>';
+            }).catch(() => {
+                document.getElementById('disengResult').innerHTML =
+                    '<span style="color:#F44336;">Save failed</span>';
+            });
+        }
+
+        function captureJustEngagedV() {
+            fetch('/cmd?action=captureJustEngagedV').then(r => r.text()).then(v => {
+                document.getElementById('biteResult').innerHTML =
+                    '<span style="color:#4CAF50;">Captured: ' + parseFloat(v).toFixed(3) + ' V</span>';
+            }).catch(() => {
+                document.getElementById('biteResult').innerHTML =
+                    '<span style="color:#F44336;">Capture failed</span>';
+            });
+        }
+
+        function saveJustEngagedV() {
+            const v = parseFloat(document.getElementById('biteInput').value);
+            if (isNaN(v) || v < 0 || v > 3.3) {
+                document.getElementById('biteResult').innerHTML =
+                    '<span style="color:#F44336;">Invalid value (0.000-3.300 V)</span>';
+                return;
+            }
+            fetch('/cmd?action=setJustEngagedV&v=' + v.toFixed(3)).then(r => {
+                document.getElementById('biteResult').innerHTML = r.ok
+                    ? '<span style="color:#4CAF50;">Saved: ' + v.toFixed(3) + ' V</span>'
+                    : '<span style="color:#F44336;">Save failed</span>';
+            }).catch(() => {
+                document.getElementById('biteResult').innerHTML =
+                    '<span style="color:#F44336;">Save failed</span>';
+            });
+        }
 
         function activatePiecewiseMapping() {
             fetch('/cmd?action=setCurveType&type=piecewise')

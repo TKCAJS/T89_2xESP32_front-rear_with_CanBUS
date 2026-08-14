@@ -291,50 +291,23 @@
         <button class='btn' onclick='sendCmd("shiftUp")'>Shift Up</button>
         
 
-        <!-- Clutch feedback voltage thresholds. Deliberately voltages rather than the
-             piecewise degree thresholds — these are read straight off the servo feedback,
-             independent of the hall/servo mapping. -->
+        <!-- Read-only. Both thresholds are set on Calibration, which has the manual
+             servo slider needed to position the clutch before capturing them. -->
         <h3>Clutch Voltage Thresholds</h3>
         <div style='background:#2a2a4d;padding:15px;border-radius:5px;border-left:4px solid #6B6BFF;max-width:400px;'>
-            <h4>Downshift Trigger Voltage</h4>
-            <p style='color:#aaa;font-size:12px;margin:0 0 10px;'>
-                On a downshift request the servo pulls until the feedback voltage passes
-                this threshold, and only then is the DS CAN command sent. Paddle max is the
-                <strong>low</strong> voltage end, so the trigger fires on the voltage
-                falling past this value.
+            <div style='display:flex;justify-content:space-between;margin-bottom:6px;'>
+                <span style='color:#aaa;font-size:13px;'>Downshift trigger</span>
+                <strong id='bitePointDisplay' style='color:#F44336;'>--</strong>
+            </div>
+            <div style='display:flex;justify-content:space-between;margin-bottom:10px;'>
+                <span style='color:#aaa;font-size:13px;'>Just-engaged (bite point)</span>
+                <strong id='justEngagedDisplay' style='color:#FF9800;'>--</strong>
+            </div>
+            <p style='color:#aaa;font-size:12px;margin:0;'>
+                Set these on <a href='/calibration' style='color:#FF9800;'>Calibration</a> &mdash;
+                capturing them means driving the clutch to position, and the manual servo
+                slider lives there.
             </p>
-            <div class='form-group'>
-                <label>Trigger voltage (raw ADC V):</label>
-                <div id='bitePointDisplay' style='font-size:1.4em;color:#6B6BFF;font-weight:bold;margin:8px 0;'>Loading...</div>
-            </div>
-            <div class='form-group'>
-                <label>Set trigger (V):</label>
-                <input type='number' id='bitePointInput' min='0' max='3.3' step='0.001' placeholder='e.g. 1.500'>
-            </div>
-            <button class='btn' onclick='saveDownshiftTrigger()'>Save to Flash</button>
-            <button class='btn' style='background:#F44336;' onclick='captureDownshiftTrigger()'>Capture Live</button>
-            <div id='bitePointResult' style='margin-top:8px;color:#aaa;font-size:0.9em;'></div>
-        </div>
-
-        <div style='background:#2a2a4d;padding:15px;border-radius:5px;border-left:4px solid #FF9800;max-width:400px;margin-top:12px;'>
-            <h4>Just-Engaged (Bite Point) Voltage</h4>
-            <p style='color:#aaa;font-size:12px;margin:0 0 10px;'>
-                Return point for stacked downshifts. Between consecutive shifts the clutch
-                need only come back to the biting point rather than all the way to idle,
-                skipping the dead travel and shortening the stroke. Moving back toward paddle idle raises
-                the voltage, so this sits <strong>above</strong> the trigger.
-            </p>
-            <div class='form-group'>
-                <label>Just-engaged voltage (raw ADC V):</label>
-                <div id='justEngagedDisplay' style='font-size:1.4em;color:#FF9800;font-weight:bold;margin:8px 0;'>Loading...</div>
-            </div>
-            <div class='form-group'>
-                <label>Set just-engaged (V):</label>
-                <input type='number' id='justEngagedInput' min='0' max='3.3' step='0.001' placeholder='e.g. 0.900'>
-            </div>
-            <button class='btn' onclick='saveJustEngaged()'>Save to Flash</button>
-            <button class='btn' style='background:#F44336;' onclick='captureJustEngaged()'>Capture Live</button>
-            <div id='justEngagedResult' style='margin-top:8px;color:#aaa;font-size:0.9em;'></div>
         </div>
     </div>
 
@@ -514,75 +487,20 @@ function updateStatus() {
             fetch('/configData').then(r => r.json()).then(d => {
                 let displayedBiteV = d.clutchDisengageV.toFixed(3);
                 document.getElementById('bitePointDisplay').textContent = displayedBiteV + ' V';
-                document.getElementById('bitePointInput').value = displayedBiteV;
                 let displayedJustV = d.clutchJustEngagedV.toFixed(3);
                 document.getElementById('justEngagedDisplay').textContent = displayedJustV + ' V';
-                document.getElementById('justEngagedInput').value = displayedJustV;
             }).catch(e => console.error('Config load error:', e));
         }
         
         // Both thresholds live here so each has exactly one writer. Calibration used to
         // capture them too, which let a stale page silently overwrite the other.
-        function captureJustEngaged() {
-            fetch('/cmd?action=captureJustEngagedV')
-                .then(r => r.text())
-                .then(v => {
-                    const val = parseFloat(v).toFixed(3);
-                    document.getElementById('justEngagedDisplay').textContent = val + ' V';
-                    document.getElementById('justEngagedInput').value = val;
-                    document.getElementById('justEngagedResult').textContent =
-                        'Captured from live position (' + val + ' V)';
-                })
-                .catch(() => { document.getElementById('justEngagedResult').textContent = 'Capture failed'; });
-        }
 
-        function saveJustEngaged() {
-            const v = parseFloat(document.getElementById('justEngagedInput').value);
-            if (isNaN(v) || v < 0 || v > 3.3) {
-                document.getElementById('justEngagedResult').textContent = 'Invalid value (0.000-3.300 V)';
-                return;
-            }
-            fetch('/cmd?action=setJustEngagedV&v=' + v.toFixed(3)).then(r => {
-                if (r.ok) {
-                    document.getElementById('justEngagedDisplay').textContent = v.toFixed(3) + ' V';
-                    document.getElementById('justEngagedResult').textContent = 'Saved (' + v.toFixed(3) + ' V)';
-                } else {
-                    document.getElementById('justEngagedResult').textContent = 'Save failed';
-                }
-            }).catch(() => { document.getElementById('justEngagedResult').textContent = 'Save error'; });
-        }
 
-        function captureDownshiftTrigger() {
-            fetch('/cmd?action=captureDisengageV')
-                .then(r => r.text())
-                .then(v => {
-                    const val = parseFloat(v).toFixed(3);
-                    document.getElementById('bitePointDisplay').textContent = val + ' V';
-                    document.getElementById('bitePointInput').value = val;
-                    document.getElementById('bitePointResult').textContent =
-                        'Captured from live position (' + val + ' V)';
-                })
-                .catch(() => { document.getElementById('bitePointResult').textContent = 'Capture failed'; });
-        }
 
-        function saveDownshiftTrigger() {
-            let displayedV = parseFloat(document.getElementById('bitePointInput').value);
-            if (isNaN(displayedV) || displayedV < 0 || displayedV > 3.3) {
-                document.getElementById('bitePointResult').textContent = 'Invalid value (0.000-3.300 V)';
-                return;
-            }
-            // setDisengageV, NOT setJustEngagedV: clutchDisengageV is the threshold the
-            // downshift gate actually compares against in checkServoPosition().
-            // clutchJustEngagedV feeds only the clutchJustEngaged flag, which no logic reads.
-            fetch('/cmd?action=setDisengageV&v=' + displayedV.toFixed(3)).then(r => {
-                if (r.ok) {
-                    document.getElementById('bitePointDisplay').textContent = displayedV.toFixed(3) + ' V';
-                    document.getElementById('bitePointResult').textContent = 'Saved (' + displayedV.toFixed(3) + ' V)';
-                } else {
-                    document.getElementById('bitePointResult').textContent = 'Save failed';
-                }
-            }).catch(() => { document.getElementById('bitePointResult').textContent = 'Save error'; });
-        }
+
+
+
+
 
         loadConfig();
         updateStatus();

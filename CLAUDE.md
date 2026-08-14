@@ -62,10 +62,17 @@ copy.**
 
 | Page | Role |
 |---|---|
-| `index.html` | Live status, gauges, bite-point voltage only. No config forms. |
-| `calibration.html` | Live testing/discovery wizard. No NVS writes except piecewise zone. |
-| `nvsconfig.html` | Single authority for all NVS saves. |
+| `index.html` | Live status and gauges. Read-only — writes nothing. |
+| `calibration.html` | Live testing/discovery, plus the two clutch voltage thresholds (they need the manual servo slider that lives here). |
+| `nvsconfig.html` | Relay timing, servo idle/max angles, hall idle/max capture. |
 | `piecewise.html` | Visual hall/servo zone editor. Reads travel extents; writes only the piecewise zone. |
+
+**One writer per value.** Each stored value is editable on exactly one page — two
+pages writing the same value silently overwrote each other, since neither refreshes
+when the other saves. Terminology is fixed too: paddle **idle** = clutch **engaged** =
+high feedback volts; paddle **max** = clutch **disengaged** = low volts. Never say
+"released" — pulling the lever releases the *mechanism* while releasing the lever
+engages it, so the word names both states at once.
 
 ### Nav bar
 All four pages share the same 4-button flex row at the top, **in this order**:
