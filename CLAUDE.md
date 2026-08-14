@@ -88,8 +88,14 @@ Uses `POST /api/config` (JSON) + firmware read-back. Fields: `neutralDownMs`, `n
 
 Hall calibration uses capture buttons hitting `/cmd?action=captureHall*` while live-polling `/sensorData`.
 
-### Piecewise zone — calibration.html only
-Stored in the separate `gearbox` Preferences namespace, not in `CalConfig`. Saved via `/cmd?action=savePiecewiseZone&...`. Has bounds validation (Hall: 0-4095, Servo: 0-180) and read-back via `/configData`. Cannot move to `/api/config` without firmware changes.
+### Piecewise zone — piecewise.html only
+Stored in the separate `gearbox` Preferences namespace, not in `CalConfig`. Saved via `/cmd?action=savePiecewiseZone&...`, read back via `/configData`. calibration.html shows the same values read-only. Cannot move to `/api/config` without firmware changes.
+
+### Servo angles are bounded 42-137, not 0-180
+`CLUTCH_SERVO_MIN`/`CLUTCH_SERVO_MAX` in `CalConfig.h` are the measured travel, and `calValidate()` enforces them. `SimpleServo::write()` clamps to that range *silently*, so a wider bound stores an angle the servo never reaches while the hall/servo mapping still computes against it.
+
+### Clutch voltage thresholds — calibration.html only
+`clutchDisengageV` (downshift trigger) and `clutchJustEngagedV` (bite point, the return target between stacked downshifts). They live on calibration.html because capturing either means driving the clutch to position, and the manual servo slider is there.
 
 ### Firmware endpoints (WebInterface.h)
 
