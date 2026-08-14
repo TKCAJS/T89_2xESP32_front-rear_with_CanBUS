@@ -323,8 +323,7 @@
     }
 
     function clearShiftLogs() {
-        if (!confirm('Clear all stored shift logs?
-Calibration values are not affected.')) return;
+        if (!confirm('Clear all stored shift logs? Calibration values are not affected.')) return;
         fetch('/cmd?action=clearShiftLogs').then(r => r.text()).then(t => {
             document.getElementById('nvsActionResult').textContent = t;
             loadNvsStats();
