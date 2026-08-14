@@ -3,12 +3,28 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <LittleFS.h>
 
 // Pin definition for ignition cut
 #define PIN_IGNITION_CUT 18
 
-// Shift logging configuration
-#define MAX_SHIFT_LOG_ENTRIES 100
+// Shift logging configuration.
+//
+// Logs live on LittleFS, NOT in NVS. They used to be 100 discrete blob keys in a
+// "shiftlogs" NVS namespace, competing with the calibration blob for the same
+// 630-entry table in a 20 KB partition - enough shifts and config saves started
+// failing with "nvs write failed". A filesystem is the right home for append-only
+// records: the spiffs partition is 3.4 MB, 173x the NVS partition, already mounted.
+//
+// Fixed-size ring file: header plus MAX_SHIFT_LOG_ENTRIES slots, oldest overwritten.
+#define MAX_SHIFT_LOG_ENTRIES 5000
+#define SHIFT_LOG_PATH   "/shiftlog.bin"
+#define SHIFT_LOG_MAGIC  0x54383953UL
+#define SHIFT_LOG_VER    1
+// Recent entries mirrored in RAM. The web server runs inside the same loop() as the
+// shift state machine, so serving /shiftLogs from flash would stall shift timing on
+// every browser poll. 20 entries costs a few hundred bytes.
+#define SHIFT_LOG_MIRROR 20
 #define SHIFT_TIMEOUT_MS 300  // Max time to wait for gear change
 
 // Shift log entry structure
@@ -20,6 +36,17 @@ struct ShiftLogEntry {
     uint16_t shiftTimeMs;     // Time taken for shift in milliseconds
     uint8_t shiftType;        // 0=upshift, 1=downshift, 2=neutral
     bool successful;          // Whether shift completed successfully
+};
+
+// Ring file header. Statistics live here too, so logging never touches NVS.
+struct ShiftLogHeader {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t head;
+    uint32_t count;
+    uint32_t totalShifts;
+    uint32_t failedShifts;
+    uint16_t avgTime;
 };
 
 // Ignition cut relay state
@@ -43,9 +70,12 @@ private:
     uint8_t currentShiftType;
     
     // Data logging
-    Preferences shiftPrefs;
+    // No Preferences member: logging is on LittleFS now. NVS is opened in exactly one
+    // place, migrateFromNvs(), to drop the legacy logs that were filling the partition.
     int currentLogIndex;
     int totalLogEntries;
+    ShiftLogEntry mirror[SHIFT_LOG_MIRROR];
+    int mirrorCount;
     
     // Statistics
     uint32_t totalShifts;
@@ -55,7 +85,7 @@ private:
 public:
     ShiftLogger() : shiftTimingActive(false), shiftStartTime(0), 
                     expectedFromGear(0), expectedToGear(0), shiftStartRpm(0),
-                    currentShiftType(0), currentLogIndex(0), totalLogEntries(0),
+                    currentShiftType(0), currentLogIndex(0), totalLogEntries(0), mirrorCount(0),
                     totalShifts(0), failedShifts(0), averageShiftTime(0) {}
     
     void begin() {
@@ -146,36 +176,25 @@ public:
     }
     
     // Get recent shift logs (for web interface)
+    // Served from the RAM mirror, never from flash. The web server shares loop() with
+    // the shift state machine, so a file read here would stall shift timing every time
+    // a browser polls. Beyond SHIFT_LOG_MIRROR entries, use the CSV export instead.
     String getRecentLogs(int count = 10) {
         String logs = "[";
-        int startIndex = max(0, currentLogIndex - count);
-        bool first = true;
-        
-        for (int i = 0; i < min(count, totalLogEntries); i++) {
-            ShiftLogEntry entry;
-            if (loadLogEntry((startIndex + i) % MAX_SHIFT_LOG_ENTRIES, entry)) {
-                if (!first) logs += ",";
-                logs += logEntryToJson(entry);
-                first = false;
-            }
+        int n = min(count, mirrorCount);
+        for (int i = mirrorCount - n; i < mirrorCount; i++) {
+            if (i > mirrorCount - n) logs += ",";
+            logs += logEntryToJson(mirror[i]);
         }
-        
         logs += "]";
         return logs;
     }
     
     // Clear all shift logs
     void clearLogs() {
-        shiftPrefs.begin("shiftlogs", false);
-        shiftPrefs.clear();
-        shiftPrefs.end();
-        
-        currentLogIndex = 0;
-        totalLogEntries = 0;
-        totalShifts = 0;
-        failedShifts = 0;
-        averageShiftTime = 0;
-        
+        initRing();        // rewrites the file with an empty header and blank slots
+        migrateFromNvs();  // and drops any legacy NVS logs still holding config space
+        mirrorCount = 0;
         Serial.println("Shift logs cleared");
     }
     
@@ -302,56 +321,114 @@ private:
     }
     
     void saveLogEntry(const ShiftLogEntry& entry) {
-        shiftPrefs.begin("shiftlogs", false);
-        
-        // Create key for this entry
-        String key = "entry_" + String(currentLogIndex);
-        
-        // Pack the struct into bytes for storage
-        uint8_t data[sizeof(ShiftLogEntry)];
-        memcpy(data, &entry, sizeof(ShiftLogEntry));
-        
-        shiftPrefs.putBytes(key.c_str(), data, sizeof(ShiftLogEntry));
-        
-        // Update counters
+        File f = LittleFS.open(SHIFT_LOG_PATH, "r+");
+        if (f) {
+            f.seek(slotOffset(currentLogIndex));
+            f.write((const uint8_t*)&entry, sizeof(ShiftLogEntry));
+            f.close();
+        } else {
+            Serial.println("ShiftLogger: cannot open ring for write");
+        }
+
         currentLogIndex = (currentLogIndex + 1) % MAX_SHIFT_LOG_ENTRIES;
-        if (totalLogEntries < MAX_SHIFT_LOG_ENTRIES) {
-            totalLogEntries++;
+        if (totalLogEntries < MAX_SHIFT_LOG_ENTRIES) totalLogEntries++;
+        writeHeader();
+
+        // Mirror it so the web view never touches flash.
+        if (mirrorCount < SHIFT_LOG_MIRROR) {
+            mirror[mirrorCount++] = entry;
+        } else {
+            for (int i = 1; i < SHIFT_LOG_MIRROR; i++) mirror[i - 1] = mirror[i];
+            mirror[SHIFT_LOG_MIRROR - 1] = entry;
         }
-        
-        // Save index
-        shiftPrefs.putInt("currentIndex", currentLogIndex);
-        shiftPrefs.putInt("totalEntries", totalLogEntries);
-        
-        shiftPrefs.end();
     }
-    
+
     bool loadLogEntry(int index, ShiftLogEntry& entry) {
-        shiftPrefs.begin("shiftlogs", true);
-        String key = "entry_" + String(index);
-        
-        uint8_t data[sizeof(ShiftLogEntry)];
-        size_t bytesRead = shiftPrefs.getBytes(key.c_str(), data, sizeof(ShiftLogEntry));
-        
-        shiftPrefs.end();
-        
-        if (bytesRead == sizeof(ShiftLogEntry)) {
-            memcpy(&entry, data, sizeof(ShiftLogEntry));
-            return true;
-        }
-        return false;
+        if (index < 0 || index >= MAX_SHIFT_LOG_ENTRIES) return false;
+        File f = LittleFS.open(SHIFT_LOG_PATH, "r");
+        if (!f) return false;
+        bool ok = f.seek(slotOffset(index)) &&
+                  f.read((uint8_t*)&entry, sizeof(ShiftLogEntry)) == sizeof(ShiftLogEntry);
+        f.close();
+        return ok;
     }
-    
+
+    static uint32_t slotOffset(int index) {
+        return sizeof(ShiftLogHeader) + (uint32_t)index * sizeof(ShiftLogEntry);
+    }
+
+    void writeHeader() {
+        File f = LittleFS.open(SHIFT_LOG_PATH, "r+");
+        if (!f) return;
+        ShiftLogHeader h = { SHIFT_LOG_MAGIC, SHIFT_LOG_VER,
+                             (uint16_t)currentLogIndex, (uint32_t)totalLogEntries,
+                             totalShifts, failedShifts, averageShiftTime };
+        f.seek(0);
+        f.write((const uint8_t*)&h, sizeof(h));
+        f.close();
+    }
+
+    // Creates the ring on first use and validates it on every boot. A missing, short
+    // or foreign file is reinitialised rather than trusted.
     void loadLogIndex() {
-        shiftPrefs.begin("shiftlogs", true);
-        currentLogIndex = shiftPrefs.getInt("currentIndex", 0);
-        totalLogEntries = shiftPrefs.getInt("totalEntries", 0);
-        totalShifts = shiftPrefs.getUInt("totalShifts", 0);
-        failedShifts = shiftPrefs.getUInt("failedShifts", 0);
-        averageShiftTime = shiftPrefs.getUShort("avgTime", 0);
-        shiftPrefs.end();
+        bool needInit = true;
+        File f = LittleFS.open(SHIFT_LOG_PATH, "r");
+        if (f) {
+            ShiftLogHeader h;
+            if (f.size() >= slotOffset(MAX_SHIFT_LOG_ENTRIES) &&
+                f.read((uint8_t*)&h, sizeof(h)) == sizeof(h) &&
+                h.magic == SHIFT_LOG_MAGIC && h.version == SHIFT_LOG_VER &&
+                h.head < MAX_SHIFT_LOG_ENTRIES && h.count <= MAX_SHIFT_LOG_ENTRIES) {
+                currentLogIndex  = h.head;
+                totalLogEntries  = h.count;
+                totalShifts      = h.totalShifts;
+                failedShifts     = h.failedShifts;
+                averageShiftTime = h.avgTime;
+                needInit = false;
+            }
+            f.close();
+        }
+        if (needInit) initRing();
+        fillMirror();
+        migrateFromNvs();
     }
-    
+
+    void initRing() {
+        File f = LittleFS.open(SHIFT_LOG_PATH, "w");
+        if (!f) { Serial.println("ShiftLogger: cannot create ring file"); return; }
+        ShiftLogHeader h = { SHIFT_LOG_MAGIC, SHIFT_LOG_VER, 0, 0, 0, 0, 0 };
+        f.write((const uint8_t*)&h, sizeof(h));
+        ShiftLogEntry blank = {};
+        for (int i = 0; i < MAX_SHIFT_LOG_ENTRIES; i++)
+            f.write((const uint8_t*)&blank, sizeof(blank));
+        f.close();
+        currentLogIndex = 0; totalLogEntries = 0;
+        totalShifts = 0; failedShifts = 0; averageShiftTime = 0;
+        Serial.println("ShiftLogger: ring created, " + String(MAX_SHIFT_LOG_ENTRIES) + " slots");
+    }
+
+    void fillMirror() {
+        mirrorCount = 0;
+        int n = min(totalLogEntries, SHIFT_LOG_MIRROR);
+        for (int i = n; i > 0; i--) {
+            int idx = (currentLogIndex - i + MAX_SHIFT_LOG_ENTRIES) % MAX_SHIFT_LOG_ENTRIES;
+            ShiftLogEntry e;
+            if (loadLogEntry(idx, e)) mirror[mirrorCount++] = e;
+        }
+    }
+
+    // One-time reclaim: the old NVS logs are dead weight, and are exactly what filled
+    // the config partition.
+    void migrateFromNvs() {
+        Preferences p;
+        if (!p.begin("shiftlogs", false)) return;
+        if (p.isKey("currentIndex") || p.isKey("entry_0")) {
+            p.clear();
+            Serial.println("ShiftLogger: cleared legacy NVS logs, config space reclaimed");
+        }
+        p.end();
+    }
+
     void updateStatistics(const ShiftLogEntry& entry) {
         totalShifts++;
         
@@ -368,12 +445,9 @@ private:
             }
         }
         
-        // Save statistics
-        shiftPrefs.begin("shiftlogs", false);
-        shiftPrefs.putUInt("totalShifts", totalShifts);
-        shiftPrefs.putUInt("failedShifts", failedShifts);
-        shiftPrefs.putUShort("avgTime", averageShiftTime);
-        shiftPrefs.end();
+        // Statistics live in the ring header, not NVS — this ran on every shift, so it
+        // was three more NVS writes per gear change on top of the log entry itself.
+        writeHeader();
     }
     
     String logEntryToJson(const ShiftLogEntry& entry) {
