@@ -97,7 +97,15 @@ private:
 
     // Timeouts
     static const unsigned long STATE_SHIFT_TIMEOUT_MS = 500;
+    // Driver is being waited on to pull the clutch by hand (neutral paths).
     static const unsigned long CLUTCH_WAIT_TIMEOUT_MS = 200;
+
+    // Servo is being waited on to physically pull the clutch past the trigger voltage
+    // (downshift path). Must comfortably exceed real servo travel — a sweep from
+    // clutchIdlePos to clutchFullyPull is typically 150-300 ms, so 200 ms would expire
+    // on healthy shifts and bypass the gate entirely. On expiry the shift is ABORTED,
+    // never sent: an unconfirmed clutch means shifting against drive.
+    static const unsigned long DOWNSHIFT_SERVO_TIMEOUT_MS = 500;
 
 public:
     GearboxStateMachine()

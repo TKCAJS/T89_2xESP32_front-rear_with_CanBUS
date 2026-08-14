@@ -48,7 +48,10 @@
 #define CLUTCH_SERVO_MAX  137
 
 // Clutch voltage thresholds — calibrated via web interface
-float clutchDisengageV   = 1.8f;  // raw ADC voltage: above this = disengaged, relay safe
+// Downshift trigger. Servo feedback is electrically inverted, so pulling the clutch
+// drives this voltage DOWN — the gate fires on falling past the threshold, not rising.
+// Set from the Downshift Trigger widget on the home page (/cmd?action=setDisengageV).
+float clutchDisengageV   = 1.8f;  // raw ADC voltage: below this = pulled, safe to send DS
 float clutchJustEngagedV = 1.8f;  // raw ADC voltage: rising through this = biting point
 
 // Standard includes

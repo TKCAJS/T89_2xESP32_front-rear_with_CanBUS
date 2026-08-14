@@ -294,7 +294,13 @@
         <!-- Downshift trigger threshold -->
         <h3>Auto-Downshift Trigger</h3>
         <div style='background:#2a2a4d;padding:15px;border-radius:5px;border-left:4px solid #6B6BFF;max-width:400px;'>
-            <h4>Clutch Bite-Point Voltage</h4>
+            <h4>Downshift Trigger Voltage</h4>
+            <p style='color:#aaa;font-size:12px;margin:0 0 10px;'>
+                On a downshift request the servo pulls until the feedback voltage passes
+                this threshold, and only then is the DS CAN command sent. Feedback is
+                electrically inverted, so pulling drives the voltage <strong>down</strong>
+                &mdash; the trigger fires on falling past this value.
+            </p>
             <div class='form-group'>
                 <label>Trigger voltage (raw ADC V):</label>
                 <div id='bitePointDisplay' style='font-size:1.4em;color:#6B6BFF;font-weight:bold;margin:8px 0;'>Loading...</div>
@@ -455,7 +461,7 @@ function updateStatus() {
                 status += '<br><span class="shift-timing">Shift Timing: ' + (d.shiftTimingActive ? 'ACTIVE' : 'Idle') + '</span>';
                 status += '<br>Hall Curve: ' + d.hallCurveName + ' (' + d.hallCurveStrength + ')';
                 document.getElementById('status').innerHTML = status;
-                document.getElementById('bitePointDisplay').textContent = d.clutchJustEngagedV.toFixed(3) + ' V  (live: ' + d.clutchVoltage.toPrecision(3) + ' V)';
+                document.getElementById('bitePointDisplay').textContent = d.clutchDisengageV.toFixed(3) + ' V  (live: ' + d.clutchVoltage.toPrecision(3) + ' V)';
                 
                 let tempStatus = '<div class="temp-reading temp-current">Current: ' + d.currentTemp.toFixed(1) + '°C</div>';
                 tempStatus += '<div class="temp-reading temp-target">Target: ' + d.targetTemp.toFixed(1) + '°C</div>';
@@ -482,7 +488,7 @@ function updateStatus() {
         
         function loadConfig() {
             fetch('/configData').then(r => r.json()).then(d => {
-                let displayedBiteV = d.clutchJustEngagedV.toFixed(3);
+                let displayedBiteV = d.clutchDisengageV.toFixed(3);
                 document.getElementById('bitePointDisplay').textContent = displayedBiteV + ' V';
                 document.getElementById('bitePointInput').value = displayedBiteV;
             }).catch(e => console.error('Config load error:', e));
@@ -494,7 +500,10 @@ function updateStatus() {
                 document.getElementById('bitePointResult').textContent = 'Invalid value (0.000-3.300 V)';
                 return;
             }
-            fetch('/cmd?action=setJustEngagedV&v=' + displayedV.toFixed(3)).then(r => {
+            // setDisengageV, NOT setJustEngagedV: clutchDisengageV is the threshold the
+            // downshift gate actually compares against in checkServoPosition().
+            // clutchJustEngagedV feeds only the clutchJustEngaged flag, which no logic reads.
+            fetch('/cmd?action=setDisengageV&v=' + displayedV.toFixed(3)).then(r => {
                 if (r.ok) {
                     document.getElementById('bitePointDisplay').textContent = displayedV.toFixed(3) + ' V';
                     document.getElementById('bitePointResult').textContent = 'Saved (' + displayedV.toFixed(3) + ' V)';

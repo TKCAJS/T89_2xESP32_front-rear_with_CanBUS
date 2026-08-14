@@ -5,6 +5,12 @@
 #include "ShiftLogger.h"
 #include "RPM.h"
 
+// Clutch servo feedback, owned by T89_gearbox_206.cpp. clutchVoltage is the live
+// position from the servo's pot via the ADS1115; clutchDisengageV is the downshift
+// trigger threshold. Feedback is electrically inverted — pulling drives it DOWN.
+extern float clutchVoltage;
+extern float clutchDisengageV;
+
 // External functions implemented in T89_gearbox_206.cpp
 extern void displayShiftLetter(char letter);
 extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear = GEAR_UNKNOWN);
@@ -277,13 +283,27 @@ void GearboxStateMachine::enterErrorState() {
 }
 
 void GearboxStateMachine::updateDownshiftClutchWait() {
-    // Wait for clutch pull detection. If none within timeout, fire relay anyway
-    // (handles bench testing without clutch, and covers slow/missed clutch pulls)
+    // The servo is travelling. Only once its feedback confirms the clutch is actually
+    // pulled is it safe to send the downshift — clutchPulled is a threshold crossing,
+    // so it latches on the first sample past the trigger voltage and does not rely on
+    // any exact value being sampled.
     if (clutchPulled) {
         processEvent(EVENT_CLUTCH_PULLED);
-    } else if (getStateElapsedTime() >= CLUTCH_WAIT_TIMEOUT_MS) {
-        Serial.println("Downshift: no clutch detected, firing relay directly");
-        transitionToState(DOWNSHIFT_SHIFTING);
+        return;
+    }
+
+    // Never send the shift unconfirmed: if the servo has not reached the trigger
+    // voltage, the clutch may still be driving and the shift would be against load.
+    // Abort instead. enterErrorState() releases the servo to idle and drops any
+    // stacked downshifts; updateErrorState() then recovers to the current gear.
+    if (getStateElapsedTime() >= DOWNSHIFT_SERVO_TIMEOUT_MS) {
+        Serial.println("Downshift ABORTED: clutch not confirmed within " +
+                       String(DOWNSHIFT_SERVO_TIMEOUT_MS) + "ms (servo/feedback fault?) - "
+                       "live " + String(clutchVoltage, 3) + "V vs trigger " +
+                       String(clutchDisengageV, 3) + "V");
+        // No explicit failure log needed: no gear change follows, so the logger's own
+        // update() records this as a failed shift when its timing window expires.
+        transitionToState(ERROR_SHIFT_TIMEOUT);
     }
 }
 
