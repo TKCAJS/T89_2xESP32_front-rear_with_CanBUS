@@ -10,7 +10,7 @@
 // trigger threshold. Feedback is electrically inverted — pulling drives it DOWN.
 extern float clutchVoltage;
 extern float clutchDisengageV;
-extern float clutchJustEngagedV;   // bite point — release target between stacked shifts
+extern float clutchJustEngagedV;   // bite point — return target between stacked shifts
 
 // External functions implemented in T89_gearbox_206.cpp
 extern void displayShiftLetter(char letter);
@@ -173,8 +173,8 @@ void GearboxStateMachine::executeStateEntry() {
         // Deliberately NOT routed through enterShiftingState(): that recomputes
         // expectedGear from currentGear, and currentGear still holds the old gear until
         // CAN confirms. Doing so here would rewind expectedGear to the gear we just left.
-        case DOWNSHIFT_PARTIAL_RELEASE:
-            enterPartialReleaseState();
+        case DOWNSHIFT_TO_BITE_POINT:
+            enterBitePointState();
             break;
 
         case WAITING_FOR_CLUTCH_SHIFT_DOWN:
@@ -197,8 +197,8 @@ void GearboxStateMachine::executeStateUpdate() {
             updateDownshiftClutchWait();
             break;
 
-        case DOWNSHIFT_PARTIAL_RELEASE:
-            updatePartialRelease();
+        case DOWNSHIFT_TO_BITE_POINT:
+            updateToBitePoint();
             break;
 
         case WAITING_FOR_CLUTCH_SHIFT_DOWN:
@@ -217,7 +217,7 @@ void GearboxStateMachine::executeStateUpdate() {
 }
 
 void GearboxStateMachine::enterIdleState() {
-    // Release clutch to idle position
+    // Return the clutch to idle (engaged)
     clutchToIdle();
 
     // Ensure relays are off
@@ -306,7 +306,7 @@ void GearboxStateMachine::updateDownshiftClutchWait() {
 
     // Never send the shift unconfirmed: if the servo has not reached the trigger
     // voltage, the clutch may still be driving and the shift would be against load.
-    // Abort instead. enterErrorState() releases the servo to idle and drops any
+    // Abort instead. enterErrorState() returns the servo to idle and drops any
     // stacked downshifts; updateErrorState() then recovers to the current gear.
     if (getStateElapsedTime() >= DOWNSHIFT_SERVO_TIMEOUT_MS) {
         Serial.println("Downshift ABORTED: clutch not confirmed within " +
@@ -319,47 +319,47 @@ void GearboxStateMachine::updateDownshiftClutchWait() {
     }
 }
 
-void GearboxStateMachine::enterPartialReleaseState() {
+void GearboxStateMachine::enterBitePointState() {
     // Deliberately does NOT command idle. Stopping at the bite point needs an angle to
     // hold, but the bite point is defined as a voltage and there is no volts-to-degrees
-    // calibration — so the command is walked out step by step in updatePartialRelease()
+    // calibration — so the command is walked out step by step in updateToBitePoint()
     // while feedback is watched, rather than commanding idle and trying to interrupt it
     // mid-travel. Servo stays where the shift left it until the first step.
-    lastReleaseStepMs = millis();
+    lastBiteStepMs = millis();
     displayShiftLetter('D');
     Serial.println("Stacked: releasing to bite point " + String(clutchJustEngagedV, 3) +
                    "V (from " + String(clutchVoltage, 3) + "V)");
 }
 
-void GearboxStateMachine::updatePartialRelease() {
+void GearboxStateMachine::updateToBitePoint() {
     // Bite point reached — hold here. The next shift fires from this position the moment
     // CAN confirms the gear, so the clutch never travels the dead zone beyond it.
     if (clutchVoltage >= clutchJustEngagedV) return;
 
-    // Not there in time: complete a normal full release so a mis-set threshold or a slow
+    // Not there in time: return fully to idle so a mis-set threshold or a slow
     // servo costs speed rather than the shift. Landing in an idle state also hands the
     // stack back to the original path.
-    if (getStateElapsedTime() >= STACK_RELEASE_TIMEOUT_MS) {
+    if (getStateElapsedTime() >= STACK_BITE_TIMEOUT_MS) {
         Serial.println("Stacked: bite point not reached in " +
-                       String(STACK_RELEASE_TIMEOUT_MS) + "ms (live " +
+                       String(STACK_BITE_TIMEOUT_MS) + "ms (live " +
                        String(clutchVoltage, 3) + "V vs " + String(clutchJustEngagedV, 3) +
-                       "V) - falling back to full release");
+                       "V) - returning fully to idle");
         clutchToIdle();
         transitionToState(getIdleStateForGear(expectedGear));
         return;
     }
 
     // Step the command toward idle. Rate-limited so the stroke stays close to the servo's
-    // own speed instead of being dictated by loop frequency; a slow loop just releases
+    // own speed instead of being dictated by loop frequency; a slow loop just returns
     // more gently, which errs toward less engagement.
     unsigned long now = millis();
-    if (now - lastReleaseStepMs < STACK_RELEASE_STEP_MS) return;
-    lastReleaseStepMs = now;
+    if (now - lastBiteStepMs < STACK_BITE_STEP_MS) return;
+    lastBiteStepMs = now;
 
     float angle  = clutchServo->getAngle();
     float target = (float)clutchIdlePos;
-    if (angle > target)      angle = max(target, angle - STACK_RELEASE_STEP_DEG);
-    else if (angle < target) angle = min(target, angle + STACK_RELEASE_STEP_DEG);
+    if (angle > target)      angle = max(target, angle - STACK_BITE_STEP_DEG);
+    else if (angle < target) angle = min(target, angle + STACK_BITE_STEP_DEG);
     clutchServo->writeFloat(angle);
 }
 
@@ -407,7 +407,7 @@ void GearboxStateMachine::updateRelayControl() {
             // returning to idle: entering an idle state calls clutchToIdle() and the
             // next shift would then have to pull back through the whole dead travel.
             if (!activeShiftIsUp && targetGear > 0 && expectedGear > targetGear) {
-                transitionToState(DOWNSHIFT_PARTIAL_RELEASE);
+                transitionToState(DOWNSHIFT_TO_BITE_POINT);
                 return;
             }
 
@@ -426,7 +426,7 @@ void GearboxStateMachine::clutchToMax() {
 
 void GearboxStateMachine::clutchToIdle() {
     clutchServo->write(clutchIdlePos);
-    Serial.println("Clutch released");
+    Serial.println("Clutch to idle (engaged)");
 }
 
 void GearboxStateMachine::clearShiftStack() {
@@ -443,10 +443,10 @@ void GearboxStateMachine::logShiftStart(int fromGear, int toGear, uint8_t shiftT
 }
 
 void GearboxStateMachine::checkTimeouts() {
-    // These two run their own timeouts (updateDownshiftClutchWait / updatePartialRelease)
+    // These two run their own timeouts (updateDownshiftClutchWait / updateToBitePoint)
     // and must not also be caught by the generic shift timeout below.
     if (currentState == DOWNSHIFT_CLUTCH_ENGAGING) return;
-    if (currentState == DOWNSHIFT_PARTIAL_RELEASE) return;
+    if (currentState == DOWNSHIFT_TO_BITE_POINT) return;
 
     if (isShiftingState(currentState) && getStateElapsedTime() >= STATE_SHIFT_TIMEOUT_MS) {
         Serial.println("Shift timeout detected");
@@ -468,7 +468,7 @@ String GearboxStateMachine::getStateName(GearboxState state) const {
         case UPSHIFTING: return "UPSHIFTING";
         case DOWNSHIFT_CLUTCH_ENGAGING: return "DOWNSHIFT_CLUTCH_ENGAGING";
         case DOWNSHIFT_SHIFTING: return "DOWNSHIFT_SHIFTING";
-        case DOWNSHIFT_PARTIAL_RELEASE: return "DOWNSHIFT_PARTIAL_RELEASE";
+        case DOWNSHIFT_TO_BITE_POINT: return "DOWNSHIFT_TO_BITE_POINT";
         case WAITING_FOR_CLUTCH_SHIFT_DOWN: return "WAITING_FOR_CLUTCH_SHIFT_DOWN";
         case WAITING_FOR_CLUTCH_SHIFT_UP: return "WAITING_FOR_CLUTCH_SHIFT_UP";
         case ERROR_SHIFT_TIMEOUT: return "ERROR_SHIFT_TIMEOUT";
@@ -505,7 +505,7 @@ void GearboxStateMachine::setCurrentGear(int gear) {
 
         // Stacked downshift: CAN confirmed the gear — fire next or clear
         if (targetGear > 0) {
-            if (currentGear > targetGear && currentState == DOWNSHIFT_PARTIAL_RELEASE) {
+            if (currentGear > targetGear && currentState == DOWNSHIFT_TO_BITE_POINT) {
                 // Holding at the bite point. currentGear has just been confirmed, so
                 // transition straight in — processEvent() must NOT be used here: outside
                 // an idle state it treats a down press as another stack request.
@@ -547,7 +547,7 @@ bool GearboxStateMachine::isIdleState(GearboxState state) const {
 }
 
 bool GearboxStateMachine::isShiftingState(GearboxState state) const {
-    return state >= NEUTRAL_DOWN_SHIFTING && state <= DOWNSHIFT_PARTIAL_RELEASE;
+    return state >= NEUTRAL_DOWN_SHIFTING && state <= DOWNSHIFT_TO_BITE_POINT;
 }
 
 void GearboxStateMachine::printStateInfo() const {

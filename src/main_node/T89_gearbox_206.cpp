@@ -51,7 +51,7 @@
 // end, so the gate fires on the voltage FALLING past this threshold, not rising.
 // Set from the Downshift Trigger widget on the home page (/cmd?action=setDisengageV).
 float clutchDisengageV   = 1.8f;  // below this = clutch DISENGAGED, safe to send the DS
-float clutchJustEngagedV = 1.8f;  // above this = clutch ENGAGED; bite point on release
+float clutchJustEngagedV = 1.8f;  // above this = clutch ENGAGED; the bite point
 
 // Standard includes
 #include <LittleFS.h>
@@ -646,7 +646,7 @@ void checkServoPosition() {
         clutchVoltage = (analogValue * 3.3) / 4095.0;
     }
     // Feedback is inverted: pulling drives the voltage DOWN. So the axis reads
-    //   v <  clutchDisengageV    -> RELEASED (disengaged, safe to send a shift)
+    //   v <  clutchDisengageV    -> DISENGAGED (safe to send a shift)
     //   v <= clutchJustEngagedV  -> biting zone
     //   v >  clutchJustEngagedV  -> ENGAGED (driving)
     // which means clutchDisengageV < clutchJustEngagedV. The old test compared them

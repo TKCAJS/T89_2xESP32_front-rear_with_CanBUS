@@ -17,7 +17,7 @@ private:
     int clutchFullyPull;
     int hallMin;
     int hallMax;
-    int pin2RawMin;   // pin4 raw ADC at idle (lever released) — calibrated
+    int pin2RawMin;   // pin4 raw ADC at paddle idle (clutch engaged) — calibrated
     int pin2RawMax;   // pin4 raw ADC at paddle max (clutch disengaged) — calibrated
     bool servoOverride;  // true = slider/web controls servo; hall sensor backs off
     // Piecewise breakpoints
