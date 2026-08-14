@@ -11,8 +11,16 @@
 #include <Preferences.h>
 #include <ArduinoJson.h>
 #include <freertos/semphr.h>
+#include <nvs.h>            // nvs_get_stats — diagnosing write failures
 
 static const uint16_t CAL_VERSION = 1;
+
+// Clutch servo travel limits — physically measured, never exceed these.
+// They live here rather than in T89_gearbox_206.cpp so calValidate() can enforce them:
+// SimpleServo::write() constrains to this range silently, so a stored angle outside it
+// would persist and read back fine while the servo quietly ignored it.
+#define CLUTCH_SERVO_MIN  42
+#define CLUTCH_SERVO_MAX  137
 
 struct CalConfig {
     uint16_t version;
@@ -23,9 +31,9 @@ struct CalConfig {
     uint16_t shiftUpMs;        // upshift relay pulse (20-1000 ms)
     uint16_t shiftDownMs;      // downshift relay pulse (20-1000 ms)
 
-    // --- clutch servo angles ---
-    uint16_t clutchIdlePos;    // lever released / clutch fully engaged (0-180 °)
-    uint16_t clutchFullyPull;  // lever pulled / clutch disengaged (0-180 °)
+    // --- clutch servo angles (CLUTCH_SERVO_MIN..MAX, not 0-180) ---
+    uint16_t clutchIdlePos;    // lever released / clutch fully engaged
+    uint16_t clutchFullyPull;  // lever pulled / clutch disengaged
 
     // --- integrity (MUST remain last member) ---
     uint32_t crc;
@@ -37,8 +45,8 @@ static void calLoadDefaults(CalConfig &c) {
     c.neutralUpMs    = 40;
     c.shiftUpMs      = 150;
     c.shiftDownMs    = 150;
-    c.clutchIdlePos  = 0;
-    c.clutchFullyPull = 180;
+    c.clutchIdlePos  = CLUTCH_SERVO_MIN;   // 0/180 would be outside real travel
+    c.clutchFullyPull = CLUTCH_SERVO_MAX;
     c.crc            = 0;
 }
 
@@ -49,8 +57,13 @@ static String calValidate(const CalConfig &c) {
     if (c.neutralUpMs    < 20 || c.neutralUpMs    > 1000) return "neutralUpMs out of range (20-1000)";
     if (c.shiftUpMs      < 20 || c.shiftUpMs      > 1000) return "shiftUpMs out of range (20-1000)";
     if (c.shiftDownMs    < 20 || c.shiftDownMs    > 1000) return "shiftDownMs out of range (20-1000)";
-    if (c.clutchIdlePos  > 180)                           return "clutchIdlePos out of range (0-180)";
-    if (c.clutchFullyPull > 180)                          return "clutchFullyPull out of range (0-180)";
+    // Enforce the servo's real travel, not 0-180. SimpleServo::write() clamps to these
+    // limits without complaint, so accepting a wider range would store an angle the
+    // servo never actually reaches — stored value and real travel silently disagreeing.
+    if (c.clutchIdlePos < CLUTCH_SERVO_MIN || c.clutchIdlePos > CLUTCH_SERVO_MAX)
+        return "clutchIdlePos out of range (" + String(CLUTCH_SERVO_MIN) + "-" + String(CLUTCH_SERVO_MAX) + ")";
+    if (c.clutchFullyPull < CLUTCH_SERVO_MIN || c.clutchFullyPull > CLUTCH_SERVO_MAX)
+        return "clutchFullyPull out of range (" + String(CLUTCH_SERVO_MIN) + "-" + String(CLUTCH_SERVO_MAX) + ")";
     return "";
 }
 
@@ -97,10 +110,33 @@ static bool calNvsRead(CalConfig &out) {
 
 static bool calNvsWrite(const CalConfig &c) {
     Preferences p;
-    p.begin(CAL_NVS_NS, false);
+    if (!p.begin(CAL_NVS_NS, false)) {
+        Serial.println("CalConfig: NVS begin failed for namespace '" + String(CAL_NVS_NS) + "'");
+        return false;
+    }
     size_t n = p.putBytes(CAL_NVS_KEY, &c, sizeof(c));
     p.end();
-    return n == sizeof(c);
+
+    if (n != sizeof(c)) {
+        // The web layer can only report "nvs write failed", which says nothing about
+        // why. putBytes gives no error code, so dump the partition stats instead —
+        // exhaustion (free_entries near zero) looks identical to any other failure
+        // from the outside. This write is field-agnostic: it stores the whole struct,
+        // so a failure is never specific to one setting.
+        nvs_stats_t st;
+        if (nvs_get_stats(NULL, &st) == ESP_OK) {
+            Serial.printf("CalConfig: NVS write failed (%u of %u bytes). "
+                          "entries used=%u free=%u total=%u, namespaces=%u\n",
+                          (unsigned)n, (unsigned)sizeof(c),
+                          (unsigned)st.used_entries, (unsigned)st.free_entries,
+                          (unsigned)st.total_entries, (unsigned)st.namespace_count);
+        } else {
+            Serial.printf("CalConfig: NVS write failed (%u of %u bytes), stats unavailable\n",
+                          (unsigned)n, (unsigned)sizeof(c));
+        }
+        return false;
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------

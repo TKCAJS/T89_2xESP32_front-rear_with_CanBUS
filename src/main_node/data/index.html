@@ -310,6 +310,7 @@
                 <input type='number' id='bitePointInput' min='0' max='3.3' step='0.001' placeholder='e.g. 1.500'>
             </div>
             <button class='btn' onclick='saveDownshiftTrigger()'>Save to Flash</button>
+            <button class='btn' style='background:#F44336;' onclick='captureDownshiftTrigger()'>Capture Live</button>
             <div id='bitePointResult' style='margin-top:8px;color:#aaa;font-size:0.9em;'></div>
         </div>
     </div>
@@ -494,6 +495,21 @@ function updateStatus() {
             }).catch(e => console.error('Config load error:', e));
         }
         
+        // Capture-from-live used to live on the Calibration page, which meant two pages
+        // could write this one threshold. It moved here so there is a single writer.
+        function captureDownshiftTrigger() {
+            fetch('/cmd?action=captureDisengageV')
+                .then(r => r.text())
+                .then(v => {
+                    const val = parseFloat(v).toFixed(3);
+                    document.getElementById('bitePointDisplay').textContent = val + ' V';
+                    document.getElementById('bitePointInput').value = val;
+                    document.getElementById('bitePointResult').textContent =
+                        'Captured from live position (' + val + ' V)';
+                })
+                .catch(() => { document.getElementById('bitePointResult').textContent = 'Capture failed'; });
+        }
+
         function saveDownshiftTrigger() {
             let displayedV = parseFloat(document.getElementById('bitePointInput').value);
             if (isNaN(displayedV) || displayedV < 0 || displayedV > 3.3) {

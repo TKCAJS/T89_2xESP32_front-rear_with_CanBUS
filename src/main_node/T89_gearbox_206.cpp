@@ -43,9 +43,8 @@
 // do NOT scale it back to the source. Bite-point thresholds are captured live in these same
 // (post-divider) volts, so the absolute scale is irrelevant — only relative position matters.
 
-// Clutch servo travel limits — physically measured, never exceed these
-#define CLUTCH_SERVO_MIN  42
-#define CLUTCH_SERVO_MAX  137
+// Clutch servo travel limits (CLUTCH_SERVO_MIN / CLUTCH_SERVO_MAX) now live in
+// CalConfig.h, so calValidate() can reject stored angles the servo cannot reach.
 
 // Clutch voltage thresholds — calibrated via web interface
 // Downshift trigger. Servo feedback is electrically inverted, so pulling the clutch
@@ -114,8 +113,11 @@ int neutralDownMs = 40;
 int neutralUpMs = 40;
 int shiftDownMs = 150;
 int shiftUpMs = 150;
-int clutchIdlePos = 0;
-int clutchFullyPull = 185;
+// Placeholders until loadConfig() runs. Kept inside the servo's real travel — the old
+// 185 was past even the nominal 180, so any use before configuration commanded an angle
+// that SimpleServo would silently clamp.
+int clutchIdlePos = CLUTCH_SERVO_MIN;
+int clutchFullyPull = CLUTCH_SERVO_MAX;
 
 // WiFi state
 bool wifiEnabled = false;
@@ -696,8 +698,8 @@ void loadConfig() {
     neutralUpMs      = prefs.getInt("neutralUpMs", 40);
     shiftDownMs      = prefs.getInt("shiftDownMs", 150);
     shiftUpMs        = prefs.getInt("shiftUpMs", 150);
-    clutchIdlePos    = prefs.getInt("clutchIdlePos", 0);
-    clutchFullyPull  = prefs.getInt("clutchFullyPull", 180);
+    clutchIdlePos    = prefs.getInt("clutchIdlePos",   CLUTCH_SERVO_MIN);
+    clutchFullyPull  = prefs.getInt("clutchFullyPull", CLUTCH_SERVO_MAX);
     clutchDisengageV   = prefs.getFloat("clutchDisengV", 1.8f);
     clutchJustEngagedV = prefs.getFloat("clutchBiteV",   1.8f);
     prefs.end();

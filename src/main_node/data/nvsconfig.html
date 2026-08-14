@@ -10,7 +10,7 @@
         .container { max-width: 1200px; margin: 0 auto; }
         /* Container is full width so the tab bar lines up with the other pages, but
            this is a settings form — the form column itself stays narrow to read well. */
-        .card, .actions, #feedback, .meta, .page-sub { max-width: 620px; }
+        .card, .actions, #feedback, .meta, .page-sub { max-width: 620px; }
         .card {
             background: #2a2a2a;
             padding: 20px;
@@ -214,22 +214,28 @@
     <div class="card clutch">
         <h3 style="color:#FF9800;">Clutch Servo Angles</h3>
 
+        <p style="color:#888;font-size:12px;margin:0 0 16px;">
+            Bounds are the servo's physically measured travel, not 0&ndash;180. The servo
+            clamps to this range silently, so an angle outside it would be stored and read
+            back happily while never actually being reached.
+        </p>
+
         <div class="field">
             <label>Idle Angle (°) &mdash; lever released, clutch fully engaged</label>
             <div class="input-row">
-                <input type="number" id="clutchIdlePos" min="0" max="180" step="1">
+                <input type="number" id="clutchIdlePos" min="42" max="137" step="1">
                 <span class="unit">°</span>
             </div>
-            <div class="bounds">Range: 0 – 180</div>
+            <div class="bounds">Range: 42 – 137</div>
         </div>
 
         <div class="field">
             <label>Engage Angle (°) &mdash; lever pulled, clutch disengaged</label>
             <div class="input-row">
-                <input type="number" id="clutchFullyPull" min="0" max="180" step="1">
+                <input type="number" id="clutchFullyPull" min="42" max="137" step="1">
                 <span class="unit">°</span>
             </div>
-            <div class="bounds">Range: 0 – 180</div>
+            <div class="bounds">Range: 42 – 137</div>
         </div>
     </div>
 
@@ -252,8 +258,9 @@
         neutralUpMs:     { min: 20,  max: 1000 },
         shiftDownMs:     { min: 20,  max: 1000 },
         shiftUpMs:       { min: 20,  max: 1000 },
-        clutchIdlePos:   { min: 0,   max: 180  },
-        clutchFullyPull: { min: 0,   max: 180  }
+        // Servo travel limits — must match CLUTCH_SERVO_MIN/MAX in CalConfig.h.
+        clutchIdlePos:   { min: 42,  max: 137  },
+        clutchFullyPull: { min: 42,  max: 137  }
     };
 
     function showFeedback(msg, isErr) {

@@ -343,34 +343,23 @@
                         <span class="step-number">4</span>
                         <strong>Piecewise Biting Zone</strong>
                         <div style="font-size:12px;color:#aaa;margin:6px 0;">
-                            Hall ADC range assigned to biting zone servo travel
+                            Hall ADC range assigned to biting zone servo travel. Shown here
+                            read-only &mdash; edit it on the
+                            <a href="/piecewise" style="color:#4CAF50;">Piecewise</a> page, which is
+                            the only place these values can be changed.
                         </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">
-                            <label style="font-size:12px;">Hall bite start (ADC)<br>
-                                <input id="hBiteStart" type="number" min="0" max="4095" value="1000"
-                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                            </label>
-                            <label style="font-size:12px;">Hall bite end (ADC)<br>
-                                <input id="hBiteEnd" type="number" min="0" max="4095" value="3000"
-                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                            </label>
-                            <label style="font-size:12px;">Servo bite start (&deg;) &mdash; just-engaged<br>
-                                <input id="sBiteStart" type="number" min="0" max="180" value="98"
-                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                            </label>
-                            <label style="font-size:12px;">Servo bite end (&deg;) &mdash; just-disengaged<br>
-                                <input id="sBiteEnd" type="number" min="0" max="180" value="115"
-                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                            </label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;font-size:12px;color:#aaa;">
+                            <div>Hall bite start (ADC)<br><strong id="hBiteStart" style="color:white;font-size:15px;">--</strong></div>
+                            <div>Hall bite end (ADC)<br><strong id="hBiteEnd" style="color:white;font-size:15px;">--</strong></div>
+                            <div>Servo bite start (&deg;) &mdash; just-engaged<br><strong id="sBiteStart" style="color:white;font-size:15px;">--</strong></div>
+                            <div>Servo bite end (&deg;) &mdash; just-disengaged<br><strong id="sBiteEnd" style="color:white;font-size:15px;">--</strong></div>
                         </div>
-                        <label style="font-size:12px;display:block;margin:8px 0;">Corner smoothing &mdash; blend half-width (ADC counts), 0 = sharp<br>
-                            <input id="pwBlend" type="number" min="0" max="2000" value="120"
-                                   style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                        </label>
-                        <button class="btn" onclick="savePiecewiseZone()">Save Piecewise Zone</button>
+                        <div style="font-size:12px;color:#aaa;margin:8px 0;">
+                            Corner smoothing &mdash; blend half-width (ADC counts), 0 = sharp<br>
+                            <strong id="pwBlend" style="color:white;font-size:15px;">--</strong>
+                        </div>
                         <button class="btn btn-secondary" id="activatePiecewiseBtn"
-                                onclick="activatePiecewiseMapping()"
-                                style="margin-left:4px;">Use Piecewise Mapping</button>
+                                onclick="activatePiecewiseMapping()">Use Piecewise Mapping</button>
                         <div id="piecewiseSaveResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
@@ -449,10 +438,14 @@
             <!-- Threshold calibration -->
             <div class="grid" style="margin-top:16px;">
                 <div>
-                    <h3>Disengage Threshold <span style="color:#F44336;">&#9646;</span></h3>
+                    <h3>Downshift Trigger <span style="color:#F44336;">&#9646;</span></h3>
                     <div class="calibration-step">
-                        <p style="margin:4px 0 8px;">Pull lever to the point where the clutch is <strong>just disengaged</strong> (relay-safe). Watch voltage, then capture.</p>
-                        <button class="btn btn-danger" onclick="captureDisengageV()">Capture Disengage Threshold</button>
+                        <p style="margin:4px 0 8px;">
+                            The voltage the servo must pass before the downshift is sent. It now
+                            gates every downshift, so it lives in one place only:
+                            <a href="/" style="color:#2196F3;">Home</a> &rarr; Downshift Trigger
+                            Voltage, where you can capture it live or type it.
+                        </p>
                         <div id="disengResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
@@ -770,15 +763,14 @@
                     if (config.clutchServoMin != null && config.clutchServoMax != null) {
                         updateSliderTrack(config.clutchServoMin, config.clutchServoMax);
                     }
-                    const piecewiseIds = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd','pwBlend'];
-                    const piecewiseFocused = piecewiseIds.some(id => document.activeElement === document.getElementById(id));
-                    if (!piecewiseFocused) {
-                        if (config.hallBiteStart != null) document.getElementById('hBiteStart').value = config.hallBiteStart;
-                        if (config.hallBiteEnd   != null) document.getElementById('hBiteEnd').value   = config.hallBiteEnd;
-                        if (config.servoBiteStart != null) document.getElementById('sBiteStart').value = config.servoBiteStart;
-                        if (config.servoBiteEnd   != null) document.getElementById('sBiteEnd').value   = config.servoBiteEnd;
-                        if (config.pwBlend       != null) document.getElementById('pwBlend').value    = config.pwBlend;
-                    }
+                    // Read-only mirror of the piecewise zone. No focus guard needed now
+                    // these are text, not inputs — nothing here can be mid-edit.
+                    const show = (id, v) => { if (v != null) document.getElementById(id).textContent = v; };
+                    show('hBiteStart', config.hallBiteStart);
+                    show('hBiteEnd',   config.hallBiteEnd);
+                    show('sBiteStart', config.servoBiteStart);
+                    show('sBiteEnd',   config.servoBiteEnd);
+                    show('pwBlend',    config.pwBlend);
                     calibrationData.relayTimings.neutralDown = config.neutralDownMs || 40;
                     calibrationData.relayTimings.neutralUp = config.neutralUpMs || 40;
                     calibrationData.relayTimings.shiftDown = config.shiftDownMs || 150;
@@ -1009,63 +1001,6 @@
         }
 
 
-        function savePiecewiseZone() {
-            const ids = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd','pwBlend'];
-            const [hBiteStart, hBiteEnd, sBiteStart, sBiteEnd, pwBlend] =
-                ids.map(id => parseInt(document.getElementById(id).value));
-            const resultEl = document.getElementById('piecewiseSaveResult');
-
-            // Clear previous invalid state
-            ids.forEach(id => document.getElementById(id).style.borderColor = '#555');
-
-            const hallOk  = v => !isNaN(v) && v >= 0 && v <= 4095;
-            const servoOk = v => !isNaN(v) && v >= 0 && v <= 180;
-            const blendOk = v => !isNaN(v) && v >= 0 && v <= 2000;
-            const errors = [];
-            if (!hallOk(hBiteStart))  { errors.push('hBiteStart'); document.getElementById('hBiteStart').style.borderColor = '#F44336'; }
-            if (!hallOk(hBiteEnd))    { errors.push('hBiteEnd');   document.getElementById('hBiteEnd').style.borderColor   = '#F44336'; }
-            if (!servoOk(sBiteStart)) { errors.push('sBiteStart'); document.getElementById('sBiteStart').style.borderColor = '#F44336'; }
-            if (!servoOk(sBiteEnd))   { errors.push('sBiteEnd');   document.getElementById('sBiteEnd').style.borderColor   = '#F44336'; }
-            if (!blendOk(pwBlend))    { errors.push('pwBlend');    document.getElementById('pwBlend').style.borderColor    = '#F44336'; }
-            if (errors.length) {
-                resultEl.innerHTML = '<span style="color:#F44336;">Out of bounds — Hall: 0–4095, Servo: 0–180, Blend: 0–2000.</span>';
-                return;
-            }
-            if (hBiteStart >= hBiteEnd) {
-                resultEl.innerHTML = '<span style="color:#F44336;">Hall bite start must be less than bite end.</span>';
-                return;
-            }
-            if (sBiteStart >= sBiteEnd) {
-                resultEl.innerHTML = '<span style="color:#F44336;">Servo bite start must be less than bite end.</span>';
-                return;
-            }
-
-            resultEl.innerHTML = '<span style="color:#aaa;">Saving...</span>';
-            fetch('/cmd?action=savePiecewiseZone'
-                + '&hBiteStart=' + hBiteStart
-                + '&hBiteEnd='   + hBiteEnd
-                + '&sBiteStart=' + sBiteStart
-                + '&sBiteEnd='   + sBiteEnd
-                + '&blend='      + pwBlend)
-                .then(r => { if (!r.ok) throw new Error('rejected'); return r.text(); })
-                .then(() => fetch('/configData'))
-                .then(r => r.json())
-                .then(cfg => {
-                    if (cfg.hallBiteStart === hBiteStart &&
-                        cfg.hallBiteEnd   === hBiteEnd   &&
-                        cfg.servoBiteStart === sBiteStart &&
-                        cfg.servoBiteEnd   === sBiteEnd   &&
-                        cfg.pwBlend       === pwBlend) {
-                        resultEl.innerHTML = '<span style="color:#4CAF50;">Saved — confirmed from read-back.</span>';
-                    } else {
-                        resultEl.innerHTML = '<span style="color:#FF9800;">Sent but read-back mismatch — check firmware.</span>';
-                    }
-                })
-                .catch(() => {
-                    resultEl.innerHTML = '<span style="color:#F44336;">Save failed or network error.</span>';
-                });
-        }
-
         function activatePiecewiseMapping() {
             fetch('/cmd?action=setCurveType&type=piecewise')
                 .then(r => r.text())
@@ -1079,18 +1014,6 @@
                 .catch(() => {
                     document.getElementById('piecewiseSaveResult').innerHTML =
                         '<span style="color:#F44336;">Activation failed</span>';
-                });
-        }
-
-        function captureDisengageV() {
-            fetch('/cmd?action=captureDisengageV')
-                .then(r => r.text())
-                .then(v => {
-                    document.getElementById('disengResult').innerHTML =
-                        '<span style="color:#4CAF50;">Saved: ' + parseFloat(v).toFixed(3) + ' V</span>';
-                })
-                .catch(() => {
-                    document.getElementById('disengResult').innerHTML = '<span style="color:#F44336;">Capture failed</span>';
                 });
         }
 
