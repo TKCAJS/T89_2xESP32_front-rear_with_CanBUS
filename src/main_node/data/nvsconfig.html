@@ -253,6 +253,15 @@
 
     <div id="feedback"></div>
     <div class="meta" id="meta"></div>
+    <div class="meta" id="nvsStats"></div>
+    <div id="nvsAction" style="margin-top:8px;display:none;">
+        <button class="btn btn-sm btn-danger" onclick="clearShiftLogs()">Clear Shift Logs</button>
+        <span style="font-size:11px;color:#666;margin-left:8px;">
+            Shift logs share this partition and are what fill it. Clearing them frees space
+            and touches no calibration.
+        </span>
+        <div id="nvsActionResult" style="font-size:11px;color:#888;margin-top:4px;"></div>
+    </div>
 </div>
 
 <script>
@@ -290,6 +299,38 @@
         meta.textContent = cfg.version !== undefined
             ? 'Config version: ' + cfg.version
             : '';
+        loadNvsStats();
+    }
+
+    // Surfaces why a save failed. "nvs write failed" tells you nothing on its own, and
+    // the write stores the whole struct in one call, so a failure is never specific to
+    // one field — exhaustion of the 20 KB partition is the likeliest cause.
+    function loadNvsStats() {
+        fetch('/configData').then(r => r.json()).then(d => {
+            if (d.nvsTotal === undefined || d.nvsTotal < 0) return;
+            const el = document.getElementById('nvsStats');
+            const pct = d.nvsTotal ? Math.round(d.nvsUsed / d.nvsTotal * 100) : 0;
+            // NVS keeps one page (126 entries) back for garbage collection, so "free"
+            // at or below a page means every usable page is full — writes fail there even
+            // though the percentage still looks comfortable.
+            const low = d.nvsFree <= 126;
+            el.innerHTML = 'NVS: <strong style="color:' + (low ? '#F44336' : '#81C784') + '">' +
+                d.nvsUsed + ' / ' + d.nvsTotal + '</strong> entries used (' + pct + '%), ' +
+                d.nvsFree + ' free, ' + d.nvsNs + ' namespaces' +
+                (low ? ' &mdash; <strong>full: only the reserved GC page is free, saves will fail</strong>' : '');
+            document.getElementById('nvsAction').style.display = low ? 'block' : 'none';
+        }).catch(() => {});
+    }
+
+    function clearShiftLogs() {
+        if (!confirm('Clear all stored shift logs?
+Calibration values are not affected.')) return;
+        fetch('/cmd?action=clearShiftLogs').then(r => r.text()).then(t => {
+            document.getElementById('nvsActionResult').textContent = t;
+            loadNvsStats();
+        }).catch(() => {
+            document.getElementById('nvsActionResult').textContent = 'Clear failed';
+        });
     }
 
     function validate() {

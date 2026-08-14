@@ -349,6 +349,22 @@ void WebInterface::handleCommand() {
             server->send(400, "text/plain", "Invalid piecewise zone parameters");
         }
         return;
+    } else if (action == "clearShiftLogs") {
+        // Shift logs share the 20 KB nvs partition with the config. 100 live blob keys
+        // (entry_0..entry_99) fill it, and once the only free page is the one NVS
+        // reserves for garbage collection, config saves start failing with nothing to
+        // reclaim. Clearing the logs frees that space; it touches no calibration.
+        shiftLogger.clearLogs();
+        nvs_stats_t st;
+        String msg = "Shift logs cleared";
+        if (nvs_get_stats(NULL, &st) == ESP_OK) {
+            msg += " - NVS now " + String((unsigned)st.used_entries) + "/" +
+                   String((unsigned)st.total_entries) + " used, " +
+                   String((unsigned)st.free_entries) + " free";
+        }
+        server->send(200, "text/plain", msg);
+        Serial.println(msg);
+        return;
     } else if (action == "setCurveType") {
         String type = server->arg("type");
         hallSensor.setCurveType(type);
@@ -506,7 +522,20 @@ void WebInterface::handleConfigData() {
     json += "\"servoBiteEnd\":"   + String(hallSensor.getServoBiteEnd())   + ",";
     json += "\"pwBlend\":"        + String(hallSensor.getPwBlend())        + ",";
     json += "\"pin2RawMin\":"     + String(hallSensor.getPin2RawMin())     + ",";
-    json += "\"pin2RawMax\":"     + String(hallSensor.getPin2RawMax());
+    json += "\"pin2RawMax\":"     + String(hallSensor.getPin2RawMax()) + ",";
+
+    // NVS partition health. "nvs write failed" is indistinguishable from any other
+    // cause at the UI, and exhaustion is the likeliest one: the partition is only
+    // 20 KB and every save rewrites its whole key set, so tombstones accumulate.
+    nvs_stats_t nst;
+    if (nvs_get_stats(NULL, &nst) == ESP_OK) {
+        json += "\"nvsUsed\":"  + String((unsigned)nst.used_entries)  + ",";
+        json += "\"nvsFree\":"  + String((unsigned)nst.free_entries)  + ",";
+        json += "\"nvsTotal\":" + String((unsigned)nst.total_entries) + ",";
+        json += "\"nvsNs\":"    + String((unsigned)nst.namespace_count);
+    } else {
+        json += "\"nvsUsed\":-1,\"nvsFree\":-1,\"nvsTotal\":-1,\"nvsNs\":-1";
+    }
     json += "}";
     
     server->send(200, "application/json", json);
