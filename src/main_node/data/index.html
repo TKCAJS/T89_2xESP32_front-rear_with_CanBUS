@@ -291,8 +291,10 @@
         <button class='btn' onclick='sendCmd("shiftUp")'>Shift Up</button>
         
 
-        <!-- Downshift trigger threshold -->
-        <h3>Auto-Downshift Trigger</h3>
+        <!-- Clutch feedback voltage thresholds. Deliberately voltages rather than the
+             piecewise degree thresholds — these are read straight off the servo feedback,
+             independent of the hall/servo mapping. -->
+        <h3>Clutch Voltage Thresholds</h3>
         <div style='background:#2a2a4d;padding:15px;border-radius:5px;border-left:4px solid #6B6BFF;max-width:400px;'>
             <h4>Downshift Trigger Voltage</h4>
             <p style='color:#aaa;font-size:12px;margin:0 0 10px;'>
@@ -312,6 +314,27 @@
             <button class='btn' onclick='saveDownshiftTrigger()'>Save to Flash</button>
             <button class='btn' style='background:#F44336;' onclick='captureDownshiftTrigger()'>Capture Live</button>
             <div id='bitePointResult' style='margin-top:8px;color:#aaa;font-size:0.9em;'></div>
+        </div>
+
+        <div style='background:#2a2a4d;padding:15px;border-radius:5px;border-left:4px solid #FF9800;max-width:400px;margin-top:12px;'>
+            <h4>Just-Engaged (Bite Point) Voltage</h4>
+            <p style='color:#aaa;font-size:12px;margin:0 0 10px;'>
+                Release point for stacked downshifts. Between consecutive shifts the clutch
+                need only come back to the biting point rather than all the way to idle,
+                skipping the dead travel and shortening the stroke. Releasing raises the
+                voltage, so this sits <strong>above</strong> the trigger and below idle.
+            </p>
+            <div class='form-group'>
+                <label>Just-engaged voltage (raw ADC V):</label>
+                <div id='justEngagedDisplay' style='font-size:1.4em;color:#FF9800;font-weight:bold;margin:8px 0;'>Loading...</div>
+            </div>
+            <div class='form-group'>
+                <label>Set just-engaged (V):</label>
+                <input type='number' id='justEngagedInput' min='0' max='3.3' step='0.001' placeholder='e.g. 0.900'>
+            </div>
+            <button class='btn' onclick='saveJustEngaged()'>Save to Flash</button>
+            <button class='btn' style='background:#F44336;' onclick='captureJustEngaged()'>Capture Live</button>
+            <div id='justEngagedResult' style='margin-top:8px;color:#aaa;font-size:0.9em;'></div>
         </div>
     </div>
 
@@ -492,11 +515,43 @@ function updateStatus() {
                 let displayedBiteV = d.clutchDisengageV.toFixed(3);
                 document.getElementById('bitePointDisplay').textContent = displayedBiteV + ' V';
                 document.getElementById('bitePointInput').value = displayedBiteV;
+                let displayedJustV = d.clutchJustEngagedV.toFixed(3);
+                document.getElementById('justEngagedDisplay').textContent = displayedJustV + ' V';
+                document.getElementById('justEngagedInput').value = displayedJustV;
             }).catch(e => console.error('Config load error:', e));
         }
         
-        // Capture-from-live used to live on the Calibration page, which meant two pages
-        // could write this one threshold. It moved here so there is a single writer.
+        // Both thresholds live here so each has exactly one writer. Calibration used to
+        // capture them too, which let a stale page silently overwrite the other.
+        function captureJustEngaged() {
+            fetch('/cmd?action=captureJustEngagedV')
+                .then(r => r.text())
+                .then(v => {
+                    const val = parseFloat(v).toFixed(3);
+                    document.getElementById('justEngagedDisplay').textContent = val + ' V';
+                    document.getElementById('justEngagedInput').value = val;
+                    document.getElementById('justEngagedResult').textContent =
+                        'Captured from live position (' + val + ' V)';
+                })
+                .catch(() => { document.getElementById('justEngagedResult').textContent = 'Capture failed'; });
+        }
+
+        function saveJustEngaged() {
+            const v = parseFloat(document.getElementById('justEngagedInput').value);
+            if (isNaN(v) || v < 0 || v > 3.3) {
+                document.getElementById('justEngagedResult').textContent = 'Invalid value (0.000-3.300 V)';
+                return;
+            }
+            fetch('/cmd?action=setJustEngagedV&v=' + v.toFixed(3)).then(r => {
+                if (r.ok) {
+                    document.getElementById('justEngagedDisplay').textContent = v.toFixed(3) + ' V';
+                    document.getElementById('justEngagedResult').textContent = 'Saved (' + v.toFixed(3) + ' V)';
+                } else {
+                    document.getElementById('justEngagedResult').textContent = 'Save failed';
+                }
+            }).catch(() => { document.getElementById('justEngagedResult').textContent = 'Save error'; });
+        }
+
         function captureDownshiftTrigger() {
             fetch('/cmd?action=captureDisengageV')
                 .then(r => r.text())

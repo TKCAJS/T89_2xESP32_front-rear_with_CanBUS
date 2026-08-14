@@ -452,8 +452,12 @@
                 <div>
                     <h3>Just-Engaged Threshold <span style="color:#FF9800;">&#9646;</span></h3>
                     <div class="calibration-step">
-                        <p style="margin:4px 0 8px;">Release lever slowly until clutch is at <strong>biting point</strong> (just starting to engage). Capture when voltage is stable.</p>
-                        <button class="btn btn-warning" onclick="captureJustEngagedV()">Capture Just-Engaged Threshold</button>
+                        <p style="margin:4px 0 8px;">
+                            Bite point used as the release target for stacked downshifts, so the
+                            clutch skips the dead travel back to idle. Set it on
+                            <a href="/" style="color:#2196F3;">Home</a> &rarr; Clutch Voltage
+                            Thresholds, alongside the downshift trigger.
+                        </p>
                         <div id="biteResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
@@ -1014,18 +1018,6 @@
                 .catch(() => {
                     document.getElementById('piecewiseSaveResult').innerHTML =
                         '<span style="color:#F44336;">Activation failed</span>';
-                });
-        }
-
-        function captureJustEngagedV() {
-            fetch('/cmd?action=captureJustEngagedV')
-                .then(r => r.text())
-                .then(v => {
-                    document.getElementById('biteResult').innerHTML =
-                        '<span style="color:#4CAF50;">Saved: ' + parseFloat(v).toFixed(3) + ' V</span>';
-                })
-                .catch(() => {
-                    document.getElementById('biteResult').innerHTML = '<span style="color:#F44336;">Capture failed</span>';
                 });
         }
 

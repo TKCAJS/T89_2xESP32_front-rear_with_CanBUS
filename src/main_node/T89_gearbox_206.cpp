@@ -645,8 +645,14 @@ void checkServoPosition() {
         int analogValue = analogRead(PIN_CLUTCH_POSITION);  // fallback: legacy GPIO15
         clutchVoltage = (analogValue * 3.3) / 4095.0;
     }
+    // Feedback is inverted: pulling drives the voltage DOWN. So the axis reads
+    //   v <  clutchDisengageV    -> RELEASED (disengaged, safe to send a shift)
+    //   v <= clutchJustEngagedV  -> biting zone
+    //   v >  clutchJustEngagedV  -> ENGAGED (driving)
+    // which means clutchDisengageV < clutchJustEngagedV. The old test compared them
+    // the other way round, so the band was unsatisfiable in the correct orientation.
     bool newClutchPulled  = (clutchVoltage < clutchDisengageV);
-    clutchJustEngaged = (clutchVoltage >= clutchJustEngagedV && clutchVoltage < clutchDisengageV);
+    clutchJustEngaged = (clutchVoltage >= clutchDisengageV && clutchVoltage <= clutchJustEngagedV);
     
     // Update clutch state - the state machine polls this in its clutch-wait states
     if (newClutchPulled != clutchPulled) {

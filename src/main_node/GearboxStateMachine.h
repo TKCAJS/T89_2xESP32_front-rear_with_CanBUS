@@ -25,6 +25,10 @@ enum GearboxState {
     UPSHIFTING,
     DOWNSHIFT_CLUTCH_ENGAGING,
     DOWNSHIFT_SHIFTING,
+    // Between stacked downshifts the clutch releases only as far as the bite point
+    // rather than all the way to idle, skipping the dead travel. Counts as a shifting
+    // state so no unrelated shift command is accepted mid-stack.
+    DOWNSHIFT_PARTIAL_RELEASE,
 
     // Wait states - clutch interlock for shifts out of neutral
     WAITING_FOR_CLUTCH_SHIFT_DOWN,
@@ -83,6 +87,7 @@ private:
 
     // Shift timing (mirrors old relay timing — completion returns to idle)
     bool relayActive;
+    unsigned long lastReleaseStepMs;   // rate limiter for the stacked partial release
     unsigned long relayStartTime;
     int relayDuration;
     bool activeShiftIsUp;
@@ -107,6 +112,16 @@ private:
     // never sent: an unconfirmed clutch means shifting against drive.
     static const unsigned long DOWNSHIFT_SERVO_TIMEOUT_MS = 500;
 
+    // Cap on the partial release between stacked downshifts. On expiry the clutch
+    // completes a normal full release rather than aborting — a missed bite point costs
+    // speed, not the shift. Also bounds the wait if CAN never confirms the gear.
+    static const unsigned long STACK_RELEASE_TIMEOUT_MS = 300;
+
+    // Release stepping. 2 deg every 4 ms is ~500 deg/s, near the servo's own speed, so
+    // the walk-out does not itself become the bottleneck. Tune together.
+    static const unsigned long STACK_RELEASE_STEP_MS  = 4;
+    static constexpr float     STACK_RELEASE_STEP_DEG = 2.0f;
+
 public:
     GearboxStateMachine()
         : currentState(IDLE_NEUTRAL),
@@ -115,7 +130,8 @@ public:
           // Placeholders until setConfiguration(); inside CLUTCH_SERVO_MIN/MAX (CalConfig.h)
           clutchIdlePos(42), clutchFullyPull(137),
           shiftLogger(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
-          relayActive(false), relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
+          relayActive(false), lastReleaseStepMs(0),
+          relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
           clutchPulled(false),
           currentGear(0), expectedGear(0), targetGear(0) {}
 
@@ -166,6 +182,8 @@ private:
     void enterErrorState();
 
     void updateDownshiftClutchWait();
+    void enterPartialReleaseState();
+    void updatePartialRelease();
     void updateWaitingState();
     void updateErrorState();
 
