@@ -202,7 +202,7 @@ void clutchToMax() { clutchServo.write(clutchFullyPull); }
 void clutchToIdle() { clutchServo.write(clutchIdlePos); }
 void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter); }
 String getGearStatusForWeb() { return mainCan.getGearName(); }
-float getRadiatorTempForWeb() { return mainCan.getRadiatorTemp(); }
+float getEngineTempForWeb() { return mainCan.getEngineTemp(); }
 uint8_t getPumpDutyForWeb() { return mainCan.getPumpDuty(); }
 String getHallCurveTypeName() { return hallSensor.getCurveTypeName(); }
 void saveHallCurveConfig() { /* Handled by HallSensorControl */ }

@@ -373,8 +373,10 @@
         
         // Temp gauge with a concentric inner ring for pump PWM %.
         // Outer arc = engine-out temp (orange), inner arc = pump duty (cyan).
-        // "Engine out" because the Dallas sensor feeding it sits directly after the
-        // engine, not at the radiator — the CAN id and MainCan still say radiator.
+        // Both come from the same sensor now: the PA4 NTC on the sensor node, which is
+        // what pumpDutyForTemp() and fanUpdate() are controlled from. It previously
+        // showed the Dallas, so the pump ring was reacting to a sensor the gauge did
+        // not display.
         function drawTempPumpGauge(canvasId, temp, tempMax, pump) {
             const canvas = document.getElementById(canvasId);
             const ctx = canvas.getContext('2d');

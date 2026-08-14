@@ -18,7 +18,11 @@ private:
     bool    _gearValid;
     bool    _busLive;   // false until ≥1 frame received — gates periodic TX so
                         // main never floods (and bus-offs) into a not-yet-ready bus
-    int16_t _radiatorTemp;   // °C × 10, from sensor node Dallas (CAN_SENS_RADIATOR_TEMP)
+    int16_t _engineTemp;     // degC x10, PA4 NTC on the sensor node
+                             // (CAN_SENS_ENGINE_TEMP). This is what the pump
+                             // and fans are controlled from, so the home gauge
+                             // and its pump ring show the same loop. The Dallas
+                             // still arrives on CAN_SENS_RADIATOR_TEMP, unused.
     uint8_t _pumpDuty;       // 0-100 %, from sensor node (CAN_SENS_PUMP_STATUS)
 
     bool install() {
@@ -53,11 +57,11 @@ private:
     }
 
 public:
-    MainCan() : initialized(false), txSeq(0), _gear(GEAR_UNKNOWN), _gearValid(false), _busLive(false), _radiatorTemp(0), _pumpDuty(0) {}
+    MainCan() : initialized(false), txSeq(0), _gear(GEAR_UNKNOWN), _gearValid(false), _busLive(false), _engineTemp(0), _pumpDuty(0) {}
 
     uint8_t getGear() const { return _gear; }
     bool    isGearValid() const { return _gearValid; }
-    float   getRadiatorTemp() const { return _radiatorTemp / 10.0f; }
+    float   getEngineTemp() const { return _engineTemp / 10.0f; }
     uint8_t getPumpDuty() const { return _pumpDuty; }
 
     String getGearName() const {
@@ -202,8 +206,8 @@ public:
                 _gear      = msg.data[2];
                 _gearValid = (_gear <= GEAR_6 || _gear == GEAR_NEUTRAL);
             }
-            else if (msg.identifier == CAN_SENS_RADIATOR_TEMP) {
-                _radiatorTemp = msg.data[2] | ((int16_t)msg.data[3] << 8);
+            else if (msg.identifier == CAN_SENS_ENGINE_TEMP) {
+                _engineTemp = msg.data[2] | ((int16_t)msg.data[3] << 8);
             }
             else if (msg.identifier == CAN_SENS_PUMP_STATUS) {
                 _pumpDuty = msg.data[2];
