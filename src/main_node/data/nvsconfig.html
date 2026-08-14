@@ -120,7 +120,7 @@
     <div class="card" style="border-left-color:#9C27B0;">
         <h3 style="color:#9C27B0;">Hall Sensor Calibration</h3>
         <p style="color:#888;font-size:12px;margin:0 0 16px;">
-            Engine OFF. Hold each paddle at the position shown, then click Capture.
+            Engine OFF. Hold each paddle at the position shown, then click Capture. Idle = clutch engaged (high feedback V); Max = clutch disengaged (low V).
         </p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
             <!-- Left paddle -->
@@ -130,14 +130,14 @@
                     Live: <span id="hallLiveL" style="color:white;font-weight:bold;">--</span>
                 </div>
                 <div class="field">
-                    <label>Idle &mdash; lever fully released</label>
+                    <label>Idle &mdash; paddle at rest, clutch engaged</label>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <button class="btn btn-sm" onclick="capture('captureHallLIdle','hallSavedLMin')">Capture</button>
                         <span style="font-size:12px;color:#aaa;">Saved: <strong id="hallSavedLMin">--</strong></span>
                     </div>
                 </div>
                 <div class="field">
-                    <label>Pulled &mdash; lever fully in</label>
+                    <label>Max &mdash; paddle fully in, clutch disengaged</label>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <button class="btn btn-sm" onclick="capture('captureHallLPulled','hallSavedLMax')">Capture</button>
                         <span style="font-size:12px;color:#aaa;">Saved: <strong id="hallSavedLMax">--</strong></span>
@@ -151,14 +151,14 @@
                     Live raw: <span id="hallLiveR" style="color:white;font-weight:bold;">--</span>
                 </div>
                 <div class="field">
-                    <label>Idle &mdash; lever fully released</label>
+                    <label>Idle &mdash; paddle at rest, clutch engaged</label>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <button class="btn btn-sm" onclick="capture('captureHallRIdle','hallSavedRMin')">Capture</button>
                         <span style="font-size:12px;color:#aaa;">Saved: <strong id="hallSavedRMin">--</strong></span>
                     </div>
                 </div>
                 <div class="field">
-                    <label>Pulled &mdash; lever fully in</label>
+                    <label>Max &mdash; paddle fully in, clutch disengaged</label>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <button class="btn btn-sm" onclick="capture('captureHallRPulled','hallSavedRMax')">Capture</button>
                         <span style="font-size:12px;color:#aaa;">Saved: <strong id="hallSavedRMax">--</strong></span>
@@ -221,7 +221,7 @@
         </p>
 
         <div class="field">
-            <label>Idle Angle (°) &mdash; lever released, clutch fully engaged</label>
+            <label>Idle Angle (°) &mdash; paddle idle, clutch engaged</label>
             <div class="input-row">
                 <input type="number" id="clutchIdlePos" min="42" max="137" step="1">
                 <span class="unit">°</span>
@@ -230,7 +230,7 @@
         </div>
 
         <div class="field">
-            <label>Engage Angle (°) &mdash; lever pulled, clutch disengaged</label>
+            <label>Max Angle (°) &mdash; paddle max, clutch disengaged</label>
             <div class="input-row">
                 <input type="number" id="clutchFullyPull" min="42" max="137" step="1">
                 <span class="unit">°</span>

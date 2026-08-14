@@ -161,7 +161,7 @@ extern bool shiftInProgress;
 extern bool waitingForClutch;
 extern bool wifiEnabled;
 extern float clutchVoltage;
-extern bool clutchPulled;
+extern bool clutchDisengaged;
 extern int currentGear;
 extern String gearNames[];
 extern int shiftSequenceState;
@@ -193,7 +193,7 @@ extern void setShiftInProgress(bool inProgress);
 extern void startDownshiftWithClutchCheck(int durationMs);
 extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear = 0xFF);
 extern void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear = 0xFF);
-extern void engageClutch();
+extern void clutchToMax();
 extern void displayShiftLetter(char letter);
 extern void saveConfig();
 extern void loadConfig();
@@ -414,7 +414,7 @@ void WebInterface::handleCommand() {
     
     if (action == "neutralDown") {
         if (!canDownshift()) {
-            server->send(423, "text/plain", "BLOCKED: Clutch not pulled");
+            server->send(423, "text/plain", "BLOCKED: clutch not disengaged");
             return;
         }
         setShiftInProgress(true);
@@ -430,7 +430,7 @@ void WebInterface::handleCommand() {
         setShiftInProgress(true);
         shiftLogger.startShiftTiming(currentGear, currentGear - 1, rpmSensor.getRpm(), 1);
         autoDownshift = true;
-        engageClutch();
+        clutchToMax();
         clutchStartTime = millis();
         shiftSequenceState = 1;
         displayShiftLetter('D');
@@ -458,7 +458,7 @@ void WebInterface::handleSensorData() {
     json += "\"hallRight\":" + String(hallRight) + ",";
     json += "\"hallValue\":" + String(hallValue) + ",";
     json += "\"clutchVoltage\":" + String(clutchVoltage, 3) + ",";
-    json += "\"clutchPulled\":" + String(clutchPulled ? "true" : "false") + ",";
+    json += "\"clutchDisengaged\":" + String(clutchDisengaged ? "true" : "false") + ",";
     json += "\"shiftSequenceState\":" + String(shiftSequenceState) + ",";
     json += "\"currentGear\":\"" + getGearStatusForWeb() + "\",";
     json += "\"softwareVersion\":" + String(SOFTWARE_VERSION) + ",";

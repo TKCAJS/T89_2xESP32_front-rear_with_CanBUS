@@ -47,11 +47,11 @@
 // CalConfig.h, so calValidate() can reject stored angles the servo cannot reach.
 
 // Clutch voltage thresholds — calibrated via web interface
-// Downshift trigger. Servo feedback is electrically inverted, so pulling the clutch
-// drives this voltage DOWN — the gate fires on falling past the threshold, not rising.
+// Downshift trigger. Feedback is inverted: paddle max (clutch DISENGAGED) is the LOW
+// end, so the gate fires on the voltage FALLING past this threshold, not rising.
 // Set from the Downshift Trigger widget on the home page (/cmd?action=setDisengageV).
-float clutchDisengageV   = 1.8f;  // raw ADC voltage: below this = pulled, safe to send DS
-float clutchJustEngagedV = 1.8f;  // raw ADC voltage: rising through this = biting point
+float clutchDisengageV   = 1.8f;  // below this = clutch DISENGAGED, safe to send the DS
+float clutchJustEngagedV = 1.8f;  // above this = clutch ENGAGED; bite point on release
 
 // Standard includes
 #include <LittleFS.h>
@@ -124,8 +124,8 @@ bool wifiEnabled = false;
 #define WIFI_LONGPRESS_MS 1000   // hold the WiFi switch this long (ms) to toggle on/off
 
 // Clutch monitoring
-bool clutchPulled = false;
-bool clutchJustEngaged = false;  // biting point zone: voltage between justEngagedV and disengageV
+bool clutchDisengaged = false;
+bool clutchJustEngaged = false;  // in the bite band: disengageV <= V <= justEngagedV
 float clutchVoltage = 0.0;
 
 // ADS1115 — clutch position feedback (16-bit, differential A0–A1 for EMI rejection)
@@ -191,14 +191,14 @@ void canSendShiftStack(uint8_t targetGear)                                   { m
 
 // Legacy functions for WebInterface compatibility
 bool isShiftAllowed() { return gearbox.canAcceptShiftCommand(); }
-bool canDownshift() { return gearbox.canAcceptShiftCommand() && clutchPulled; }
+bool canDownshift() { return gearbox.canAcceptShiftCommand() && clutchDisengaged; }
 void setShiftInProgress(bool inProgress) { /* Now handled by state machine */ }
 void startDownshiftWithClutchCheck(int durationMs) { 
     gearbox.processEvent(EVENT_NEUTRAL_DOWN_PRESSED); 
 }
 
-void engageClutch() { clutchServo.write(clutchFullyPull); }
-void releaseClutch() { clutchServo.write(clutchIdlePos); }
+void clutchToMax() { clutchServo.write(clutchFullyPull); }
+void clutchToIdle() { clutchServo.write(clutchIdlePos); }
 void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter); }
 String getGearStatusForWeb() { return mainCan.getGearName(); }
 float getRadiatorTempForWeb() { return mainCan.getRadiatorTemp(); }
@@ -458,7 +458,7 @@ void loop() {
 
         if (gearbox.getCurrentState() == DOWNSHIFT_CLUTCH_ENGAGING) {
             Serial.println("Servo engaging - Voltage: " + String(clutchVoltage, 3) + 
-                        "V, Threshold: 1.8V, Pulled: " + String(clutchPulled ? "YES" : "NO"));
+                        "V, Threshold: 1.8V, Pulled: " + String(clutchDisengaged ? "YES" : "NO"));
         }
         
         // Clutch paddle->servo is handled by clutchControlTask (core 0)
@@ -655,9 +655,9 @@ void checkServoPosition() {
     clutchJustEngaged = (clutchVoltage >= clutchDisengageV && clutchVoltage <= clutchJustEngagedV);
     
     // Update clutch state - the state machine polls this in its clutch-wait states
-    if (newClutchPulled != clutchPulled) {
-        clutchPulled = newClutchPulled;
-        gearbox.setClutchPulled(clutchPulled);
+    if (newClutchPulled != clutchDisengaged) {
+        clutchDisengaged = newClutchPulled;
+        gearbox.setClutchDisengaged(clutchDisengaged);
     }
 }
 

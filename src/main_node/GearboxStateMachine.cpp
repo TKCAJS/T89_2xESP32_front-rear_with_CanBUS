@@ -218,7 +218,7 @@ void GearboxStateMachine::executeStateUpdate() {
 
 void GearboxStateMachine::enterIdleState() {
     // Release clutch to idle position
-    releaseClutch();
+    clutchToIdle();
 
     // Ensure relays are off
     deactivateShift();
@@ -266,7 +266,7 @@ void GearboxStateMachine::enterShiftingState() {
         case DOWNSHIFT_CLUTCH_ENGAGING:
             // Shift Down button - engage clutch servo, relay fires on pull detection
             logShiftStart(fromGear, expectedGear, 1);
-            engageClutch();
+            clutchToMax();
             displayShiftLetter('D');
             break;
 
@@ -290,16 +290,16 @@ void GearboxStateMachine::enterErrorState() {
 
     // Ensure safe state
     deactivateShift();
-    releaseClutch();
+    clutchToIdle();
     clearShiftStack();  // aborted shift - drop any queued downshifts
 }
 
 void GearboxStateMachine::updateDownshiftClutchWait() {
     // The servo is travelling. Only once its feedback confirms the clutch is actually
-    // pulled is it safe to send the downshift — clutchPulled is a threshold crossing,
+    // pulled is it safe to send the downshift — clutchDisengaged is a threshold crossing,
     // so it latches on the first sample past the trigger voltage and does not rely on
     // any exact value being sampled.
-    if (clutchPulled) {
+    if (clutchDisengaged) {
         processEvent(EVENT_CLUTCH_PULLED);
         return;
     }
@@ -344,7 +344,7 @@ void GearboxStateMachine::updatePartialRelease() {
                        String(STACK_RELEASE_TIMEOUT_MS) + "ms (live " +
                        String(clutchVoltage, 3) + "V vs " + String(clutchJustEngagedV, 3) +
                        "V) - falling back to full release");
-        releaseClutch();
+        clutchToIdle();
         transitionToState(getIdleStateForGear(expectedGear));
         return;
     }
@@ -364,7 +364,7 @@ void GearboxStateMachine::updatePartialRelease() {
 }
 
 void GearboxStateMachine::updateWaitingState() {
-    if (clutchPulled) {
+    if (clutchDisengaged) {
         processEvent(EVENT_CLUTCH_PULLED);
     } else if (getStateElapsedTime() >= CLUTCH_WAIT_TIMEOUT_MS) {
         clearShiftStack();  // aborting without shifting - drop any queued downshifts
@@ -404,7 +404,7 @@ void GearboxStateMachine::updateRelayControl() {
             deactivateShift();
 
             // With a stacked downshift still pending, hold at the bite point instead of
-            // returning to idle: entering an idle state calls releaseClutch() and the
+            // returning to idle: entering an idle state calls clutchToIdle() and the
             // next shift would then have to pull back through the whole dead travel.
             if (!activeShiftIsUp && targetGear > 0 && expectedGear > targetGear) {
                 transitionToState(DOWNSHIFT_PARTIAL_RELEASE);
@@ -419,12 +419,12 @@ void GearboxStateMachine::updateRelayControl() {
     }
 }
 
-void GearboxStateMachine::engageClutch() {
+void GearboxStateMachine::clutchToMax() {
     clutchServo->write(clutchFullyPull);
     Serial.println("Clutch engaged");
 }
 
-void GearboxStateMachine::releaseClutch() {
+void GearboxStateMachine::clutchToIdle() {
     clutchServo->write(clutchIdlePos);
     Serial.println("Clutch released");
 }
@@ -558,7 +558,7 @@ void GearboxStateMachine::printStateInfo() const {
     Serial.println("Is Shifting: " + String(isShifting() ? "YES" : "NO"));
     Serial.println("Can Accept Commands: " + String(canAcceptShiftCommand() ? "YES" : "NO"));
     Serial.println("Relay Active: " + String(relayActive ? "YES" : "NO"));
-    Serial.println("Clutch Pulled: " + String(clutchPulled ? "YES" : "NO"));
+    Serial.println("Clutch Pulled: " + String(clutchDisengaged ? "YES" : "NO"));
     Serial.println("=====================================");
 }
 

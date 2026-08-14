@@ -265,7 +265,7 @@
         <div class="calibration-section hall-section">
             <h2>Hall Sensor Calibration</h2>
             <div class="instruction-box">
-                <strong>Purpose:</strong> Calibrate clutch lever position sensing for optimal response curve
+                <strong>Purpose:</strong> Calibrate clutch paddle position sensing for optimal response curve
             </div>
             
             <div class="grid">
@@ -469,7 +469,7 @@
                 <div>
                     <div class="calibration-step">
                         <span class="step-number">1</span>
-                        <strong>Idle Position</strong> (lever released, clutch fully engaged)<br>
+                        <strong>Idle Position</strong> (paddle idle, clutch engaged)<br>
                         <small style="color:#aaa;">Use slider above to find the angle, then enter it in <a href="/nvsconfig" style="color:#FF9800;">NVS Config</a>.</small><br>
                         <span style="font-size:13px;">Saved: <strong id="clutchIdle">--</strong>&deg;</span>
                     </div>
@@ -477,7 +477,7 @@
                 <div>
                     <div class="calibration-step">
                         <span class="step-number">2</span>
-                        <strong>Engage Position</strong> (lever pulled, clutch fully disengaged)<br>
+                        <strong>Max Position</strong> (paddle max, clutch disengaged)<br>
                         <small style="color:#aaa;">Use slider above to find the angle, then enter it in <a href="/nvsconfig" style="color:#FF9800;">NVS Config</a>.</small><br>
                         <span style="font-size:13px;">Saved: <strong id="clutchEngage">--</strong>&deg;</span>
                     </div>
@@ -706,7 +706,7 @@
                     // Clutch state labels
                     const stateEl = document.getElementById('clutchStateLabel');
                     const biteEl  = document.getElementById('biteLabel');
-                    if (data.clutchPulled) {
+                    if (data.clutchDisengaged) {
                         stateEl.textContent = 'DISENGAGED'; stateEl.style.background = '#F44336';
                     } else {
                         stateEl.textContent = 'ENGAGED'; stateEl.style.background = '#4CAF50';
@@ -882,7 +882,7 @@
 
         function startHallRangeTest() {
             document.getElementById('hallRangeResults').innerHTML = 
-                '<div class="test-active">Testing hall sensor range... Move clutch lever through full range</div>';
+                '<div class="test-active">Testing hall sensor range... Move clutch paddle idle to max</div>';
             
             let samples = [];
             let sampleCount = 0;

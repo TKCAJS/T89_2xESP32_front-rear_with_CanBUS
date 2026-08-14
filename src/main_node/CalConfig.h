@@ -32,8 +32,8 @@ struct CalConfig {
     uint16_t shiftDownMs;      // downshift relay pulse (20-1000 ms)
 
     // --- clutch servo angles (CLUTCH_SERVO_MIN..MAX, not 0-180) ---
-    uint16_t clutchIdlePos;    // lever released / clutch fully engaged
-    uint16_t clutchFullyPull;  // lever pulled / clutch disengaged
+    uint16_t clutchIdlePos;    // paddle idle  -> clutch ENGAGED  (high feedback V)
+    uint16_t clutchFullyPull;  // paddle max   -> clutch DISENGAGED (low feedback V)
 
     // --- integrity (MUST remain last member) ---
     uint32_t crc;

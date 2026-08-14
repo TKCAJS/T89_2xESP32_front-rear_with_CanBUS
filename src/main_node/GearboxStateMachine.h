@@ -92,8 +92,8 @@ private:
     int relayDuration;
     bool activeShiftIsUp;
 
-    // Clutch state (fed from main loop via setClutchPulled)
-    bool clutchPulled;
+    // Clutch state (fed from main loop via setClutchDisengaged)
+    bool clutchDisengaged;
 
     // Current gear tracking
     int currentGear;     // 0=N, 1-6=gears — confirmed by CAN
@@ -132,7 +132,7 @@ public:
           shiftLogger(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
           relayActive(false), lastReleaseStepMs(0),
           relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
-          clutchPulled(false),
+          clutchDisengaged(false),
           currentGear(0), expectedGear(0), targetGear(0) {}
 
     // Initialization
@@ -158,7 +158,7 @@ public:
     String getCurrentGearName() const;
 
     // Clutch control
-    void setClutchPulled(bool pulled) { clutchPulled = pulled; }
+    void setClutchDisengaged(bool disengaged) { clutchDisengaged = disengaged; }
 
     // Status for web interface
     bool isWaitingForClutch() const {
@@ -190,8 +190,8 @@ private:
     // Shift control (sends CAN command + tracks completion timing)
     void activateShift(bool isUpshift, int duration, uint16_t ignCutMs = 0, uint8_t targetGear = 0xFF);
     void deactivateShift();
-    void engageClutch();
-    void releaseClutch();
+    void clutchToMax();
+    void clutchToIdle();
     void updateRelayControl();
 
     // Stacked downshift + logging helpers

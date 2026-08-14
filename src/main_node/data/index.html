@@ -299,9 +299,9 @@
             <h4>Downshift Trigger Voltage</h4>
             <p style='color:#aaa;font-size:12px;margin:0 0 10px;'>
                 On a downshift request the servo pulls until the feedback voltage passes
-                this threshold, and only then is the DS CAN command sent. Feedback is
-                electrically inverted, so pulling drives the voltage <strong>down</strong>
-                &mdash; the trigger fires on falling past this value.
+                this threshold, and only then is the DS CAN command sent. Paddle max is the
+                <strong>low</strong> voltage end, so the trigger fires on the voltage
+                falling past this value.
             </p>
             <div class='form-group'>
                 <label>Trigger voltage (raw ADC V):</label>
@@ -321,8 +321,8 @@
             <p style='color:#aaa;font-size:12px;margin:0 0 10px;'>
                 Release point for stacked downshifts. Between consecutive shifts the clutch
                 need only come back to the biting point rather than all the way to idle,
-                skipping the dead travel and shortening the stroke. Releasing raises the
-                voltage, so this sits <strong>above</strong> the trigger and below idle.
+                skipping the dead travel and shortening the stroke. Moving back toward paddle idle raises
+                the voltage, so this sits <strong>above</strong> the trigger.
             </p>
             <div class='form-group'>
                 <label>Just-engaged voltage (raw ADC V):</label>
@@ -477,7 +477,7 @@ function updateStatus() {
                 let gearClass = d.currentGear.includes('DISCONNECTED') ? 'gear-disconnected' : 'gear-display';
                 status += '<br>Current Gear: <span class="' + gearClass + '">' + d.currentGear + '</span>';
                 status += '<br>WiFi: ' + (d.wifiEnabled ? 'ON (' + d.apIP + ')' : 'OFF');
-                status += '<br>Clutch: ' + d.clutchVoltage.toPrecision(3) + 'V ' + (d.clutchPulled ? '(PULLED)' : '(RELEASED)');
+                status += '<br>Clutch: ' + d.clutchVoltage.toPrecision(3) + 'V ' + (d.clutchDisengaged ? '(DISENGAGED)' : '(ENGAGED)');
                 status += '<br>Hall Sensor: ' + d.hallValue;
                 status += '<br>Software Version: ' + (d.softwareVersion/100).toFixed(2);
                 status += '<br>RPM: ' + d.currentRpm.toFixed(0);
