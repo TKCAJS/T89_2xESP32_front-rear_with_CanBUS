@@ -438,24 +438,6 @@
             <!-- Threshold calibration -->
             <div class="grid" style="margin-top:16px;">
                 <div>
-                    <h3>Downshift Trigger <span style="color:#F44336;">&#9646;</span></h3>
-                    <div class="calibration-step">
-                        <p style="margin:4px 0 8px;">
-                            Gates every downshift: the servo pulls toward max until the feedback
-                            falls past this, and only then is the DS sent. Drive the servo to the
-                            point where the clutch is just disengaged, then Capture.
-                        </p>
-                        <div style="display:flex;gap:6px;align-items:center;margin:8px 0;">
-                            <input type="number" id="disengInput" min="0" max="3.3" step="0.001"
-                                   style="flex:1;background:#1a1a1a;color:white;border:1px solid #555;padding:5px;border-radius:3px;">
-                            <span style="font-size:12px;color:#aaa;">V</span>
-                        </div>
-                        <button class="btn btn-danger" onclick="captureDisengageV()">Capture Live</button>
-                        <button class="btn btn-secondary" onclick="saveDisengageV()">Save Typed</button>
-                        <div id="disengResult" style="margin-top:6px;"></div>
-                    </div>
-                </div>
-                <div>
                     <h3>Just-Engaged Threshold <span style="color:#FF9800;">&#9646;</span></h3>
                     <div class="calibration-step">
                         <p style="margin:4px 0 8px;">
@@ -472,6 +454,24 @@
                         <button class="btn btn-warning" onclick="captureJustEngagedV()">Capture Live</button>
                         <button class="btn btn-secondary" onclick="saveJustEngagedV()">Save Typed</button>
                         <div id="biteResult" style="margin-top:6px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <h3>Downshift Trigger <span style="color:#F44336;">&#9646;</span></h3>
+                    <div class="calibration-step">
+                        <p style="margin:4px 0 8px;">
+                            Gates every downshift: the servo pulls toward max until the feedback
+                            falls past this, and only then is the DS sent. Drive the servo to the
+                            point where the clutch is just disengaged, then Capture.
+                        </p>
+                        <div style="display:flex;gap:6px;align-items:center;margin:8px 0;">
+                            <input type="number" id="disengInput" min="0" max="3.3" step="0.001"
+                                   style="flex:1;background:#1a1a1a;color:white;border:1px solid #555;padding:5px;border-radius:3px;">
+                            <span style="font-size:12px;color:#aaa;">V</span>
+                        </div>
+                        <button class="btn btn-danger" onclick="captureDisengageV()">Capture Live</button>
+                        <button class="btn btn-secondary" onclick="saveDisengageV()">Save Typed</button>
+                        <div id="disengResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
             </div>
