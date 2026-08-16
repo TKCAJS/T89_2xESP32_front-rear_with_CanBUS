@@ -65,9 +65,13 @@ private:
     String notifGearAtStart;  // gear the box was in when the letter went up
 
     // Configuration
-    // Fallback only. A shift letter normally ends the moment the rear node confirms
-    // a gear, which is far sooner than this — see expireNotification().
-    static const unsigned long SHIFT_NOTIFICATION_DURATION = 300;
+    // Fallback only. A shift letter normally ends the moment the rear node confirms a
+    // gear (see expireNotification()); this cap is what's left for the case where no
+    // confirmation ever comes, i.e. the shift did not move the box. 100ms is roughly
+    // the neutral pulse plus the rear node's 30ms debounce — long enough that a
+    // successful shift still gets its letter, short enough that a failed one does not
+    // sit there claiming a gear the box never reached.
+    static const unsigned long SHIFT_NOTIFICATION_DURATION = 100;
     static const unsigned long CYCLE_TIME = 1000;
     static const unsigned long FLASH_DURATION = 70;
     static const unsigned long FLASH_GAP = 150;
