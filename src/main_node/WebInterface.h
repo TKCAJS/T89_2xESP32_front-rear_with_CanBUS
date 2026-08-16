@@ -162,6 +162,14 @@ extern float clutchDisengageV;
 extern float clutchJustEngagedV;
 extern bool clutchJustEngaged;
 
+// Clutch feedback health + loop timing. A steady clutchVoltage means a clean 16-bit read
+// ONLY if adsFailTotal is also standing still — a wedged bus holds the last value too.
+extern bool adsFault;
+extern uint32_t adsFailTotal;
+extern uint32_t adsRecoveries;
+extern uint32_t maxLoopUs;
+extern uint32_t loopStalls;
+
 // Function declarations for callbacks
 extern bool isShiftAllowed();
 extern bool canDownshift();
@@ -444,7 +452,12 @@ void WebInterface::handleSensorData() {
     json += "\"clutchDisengageV\":" + String(clutchDisengageV, 3) + ",";
     json += "\"clutchJustEngagedV\":" + String(clutchJustEngagedV, 3) + ",";
     json += "\"clutchJustEngaged\":" + String(clutchJustEngaged ? "true" : "false") + ",";
-    
+    json += "\"adsFault\":" + String(adsFault ? "true" : "false") + ",";
+    json += "\"adsFailTotal\":" + String(adsFailTotal) + ",";
+    json += "\"adsRecoveries\":" + String(adsRecoveries) + ",";
+    json += "\"maxLoopUs\":" + String(maxLoopUs) + ",";
+    json += "\"loopStalls\":" + String(loopStalls) + ",";
+
     json += "\"currentRpm\":" + String(rpmSensor.getRpm(), 1) + ",";
     json += "\"currentTemp\":" + String(getRadiatorTempForWeb(), 1) + ",";
     json += "\"pumpDuty\":" + String(getPumpDutyForWeb()) + ",";

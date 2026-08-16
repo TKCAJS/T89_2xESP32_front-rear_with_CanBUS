@@ -1,7 +1,15 @@
+// 214    RELIABILITY: the ADS1115 read no longer runs in loop(). Two blocking Wire
+//        transactions per pass, at Wire's 50ms default timeout, could stall core 1 for up
+//        to 100ms per pass on an EMI-disturbed bus — and the shift paddles are polled
+//        edge-detects in processInputs(), so a press+release inside that stall is not
+//        delayed, it is never seen. Symptom on track: paddles dead at high revs while the
+//        clutch (core 0, 200Hz) kept working. Now: read moved to the core-0 clutch task,
+//        Wire timeout 50ms -> 3ms, both I2C transactions checked, stuck-bus recovery, and
+//        the GPIO15 fallback removed — since 098f08d that pin is unwired and pulled down,
+//        so falling back to it read 0.0V = "clutch pulled" forever.
 // 213    HARDWARE: clutch position now read via ADS1115 (16-bit, differential A0-A1) over
 //        I2C SDA8/SCL14 @0x48, 2:1 divider on servo feedback; ~0.003V jitter vs noisy GPIO15.
-//        Falls back to legacy GPIO15 analogRead if ADS absent. Hall pin 4 moved to central
-//        pin map (PIN_HALL_SENSOR_2) and injected like pin 5.
+//        Hall pin 4 moved to central pin map (PIN_HALL_SENSOR_2) and injected like pin 5.
 // 212    NVS config web UI; dual hall calibration (per-paddle idle/pulled capture)
 // 211    Hall pin 4 rescaling to match pin 5 range; left/right/result shown on web page
 // 210    Stacked downshift, piecewise clutch mapping, dual hall sensor, CAN bus recovery,
@@ -23,7 +31,7 @@
 #include <driver/gpio.h>
 
 // Version tracking
-#define SOFTWARE_VERSION 213.0
+#define SOFTWARE_VERSION 214.0
 
 // Pin definitions for ESP32-S3 - FIXED PIN ASSIGNMENTS
 #define PIN_MANUAL_TOGGLE   10   // Switch 1 - Long press to toggle manual mode
@@ -34,9 +42,19 @@
 #define PIN_HALL_SENSOR_2   4    // Clutch paddle hall (right)
 #define PIN_CLUTCH_SERVO    6    // Servo output
 #define PIN_WIFI_SWITCH     21   // WiFi toggle switch input (momentary)
-#define PIN_CLUTCH_POSITION 15   // Legacy analog clutch position input (fallback if ADS1115 absent)
+#define PIN_CLUTCH_POSITION 15   // Legacy analog clutch input — UNWIRED since 098f08d, held low, never read
 #define PIN_ADS_SDA         8    // ADS1115 I2C data
 #define PIN_ADS_SCL         14   // ADS1115 I2C clock (not GPIO9 — see board notes)
+#define ADS_I2C_ADDR        0x48
+
+// ADS1115 read policy. The chip runs at 128 SPS, so a new sample exists only every 7.8ms —
+// reading it faster just spends I2C traffic (and EMI exposure) re-fetching the same value.
+#define ADS_READ_INTERVAL_MS  10   // ~100Hz, comfortably ahead of the 128 SPS conversion rate
+#define ADS_RETRY_INTERVAL_MS 500  // back off once faulted: a wedged bus costs ~6ms per attempt, and
+                                   // core 0 still has a servo to track — retry slowly, recover if it returns
+#define ADS_I2C_TIMEOUT_MS    3    // per transaction; Wire's default is 50ms, far too long to ever wait
+#define ADS_FAIL_RECOVER      10   // consecutive failed reads between bus-recovery attempts (~100ms)
+#define ADS_FAIL_FAULT        50   // consecutive failed reads before clutchVoltage is declared stale (~500ms)
 // 0.591 divider (4.7k top / 6.8k bottom) on servo feedback into ADS A0, return ref on A1
 // (differential), 0.1uF across A0-A1. 5V -> ~2.96V, safely under 3.3V VDD at GAIN_ONE.
 // The divider exists only to keep the pin under 3.3V; we read the divided voltage as-is and
@@ -123,9 +141,21 @@ bool clutchPulled = false;
 bool clutchJustEngaged = false;  // biting point zone: voltage between justEngagedV and disengageV
 float clutchVoltage = 0.0;
 
-// ADS1115 — clutch position feedback (16-bit, differential A0–A1 for EMI rejection)
+// ADS1115 — clutch position feedback (16-bit, differential A0–A1 for EMI rejection).
+// Read exclusively from clutchControlTask on core 0 — see checkServoPosition().
 Adafruit_ADS1115 ads;
-bool adsReady = false;
+bool     adsReady      = false;  // chip answered at boot
+bool     adsFault      = false;  // sustained read failure: clutchVoltage below is STALE, not steady
+uint32_t adsFailStreak = 0;      // consecutive failed reads
+uint32_t adsFailTotal  = 0;      // lifetime failed reads — a steady gauge with 0 here is a real signal
+uint32_t adsRecoveries = 0;      // bus-recovery attempts
+
+// Loop-time watchdog. The paddles are polled edge-detects, so anything that blocks loop()
+// costs shift commands outright; maxLoopUs is the worst pass since boot and loopStalls
+// counts passes long enough to swallow a paddle press.
+uint32_t maxLoopUs  = 0;
+uint32_t loopStalls = 0;
+#define LOOP_STALL_US 20000
 
 // Hall sensor range mirrors (synced from hallSensor each loop)
 int hallMin = 780;
@@ -194,7 +224,9 @@ void startDownshiftWithClutchCheck(int durationMs) {
 
 void engageClutch() { clutchServo.write(clutchFullyPull); }
 void releaseClutch() { clutchServo.write(clutchIdlePos); }
-void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter); }
+// Stamp the letter with the gear we are setting off from, so the matrix can drop it the
+// moment the rear node confirms where the box actually ended up.
+void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter, mainCan.getGearName()); }
 String getGearStatusForWeb() { return mainCan.getGearName(); }
 float getRadiatorTempForWeb() { return mainCan.getRadiatorTemp(); }
 uint8_t getPumpDutyForWeb() { return mainCan.getPumpDuty(); }
@@ -342,7 +374,18 @@ void SerialCommands::printHelp() {
 // gearbox.isIdle() is false.
 static void clutchControlTask(void* param) {
     const TickType_t period = pdMS_TO_TICKS(5);   // 200 Hz — plenty for clutch tracking
+    unsigned long lastAdsRead = 0;
     for (;;) {
+        // Clutch position feedback is read here, not in loop(): the I2C transaction can
+        // block, and on core 1 that blocks the paddle poll. Here it costs nothing but
+        // servo tracking jitter, which the 200Hz rate absorbs.
+        unsigned long now = millis();
+        unsigned long adsInterval = adsFault ? ADS_RETRY_INTERVAL_MS : ADS_READ_INTERVAL_MS;
+        if (now - lastAdsRead >= adsInterval) {
+            lastAdsRead = now;
+            checkServoPosition();
+        }
+
         if (manualMode.isManualModeEnabled()) {
             manualMode.updateClutch();              // direct paddle->servo (no limits)
         } else if (gearbox.isIdle()) {
@@ -443,6 +486,8 @@ void setup() {
 }
 
 void loop() {
+    const uint32_t loopStartUs = micros();
+
     // Update manual mode controller (highest priority)
     manualMode.update();
     
@@ -469,7 +514,8 @@ void loop() {
         checkWiFiToggleSwitch();
         if (wifiEnabled) { server.handleClient(); }
         processInputs();
-        checkServoPosition();
+        // Clutch position feedback is read by clutchControlTask (core 0) — deliberately
+        // not here, so a stalled I2C bus can never delay the paddle poll above.
     } else {
         // In manual mode - only update essential systems
         serialCommands.processCommands();
@@ -523,7 +569,58 @@ void loop() {
     }
     
     pixels.show();
+
+    // Loop-time watchdog — paddle response is only as good as this number.
+    const uint32_t loopUs = micros() - loopStartUs;
+    if (loopUs > maxLoopUs)     maxLoopUs = loopUs;
+    if (loopUs > LOOP_STALL_US) loopStalls++;
+
     yield();
+}
+
+// Put the ADS into continuous differential A0-A1 conversion. Called at boot and again
+// after a bus recovery, since a glitch severe enough to wedge the bus may also have
+// reset the chip's config register.
+static void adsConfigure() {
+    ads.setGain(GAIN_ONE);                  // ±4.096V FSR — fits divided 0–2.5V
+    ads.setDataRate(RATE_ADS1115_128SPS);
+    ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
+}
+
+// Read the conversion register with BOTH I2C transactions checked. The library's
+// getLastConversionResults() ignores Wire's return codes and hands back the previous
+// buffer contents on failure, which makes a dead bus look exactly like a rock-steady
+// signal on the web gauge. Returns false and leaves 'counts' untouched if the bus
+// did not answer.
+static bool adsReadCounts(int16_t& counts) {
+    Wire.beginTransmission(ADS_I2C_ADDR);
+    Wire.write(ADS1X15_REG_POINTER_CONVERT);
+    if (Wire.endTransmission() != 0) return false;
+    if (Wire.requestFrom((uint8_t)ADS_I2C_ADDR, (uint8_t)2) != 2) return false;
+
+    uint8_t hi = Wire.read();
+    uint8_t lo = Wire.read();
+    counts = (int16_t)(((uint16_t)hi << 8) | lo);
+    return true;
+}
+
+// Free a bus left wedged by a glitch mid-transaction: clock SCL until the slave lets go
+// of SDA, then re-init Wire and re-arm the conversion. Runs on core 0, ~90us worst case,
+// so even a permanently broken bus cannot reach loop().
+static void adsBusRecover() {
+    Wire.end();
+
+    pinMode(PIN_ADS_SDA, INPUT_PULLUP);
+    pinMode(PIN_ADS_SCL, OUTPUT);
+    for (int i = 0; i < 9 && digitalRead(PIN_ADS_SDA) == LOW; i++) {
+        digitalWrite(PIN_ADS_SCL, LOW);  delayMicroseconds(5);
+        digitalWrite(PIN_ADS_SCL, HIGH); delayMicroseconds(5);
+    }
+
+    Wire.begin(PIN_ADS_SDA, PIN_ADS_SCL);
+    Wire.setTimeOut(ADS_I2C_TIMEOUT_MS);
+    adsConfigure();
+    adsRecoveries++;
 }
 
 void setupPins() {
@@ -544,18 +641,18 @@ void setupPins() {
 
     // Configure analog inputs
     pinMode(PIN_HALL_SENSOR, INPUT);
-    pinMode(PIN_CLUTCH_POSITION, INPUT_PULLDOWN);   // legacy fallback input, no longer wired — pin held defined
+    pinMode(PIN_CLUTCH_POSITION, INPUT_PULLDOWN);   // unwired input, held low so it can't float
 
     // ADS1115 — clutch position feedback, differential A0–A1 (rejects ground bounce)
     Wire.begin(PIN_ADS_SDA, PIN_ADS_SCL);
-    adsReady = ads.begin(0x48);
+    Wire.setTimeOut(ADS_I2C_TIMEOUT_MS);
+    adsReady = ads.begin(ADS_I2C_ADDR);
     if (adsReady) {
-        ads.setGain(GAIN_ONE);                  // ±4.096V FSR — fits divided 0–2.5V
-        ads.setDataRate(RATE_ADS1115_128SPS);
-        ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
+        adsConfigure();
         Serial.println("ADS1115: clutch position OK (diff A0-A1 @0x48)");
     } else {
-        Serial.println("ADS1115: NOT FOUND — falling back to GPIO15 analogRead");
+        adsFault = true;
+        Serial.println("ADS1115: NOT FOUND — clutch position feedback UNAVAILABLE");
     }
 
     // Clutch servo is attached first thing in setup() so its idle PWM starts ASAP.
@@ -629,17 +726,28 @@ void checkWiFiToggleSwitch() {
     }
 }
 
+// Clutch position feedback. Called ONLY from clutchControlTask on core 0 — never from
+// loop(). An EMI-disturbed I2C bus blocks for the Wire timeout, and on core 1 that stall
+// lands straight on the polled paddle inputs in processInputs() (see v214 header note).
 void checkServoPosition() {
-    if (adsReady) {
-        int16_t counts = ads.getLastConversionResults();   // differential A0-A1, 16-bit
-        if (counts < 0) counts = 0;                         // clamp tiny negative at rest
-        // Report the divided voltage at the ADS input directly — no back-scaling. Thresholds
-        // are captured live in these same post-divider volts, so absolute scale doesn't matter.
-        clutchVoltage = ads.computeVolts(counts);
-    } else {
-        int analogValue = analogRead(PIN_CLUTCH_POSITION);  // fallback: legacy GPIO15
-        clutchVoltage = (analogValue * 3.3) / 4095.0;
+    if (!adsReady) return;      // no chip, no feedback — GPIO15 is unwired, reading it would lie
+
+    int16_t counts = 0;
+    if (!adsReadCounts(counts)) {
+        adsFailTotal++;
+        adsFailStreak++;
+        if (adsFailStreak >= ADS_FAIL_FAULT)       adsFault = true;
+        if (adsFailStreak % ADS_FAIL_RECOVER == 0) adsBusRecover();
+        return;                 // hold the last good clutch state rather than invent one
     }
+    adsFailStreak = 0;
+    adsFault      = false;
+
+    if (counts < 0) counts = 0;                             // clamp tiny negative at rest
+    // Report the divided voltage at the ADS input directly — no back-scaling. Thresholds
+    // are captured live in these same post-divider volts, so absolute scale doesn't matter.
+    clutchVoltage = ads.computeVolts(counts);
+
     bool newClutchPulled  = (clutchVoltage < clutchDisengageV);
     clutchJustEngaged = (clutchVoltage >= clutchJustEngagedV && clutchVoltage < clutchDisengageV);
     

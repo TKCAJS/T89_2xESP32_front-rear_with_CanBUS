@@ -8,7 +8,7 @@
 #define CAN_TX_PIN          17
 #define CAN_RX_PIN          18
 #define IGN_CUT_DEFAULT_MS  30
-#define MAIN_NODE_VERSION   211
+#define MAIN_NODE_VERSION   214   // keep in step with SOFTWARE_VERSION in T89_gearbox_206.cpp
 
 class MainCan {
 private:

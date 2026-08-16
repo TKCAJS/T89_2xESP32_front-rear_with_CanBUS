@@ -412,6 +412,15 @@ function updateStatus() {
                 status += '<br>Current Gear: <span class="' + gearClass + '">' + d.currentGear + '</span>';
                 status += '<br>WiFi: ' + (d.wifiEnabled ? 'ON (' + d.apIP + ')' : 'OFF');
                 status += '<br>Clutch: ' + d.clutchVoltage.toPrecision(3) + 'V ' + (d.clutchPulled ? '(PULLED)' : '(RELEASED)');
+                // A steady voltage is only good news while adsFailTotal stays put: a wedged
+                // I2C bus holds the last reading, which looks identical to a clean signal.
+                if (d.adsFault) {
+                    status += ' <span class="gear-disconnected">FEEDBACK FAULT — value is stale</span>';
+                } else if (d.adsFailTotal > 0) {
+                    status += ' <span class="gear-disconnected">(I2C errors: ' + d.adsFailTotal +
+                              ', recoveries: ' + d.adsRecoveries + ')</span>';
+                }
+                status += '<br>Loop: max ' + (d.maxLoopUs/1000).toFixed(1) + ' ms, stalls ' + d.loopStalls;
                 status += '<br>Hall Sensor: ' + d.hallValue;
                 status += '<br>Software Version: ' + (d.softwareVersion/100).toFixed(2);
                 status += '<br>RPM: ' + d.currentRpm.toFixed(0);
