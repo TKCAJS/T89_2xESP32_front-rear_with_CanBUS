@@ -17,8 +17,8 @@ private:
     int clutchFullyPull;
     int hallMin;
     int hallMax;
-    int pin2RawMin;   // pin4 raw ADC at idle (lever released) — calibrated
-    int pin2RawMax;   // pin4 raw ADC at pulled (lever fully in) — calibrated
+    int pin2RawMin;   // pin4 raw ADC at paddle idle (clutch engaged) — calibrated
+    int pin2RawMax;   // pin4 raw ADC at paddle max (clutch disengaged) — calibrated
     bool servoOverride;  // true = slider/web controls servo; hall sensor backs off
     // Piecewise breakpoints
     int hallBiteStart;   // ADC value where biting zone input begins
@@ -34,7 +34,9 @@ private:
 public:
     HallSensorControl(int pin, int pin2) : hallPin(pin), hallPin2(pin2), curveType(HALL_LOGARITHMIC),
                                 curveStrength(2.0), clutchServo(nullptr),
-                                clutchIdlePos(0), clutchFullyPull(180),
+                                // Placeholders until setConfiguration();
+                                // factory travel from CalConfig.h
+                                clutchIdlePos(42), clutchFullyPull(137),
                                 hallMin(780), hallMax(3330),
                                 pin2RawMin(1000), pin2RawMax(3600), servoOverride(false),
                                 hallBiteStart(1000), hallBiteEnd(3000),

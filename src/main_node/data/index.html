@@ -7,16 +7,14 @@
     <style>
         body {
             font-family: Arial;
-            margin: 20px;
+            margin: 0;
+            padding: 20px;
             background: #1a1a1a;
             color: white;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
-            background: #333;
-            border-radius: 10px;
         }
         .btn {
             background: #4CAF50;
@@ -179,18 +177,56 @@
                 margin: 20px 0;
             }
         }
+    
+        /* ---- shared page chrome: identical on all four pages ---- */
+        .navbar { display: flex; gap: 4px; align-items: flex-end; }
+        .navbar a {
+            flex: 0 0 auto;
+            padding: 11px 20px;
+            border-radius: 7px 7px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+            line-height: 1;
+            opacity: 0.45;
+            transition: opacity 0.15s;
+        }
+        .navbar a:hover { opacity: 0.75; }
+        /* The active tab spreads across the row, and every tab has square bottom
+           corners, so the active one runs straight into the rail below it and the
+           two read as a single shape. */
+        .navbar a.active {
+            flex: 1 1 auto;
+            padding: 15px 20px;
+            text-align: center;
+            opacity: 1;
+            pointer-events: none;
+            cursor: default;
+        }
+        /* Carries the active page's colour across the full width, under the tabs. */
+        .nav-rail { height: 6px; border-radius: 0 0 4px 4px; margin-bottom: 20px; }
+        .tab-home, .rail-home { background: #2196F3; }
+        .tab-cal,  .rail-cal  { background: #FF9800; }
+        .tab-nvs,  .rail-nvs  { background: #9C27B0; }
+        .tab-pw,   .rail-pw   { background: #4CAF50; }
+        .page-title { margin: 0 0 5px; font-size: 1.5em; color: white; }
+        .page-sub { color: #888; font-size: 0.9em; margin: 0 0 22px; line-height: 1.45; }
     </style>
 </head>
 <body>
     <div class='container'>
-        <h1>T89 Sequential Gearbox Control</h1>
-        
-        <div style='display:flex;gap:8px;margin-bottom:16px;'>
-            <a class='btn' style='background:#2196F3;opacity:0.5;pointer-events:none;'>Home</a>
-            <a href='/calibration' class='btn' style='background:#FF9800;'>Calibration</a>
-            <a href='/nvsconfig' class='btn' style='background:#9C27B0;'>NVS Config</a>
+        <div class="navbar">
+            <a class="tab-home active">Home</a>
+            <a href="/calibration" class="tab-cal">Calibration</a>
+            <a href="/nvsconfig" class="tab-nvs">NVS Config</a>
+            <a href="/piecewise" class="tab-pw">Piecewise</a>
         </div>
-        
+        <div class="nav-rail rail-home"></div>
+
+        <h1 class="page-title">T89 Sequential Gearbox Control</h1>
+        <p class="page-sub">Live status, gauges and bite-point voltage.</p>
+
         <!-- Gauges section -->
         <div class='gauges-container'>
             <div class='gauge-row'>
@@ -204,7 +240,7 @@
                 </div>
                 <div class='gauge-item'>
                     <canvas id='tempGauge' width='200' height='200'></canvas>
-                    <div class='gauge-label'>Radiator °C / Pump %</div>
+                    <div class='gauge-label'>Engine Out °C / Pump %</div>
                 </div>
             </div>
             <div class='gauge-row'>
@@ -255,20 +291,23 @@
         <button class='btn' onclick='sendCmd("shiftUp")'>Shift Up</button>
         
 
-        <!-- Downshift trigger threshold -->
-        <h3>Auto-Downshift Trigger</h3>
+        <!-- Read-only. Both thresholds are set on Calibration, which has the manual
+             servo slider needed to position the clutch before capturing them. -->
+        <h3>Clutch Voltage Thresholds</h3>
         <div style='background:#2a2a4d;padding:15px;border-radius:5px;border-left:4px solid #6B6BFF;max-width:400px;'>
-            <h4>Clutch Bite-Point Voltage</h4>
-            <div class='form-group'>
-                <label>Trigger voltage (raw ADC V):</label>
-                <div id='bitePointDisplay' style='font-size:1.4em;color:#6B6BFF;font-weight:bold;margin:8px 0;'>Loading...</div>
+            <div style='display:flex;justify-content:space-between;margin-bottom:6px;'>
+                <span style='color:#aaa;font-size:13px;'>Downshift trigger</span>
+                <strong id='bitePointDisplay' style='color:#F44336;'>--</strong>
             </div>
-            <div class='form-group'>
-                <label>Set trigger (V):</label>
-                <input type='number' id='bitePointInput' min='0' max='3.3' step='0.001' placeholder='e.g. 1.500'>
+            <div style='display:flex;justify-content:space-between;margin-bottom:10px;'>
+                <span style='color:#aaa;font-size:13px;'>Just-engaged (bite point)</span>
+                <strong id='justEngagedDisplay' style='color:#FF9800;'>--</strong>
             </div>
-            <button class='btn' onclick='saveDownshiftTrigger()'>Save to Flash</button>
-            <div id='bitePointResult' style='margin-top:8px;color:#aaa;font-size:0.9em;'></div>
+            <p style='color:#aaa;font-size:12px;margin:0;'>
+                Set these on <a href='/calibration' style='color:#FF9800;'>Calibration</a> &mdash;
+                capturing them means driving the clutch to position, and the manual servo
+                slider lives there.
+            </p>
         </div>
     </div>
 
@@ -333,7 +372,11 @@
         }
         
         // Temp gauge with a concentric inner ring for pump PWM %.
-        // Outer arc = radiator temp (orange), inner arc = pump duty (cyan).
+        // Outer arc = engine-out temp (orange), inner arc = pump duty (cyan).
+        // Both come from the same sensor now: the PA4 NTC on the sensor node, which is
+        // what pumpDutyForTemp() and fanUpdate() are controlled from. It previously
+        // showed the Dallas, so the pump ring was reacting to a sensor the gauge did
+        // not display.
         function drawTempPumpGauge(canvasId, temp, tempMax, pump) {
             const canvas = document.getElementById(canvasId);
             const ctx = canvas.getContext('2d');
@@ -345,7 +388,7 @@
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Outer ring — radiator temperature
+            // Outer ring — engine-out temperature
             const rOuter = 80;
             ctx.lineWidth = 10;
             ctx.beginPath(); ctx.arc(cx, cy, rOuter, startAngle, endAngle);
@@ -411,7 +454,7 @@ function updateStatus() {
                 let gearClass = d.currentGear.includes('DISCONNECTED') ? 'gear-disconnected' : 'gear-display';
                 status += '<br>Current Gear: <span class="' + gearClass + '">' + d.currentGear + '</span>';
                 status += '<br>WiFi: ' + (d.wifiEnabled ? 'ON (' + d.apIP + ')' : 'OFF');
-                status += '<br>Clutch: ' + d.clutchVoltage.toPrecision(3) + 'V ' + (d.clutchPulled ? '(PULLED)' : '(RELEASED)');
+                status += '<br>Clutch: ' + d.clutchVoltage.toPrecision(3) + 'V ' + (d.clutchDisengaged ? '(DISENGAGED)' : '(ENGAGED)');
                 // A steady voltage is only good news while adsFailTotal stays put: a wedged
                 // I2C bus holds the last reading, which looks identical to a clean signal.
                 if (d.adsFault) {
@@ -428,9 +471,9 @@ function updateStatus() {
                 status += '<br><span class="shift-timing">Shift Timing: ' + (d.shiftTimingActive ? 'ACTIVE' : 'Idle') + '</span>';
                 status += '<br>Hall Curve: ' + d.hallCurveName + ' (' + d.hallCurveStrength + ')';
                 document.getElementById('status').innerHTML = status;
-                document.getElementById('bitePointDisplay').textContent = d.clutchJustEngagedV.toFixed(3) + ' V  (live: ' + d.clutchVoltage.toPrecision(3) + ' V)';
+                document.getElementById('bitePointDisplay').textContent = d.clutchDisengageV.toFixed(3) + ' V  (live: ' + d.clutchVoltage.toPrecision(3) + ' V)';
                 
-                let tempStatus = '<div class="temp-reading temp-current">Current: ' + d.currentTemp.toFixed(1) + '°C</div>';
+                let tempStatus = '<div class="temp-reading temp-current">Engine Out: ' + d.currentTemp.toFixed(1) + '°C</div>';
                 tempStatus += '<div class="temp-reading temp-target">Target: ' + d.targetTemp.toFixed(1) + '°C</div>';
                 tempStatus += '<div class="temp-reading pump-status">Pump PWM: ' + d.pumpPwmPercent + '%</div>';
                 tempStatus += '<div class="temp-reading engine-status">Engine: ' + (d.engineRunning ? 'RUNNING' : 'STOPPED') + '</div>';
@@ -455,27 +498,22 @@ function updateStatus() {
         
         function loadConfig() {
             fetch('/configData').then(r => r.json()).then(d => {
-                let displayedBiteV = d.clutchJustEngagedV.toFixed(3);
+                let displayedBiteV = d.clutchDisengageV.toFixed(3);
                 document.getElementById('bitePointDisplay').textContent = displayedBiteV + ' V';
-                document.getElementById('bitePointInput').value = displayedBiteV;
+                let displayedJustV = d.clutchJustEngagedV.toFixed(3);
+                document.getElementById('justEngagedDisplay').textContent = displayedJustV + ' V';
             }).catch(e => console.error('Config load error:', e));
         }
         
-        function saveDownshiftTrigger() {
-            let displayedV = parseFloat(document.getElementById('bitePointInput').value);
-            if (isNaN(displayedV) || displayedV < 0 || displayedV > 3.3) {
-                document.getElementById('bitePointResult').textContent = 'Invalid value (0.000-3.300 V)';
-                return;
-            }
-            fetch('/cmd?action=setJustEngagedV&v=' + displayedV.toFixed(3)).then(r => {
-                if (r.ok) {
-                    document.getElementById('bitePointDisplay').textContent = displayedV.toFixed(3) + ' V';
-                    document.getElementById('bitePointResult').textContent = 'Saved (' + displayedV.toFixed(3) + ' V)';
-                } else {
-                    document.getElementById('bitePointResult').textContent = 'Save failed';
-                }
-            }).catch(() => { document.getElementById('bitePointResult').textContent = 'Save error'; });
-        }
+        // Both thresholds live here so each has exactly one writer. Calibration used to
+        // capture them too, which let a stale page silently overwrite the other.
+
+
+
+
+
+
+
 
         loadConfig();
         updateStatus();

@@ -25,6 +25,10 @@ enum GearboxState {
     UPSHIFTING,
     DOWNSHIFT_CLUTCH_ENGAGING,
     DOWNSHIFT_SHIFTING,
+    // Between stacked downshifts the clutch returns only as far as the bite point
+    // rather than all the way to idle, skipping the dead travel. Counts as a shifting
+    // state so no unrelated shift command is accepted mid-stack.
+    DOWNSHIFT_TO_BITE_POINT,
 
     // Wait states - clutch interlock for shifts out of neutral
     WAITING_FOR_CLUTCH_SHIFT_DOWN,
@@ -83,12 +87,13 @@ private:
 
     // Shift timing (mirrors old relay timing — completion returns to idle)
     bool relayActive;
+    unsigned long lastBiteStepMs;   // rate limiter for the walk back to the bite point
     unsigned long relayStartTime;
     int relayDuration;
     bool activeShiftIsUp;
 
-    // Clutch state (fed from main loop via setClutchPulled)
-    bool clutchPulled;
+    // Clutch state (fed from main loop via setClutchDisengaged)
+    bool clutchDisengaged;
 
     // Current gear tracking
     int currentGear;     // 0=N, 1-6=gears — confirmed by CAN
@@ -97,17 +102,37 @@ private:
 
     // Timeouts
     static const unsigned long STATE_SHIFT_TIMEOUT_MS = 500;
+    // Driver is being waited on to pull the clutch by hand (neutral paths).
     static const unsigned long CLUTCH_WAIT_TIMEOUT_MS = 200;
+
+    // Servo is being waited on to physically pull the clutch past the trigger voltage
+    // (downshift path). Must comfortably exceed real servo travel — a sweep from
+    // clutchIdlePos to clutchFullyPull is typically 150-300 ms, so 200 ms would expire
+    // on healthy shifts and bypass the gate entirely. On expiry the shift is ABORTED,
+    // never sent: an unconfirmed clutch means shifting against drive.
+    static const unsigned long DOWNSHIFT_SERVO_TIMEOUT_MS = 500;
+
+    // Cap on the walk back to the bite point between stacked downshifts. On expiry the
+    // clutch returns fully to idle rather than aborting — a missed bite point costs
+    // speed, not the shift. Also bounds the wait if CAN never confirms the gear.
+    static const unsigned long STACK_BITE_TIMEOUT_MS = 300;
+
+    // Step size for that walk. 2 deg every 4 ms is ~500 deg/s, near the servo's own, so
+    // the walk-out does not itself become the bottleneck. Tune together.
+    static const unsigned long STACK_BITE_STEP_MS  = 4;
+    static constexpr float     STACK_BITE_STEP_DEG = 2.0f;
 
 public:
     GearboxStateMachine()
         : currentState(IDLE_NEUTRAL),
           stateStartTime(0),
           neutralDownMs(40), neutralUpMs(40), shiftDownMs(150), shiftUpMs(150),
-          clutchIdlePos(0), clutchFullyPull(180),
+          // Placeholders until setConfiguration(); factory travel from CalConfig.h
+          clutchIdlePos(42), clutchFullyPull(137),
           shiftLogger(nullptr), rpmSensor(nullptr), clutchServo(nullptr),
-          relayActive(false), relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
-          clutchPulled(false),
+          relayActive(false), lastBiteStepMs(0),
+          relayStartTime(0), relayDuration(0), activeShiftIsUp(false),
+          clutchDisengaged(false),
           currentGear(0), expectedGear(0), targetGear(0) {}
 
     // Initialization
@@ -133,7 +158,7 @@ public:
     String getCurrentGearName() const;
 
     // Clutch control
-    void setClutchPulled(bool pulled) { clutchPulled = pulled; }
+    void setClutchDisengaged(bool disengaged) { clutchDisengaged = disengaged; }
 
     // Status for web interface
     bool isWaitingForClutch() const {
@@ -157,14 +182,16 @@ private:
     void enterErrorState();
 
     void updateDownshiftClutchWait();
+    void enterBitePointState();
+    void updateToBitePoint();
     void updateWaitingState();
     void updateErrorState();
 
     // Shift control (sends CAN command + tracks completion timing)
     void activateShift(bool isUpshift, int duration, uint16_t ignCutMs = 0, uint8_t targetGear = 0xFF);
     void deactivateShift();
-    void engageClutch();
-    void releaseClutch();
+    void clutchToMax();
+    void clutchToIdle();
     void updateRelayControl();
 
     // Stacked downshift + logging helpers

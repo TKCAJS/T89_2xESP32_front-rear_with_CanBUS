@@ -21,21 +21,65 @@ expected, check `git branch -r` for stray branches before concluding work is mis
 
 ## Web UI
 
-Pages live in `src/main_node/data/`. Deploy changes with PlatformIO **Upload Filesystem Image** — no recompile needed.
+### One copy of the pages, two envs
+
+Pages live in `src/main_node/data/` — **one copy, used by both envs.**
+
+| Env | Serves pages from | Deploy |
+|---|---|---|
+| `main_node_integratedweb` | firmware image | **lead build** — rebuild + **Upload** |
+| `main_node` | LittleFS | **Upload Filesystem Image** — no recompile |
+
+`main_node_integratedweb` is the build to use. It compiles the pages into the firmware
+with `board_build.embed_txtfiles`, so a single Upload ships firmware and pages together
+and they cannot fall out of step. `main_node` is kept as the LittleFS fallback; it needs
+a separate Upload Filesystem Image, and flashing it without one leaves the old pages in
+place, which reads exactly like "my changes didn't apply".
+
+There used to be a second, duplicate copy of the pages under
+`src/main_node_integratedweb/data/` for the embedded build to compile. It drifted, and
+it was expensive: that copy of `calibration.html` had been split to load a
+`/calibration.js` that was never created and never routed, so it silently lost ~760
+lines of JavaScript — the embedded build served a dead page while LittleFS served a
+working one. Both envs now embed/serve the same directory. **Do not reintroduce a second
+copy.**
+
+### Embedded build gotchas (`main_node_integratedweb`)
+
+- Needs `-DWEBINTERFACE_USE_EMBEDDED` in `build_flags`. Without it the build compiles
+  the LittleFS path instead and serves nothing — `embed_txtfiles` alone does nothing.
+- objcopy derives symbol names from the **file path**, so the externs are
+  `_binary_src_main_node_data_<name>_html_start` / `_end`. Moving or renaming
+  `src/main_node/data/` renames every symbol and breaks the link.
+- Adding a page means three edits: the file, its `embed_txtfiles` line in
+  `platformio.ini`, and its extern pair + route in `WebInterface.h`.
+- Serve embedded bytes with `setContentLength()` + `sendContent()`. `sendHeader()`
+  appends rather than replaces, and `send()` adds its own `Content-Length`, so setting
+  it by hand emits two conflicting values and browsers reject the page. JSON endpoints
+  are unaffected, so the tell is live data working while no page loads.
 
 ### Page roles
 
 | Page | Role |
 |---|---|
-| `index.html` | Live status, gauges, bite-point voltage only. No config forms. |
-| `calibration.html` | Live testing/discovery wizard. No NVS writes except piecewise zone. |
-| `nvsconfig.html` | Single authority for all NVS saves. |
+| `index.html` | Live status and gauges. Read-only — writes nothing. |
+| `calibration.html` | Live testing/discovery, plus the two clutch voltage thresholds (they need the manual servo slider that lives here). |
+| `nvsconfig.html` | Relay timing, servo idle/max angles, hall idle/max capture. |
+| `piecewise.html` | Visual hall/servo zone editor. Reads travel extents; writes only the piecewise zone. |
+
+**One writer per value.** Each stored value is editable on exactly one page — two
+pages writing the same value silently overwrote each other, since neither refreshes
+when the other saves. Terminology is fixed too: paddle **idle** = clutch **engaged** =
+high feedback volts; paddle **max** = clutch **disengaged** = low volts. Never say
+"released" — pulling the lever releases the *mechanism* while releasing the lever
+engages it, so the word names both states at once.
 
 ### Nav bar
-All three pages share the same 3-button flex row at the top:
+All four pages share the same 4-button flex row at the top, **in this order**:
 - **Home** — `#2196F3` blue
 - **Calibration** — `#FF9800` orange
 - **NVS Config** — `#9C27B0` purple
+- **Piecewise** — `#4CAF50` green
 
 Current page button is muted (`opacity:0.5; pointer-events:none;`).
 
@@ -44,8 +88,14 @@ Uses `POST /api/config` (JSON) + firmware read-back. Fields: `neutralDownMs`, `n
 
 Hall calibration uses capture buttons hitting `/cmd?action=captureHall*` while live-polling `/sensorData`.
 
-### Piecewise zone — calibration.html only
-Stored in the separate `gearbox` Preferences namespace, not in `CalConfig`. Saved via `/cmd?action=savePiecewiseZone&...`. Has bounds validation (Hall: 0-4095, Servo: 0-180) and read-back via `/configData`. Cannot move to `/api/config` without firmware changes.
+### Piecewise zone — piecewise.html only
+Stored in the separate `gearbox` Preferences namespace, not in `CalConfig`. Saved via `/cmd?action=savePiecewiseZone&...`, read back via `/configData`. calibration.html shows the same values read-only. Cannot move to `/api/config` without firmware changes.
+
+### Servo angles are bounded 42-137, not 0-180
+`CLUTCH_SERVO_MIN`/`CLUTCH_SERVO_MAX` in `CalConfig.h` are the measured travel, and `calValidate()` enforces them. `SimpleServo::write()` clamps to that range *silently*, so a wider bound stores an angle the servo never reaches while the hall/servo mapping still computes against it.
+
+### Clutch voltage thresholds — calibration.html only
+`clutchDisengageV` (downshift trigger) and `clutchJustEngagedV` (bite point, the return target between stacked downshifts). They live on calibration.html because capturing either means driving the clutch to position, and the manual servo slider is there.
 
 ### Firmware endpoints (WebInterface.h)
 

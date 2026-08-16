@@ -8,13 +8,78 @@
 #include "MainCan.h"
 #include "CalConfig.h"
 
+// Define embedded file symbols if using embedded web pages
+#ifdef WEBINTERFACE_USE_EMBEDDED
+  extern const uint8_t _binary_src_main_node_data_index_html_start[];
+  extern const uint8_t _binary_src_main_node_data_index_html_end[];
+  extern const uint8_t _binary_src_main_node_data_calibration_html_start[];
+  extern const uint8_t _binary_src_main_node_data_calibration_html_end[];
+  extern const uint8_t _binary_src_main_node_data_nvsconfig_html_start[];
+  extern const uint8_t _binary_src_main_node_data_nvsconfig_html_end[];
+  extern const uint8_t _binary_src_main_node_data_piecewise_html_start[];
+  extern const uint8_t _binary_src_main_node_data_piecewise_html_end[];
+#endif
+
 class WebInterface {
 private:
     WebServer* server;
     
 public:
     WebInterface(WebServer* webServer) : server(webServer) {}
-    
+
+private:
+    void serveEmbeddedFile(const uint8_t* dataStart, const uint8_t* dataEnd, const char* filename, const char* mimetype) {
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        if (!dataStart || dataEnd <= dataStart) {
+            server->send(404, "text/plain", String("Not embedded: ") + filename);
+            Serial.println(String("Error: ") + filename + " has no embedded data");
+            return;
+        }
+        // embed_txtfiles appends a NUL terminator that is not part of the document.
+        size_t size = dataEnd - dataStart;
+        if (dataStart[size - 1] == 0) size--;
+
+        // setContentLength() must own the Content-Length header. Setting it by hand with
+        // sendHeader() does NOT replace anything — sendHeader appends, and _prepareHeader
+        // then appends its own Content-Length too. Two conflicting values in one response
+        // make browsers reject the whole page.
+        server->setContentLength(size);
+        server->send(200, mimetype, "");
+        server->sendContent(reinterpret_cast<const char*>(dataStart), size);
+        Serial.println(String("Served ") + filename + " from embedded data, " + size + " bytes");
+      #else
+        server->send(404, "text/plain", String("File not found: ") + filename);
+      #endif
+    }
+
+    void servePage(const char* filename, const uint8_t* embeddedStart, const uint8_t* embeddedEnd) {
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        serveEmbeddedFile(embeddedStart, embeddedEnd, filename, "text/html");
+      #else
+        if (LittleFS.exists(filename)) {
+            File file = LittleFS.open(filename, "r");
+            if (file) {
+                server->streamFile(file, "text/html");
+                file.close();
+                Serial.println(String("Served ") + filename + " from LittleFS");
+            } else {
+                server->send(500, "text/plain", String("Error reading ") + filename);
+                Serial.println(String("Error: Could not read ") + filename);
+            }
+        } else {
+            server->send(404, "text/html",
+                "<html><body style='background:#1a1a1a;color:white;font-family:Arial;text-align:center;padding:50px;'>"
+                "<h1>File Not Found</h1>"
+                "<p>" + String(filename) + " not found</p>"
+                "<p>Please upload the file to the ESP32 file system</p>"
+                "<a href='/' style='color:#4CAF50;'>Return to Main Page</a>"
+                "</body></html>");
+            Serial.println(String("Error: ") + filename + " not found in LittleFS");
+        }
+      #endif
+    }
+
+public:
     void setupRoutes() {
         server->on("/", HTTP_GET, [this]() { this->handleRoot(); });
         server->on("/index.html", HTTP_GET, [this]() { this->handleRoot(); });
@@ -27,6 +92,7 @@ public:
         server->on("/shiftLogs", HTTP_GET, [this]() { this->handleShiftLogs(); });
         server->on("/hello", HTTP_GET, [this]() { this->handleHelloPage(); });
         server->on("/calibration", HTTP_GET, [this]() { this->handleCalibrationPage(); });
+        server->on("/piecewise", HTTP_GET, [this]() { this->handlePiecewisePage(); });
         // NVS calibration config API (CalConfig blob, CRC-verified)
         server->on("/api/config",   HTTP_GET,  [this]() { this->handleApiGetConfig(); });
         server->on("/api/config",   HTTP_POST, [this]() { this->handleApiPostConfig(); });
@@ -35,75 +101,33 @@ public:
     }
     
     void handleRoot() {
-        if (LittleFS.exists("/index.html")) {
-            File file = LittleFS.open("/index.html", "r");
-            if (file) {
-                server->streamFile(file, "text/html");
-                file.close();
-                Serial.println("Served index.html from LittleFS");
-            } else {
-                server->send(500, "text/plain", "Error reading index.html file");
-                Serial.println("Error: Could not read index.html file");
-            }
-        } else {
-            server->send(404, "text/html", 
-                "<html><body style='background:#1a1a1a;color:white;font-family:Arial;text-align:center;padding:50px;'>"
-                "<h1>File Not Found</h1>"
-                "<p>index.html not found in LittleFS</p>"
-                "<p>Please upload the file to the ESP32 file system</p>"
-                "<a href='/hello' style='color:#4CAF50;'>Hello Page</a> | "
-                "<a href='/calibration' style='color:#4CAF50;'>Calibration Page</a>"
-                "</body></html>");
-            Serial.println("Error: index.html not found in LittleFS");
-        }
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        servePage("/index.html", _binary_src_main_node_data_index_html_start, _binary_src_main_node_data_index_html_end);
+      #else
+        servePage("/index.html", nullptr, nullptr);
+      #endif
     }
     
     void handleHelloPage() {
-        if (LittleFS.exists("/hello.html")) {
-            File file = LittleFS.open("/hello.html", "r");
-            if (file) {
-                server->streamFile(file, "text/html");
-                file.close();
-                Serial.println("Served hello.html from LittleFS");
-            } else {
-                server->send(500, "text/plain", "Error reading hello.html file");
-                Serial.println("Error: Could not read hello.html file");
-            }
-        } else {
-            server->send(404, "text/html", 
-                "<html><body style='background:#1a1a1a;color:white;font-family:Arial;text-align:center;padding:50px;'>"
-                "<h1>File Not Found</h1>"
-                "<p>hello.html not found in LittleFS</p>"
-                "<p>Please upload the file to the ESP32 file system</p>"
-                "<a href='/' style='color:#4CAF50;'>Return to Main Page</a>"
-                "</body></html>");
-            Serial.println("Error: hello.html not found in LittleFS");
-        }
+        servePage("/hello.html", nullptr, nullptr);
     }
 
     void handleCalibrationPage() {
-        if (LittleFS.exists("/calibration.html")) {
-            File file = LittleFS.open("/calibration.html", "r");
-            if (file) {
-                server->streamFile(file, "text/html");
-                file.close();
-                Serial.println("Served calibration.html from LittleFS");
-            } else {
-                server->send(500, "text/plain", "Error reading calibration.html file");
-                Serial.println("Error: Could not read calibration.html file");
-            }
-        } else {
-            server->send(404, "text/html", 
-                "<html><body style='background:#1a1a1a;color:white;font-family:Arial;text-align:center;padding:50px;'>"
-                "<h1>File Not Found</h1>"
-                "<p>calibration.html not found in LittleFS</p>"
-                "<p>Please upload the file to the ESP32 file system</p>"
-                "<a href='/' style='color:#4CAF50;'>Return to Main Page</a>"
-                "</body></html>");
-            Serial.println("Error: calibration.html not found in LittleFS");
-        }
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        servePage("/calibration.html", _binary_src_main_node_data_calibration_html_start, _binary_src_main_node_data_calibration_html_end);
+      #else
+        servePage("/calibration.html", nullptr, nullptr);
+      #endif
     }
-    
+
+    void handlePiecewisePage() {
+      #ifdef WEBINTERFACE_USE_EMBEDDED
+        servePage("/piecewise.html", _binary_src_main_node_data_piecewise_html_start, _binary_src_main_node_data_piecewise_html_end);
+      #else
+        servePage("/piecewise.html", nullptr, nullptr);
+      #endif
+    }
+
     void handleUpdate();
     void handleHallCurveUpdate();
     void handleCommand();
@@ -137,7 +161,7 @@ extern bool shiftInProgress;
 extern bool waitingForClutch;
 extern bool wifiEnabled;
 extern float clutchVoltage;
-extern bool clutchPulled;
+extern bool clutchDisengaged;
 extern int currentGear;
 extern String gearNames[];
 extern int shiftSequenceState;
@@ -177,12 +201,12 @@ extern void setShiftInProgress(bool inProgress);
 extern void startDownshiftWithClutchCheck(int durationMs);
 extern void canSendShiftUp(uint16_t shiftMs, uint16_t ignCutMs, uint8_t targetGear = 0xFF);
 extern void canSendShiftDown(uint16_t shiftMs, uint8_t targetGear = 0xFF);
-extern void engageClutch();
+extern void clutchToMax();
 extern void displayShiftLetter(char letter);
 extern void saveConfig();
 extern void loadConfig();
 extern String getGearStatusForWeb();
-extern float getRadiatorTempForWeb();
+extern float getEngineTempForWeb();
 extern uint8_t getPumpDutyForWeb();
 extern String getHallCurveTypeName();
 extern void saveHallCurveConfig();
@@ -333,6 +357,22 @@ void WebInterface::handleCommand() {
             server->send(400, "text/plain", "Invalid piecewise zone parameters");
         }
         return;
+    } else if (action == "clearShiftLogs") {
+        // Shift logs share the 20 KB nvs partition with the config. 100 live blob keys
+        // (entry_0..entry_99) fill it, and once the only free page is the one NVS
+        // reserves for garbage collection, config saves start failing with nothing to
+        // reclaim. Clearing the logs frees that space; it touches no calibration.
+        shiftLogger.clearLogs();
+        nvs_stats_t st;
+        String msg = "Shift logs cleared";
+        if (nvs_get_stats(NULL, &st) == ESP_OK) {
+            msg += " - NVS now " + String((unsigned)st.used_entries) + "/" +
+                   String((unsigned)st.total_entries) + " used, " +
+                   String((unsigned)st.free_entries) + " free";
+        }
+        server->send(200, "text/plain", msg);
+        Serial.println(msg);
+        return;
     } else if (action == "setCurveType") {
         String type = server->arg("type");
         hallSensor.setCurveType(type);
@@ -398,7 +438,7 @@ void WebInterface::handleCommand() {
     
     if (action == "neutralDown") {
         if (!canDownshift()) {
-            server->send(423, "text/plain", "BLOCKED: Clutch not pulled");
+            server->send(423, "text/plain", "BLOCKED: clutch not disengaged");
             return;
         }
         setShiftInProgress(true);
@@ -414,7 +454,7 @@ void WebInterface::handleCommand() {
         setShiftInProgress(true);
         shiftLogger.startShiftTiming(currentGear, currentGear - 1, rpmSensor.getRpm(), 1);
         autoDownshift = true;
-        engageClutch();
+        clutchToMax();
         clutchStartTime = millis();
         shiftSequenceState = 1;
         displayShiftLetter('D');
@@ -442,7 +482,7 @@ void WebInterface::handleSensorData() {
     json += "\"hallRight\":" + String(hallRight) + ",";
     json += "\"hallValue\":" + String(hallValue) + ",";
     json += "\"clutchVoltage\":" + String(clutchVoltage, 3) + ",";
-    json += "\"clutchPulled\":" + String(clutchPulled ? "true" : "false") + ",";
+    json += "\"clutchDisengaged\":" + String(clutchDisengaged ? "true" : "false") + ",";
     json += "\"shiftSequenceState\":" + String(shiftSequenceState) + ",";
     json += "\"currentGear\":\"" + getGearStatusForWeb() + "\",";
     json += "\"softwareVersion\":" + String(SOFTWARE_VERSION) + ",";
@@ -459,7 +499,7 @@ void WebInterface::handleSensorData() {
     json += "\"loopStalls\":" + String(loopStalls) + ",";
 
     json += "\"currentRpm\":" + String(rpmSensor.getRpm(), 1) + ",";
-    json += "\"currentTemp\":" + String(getRadiatorTempForWeb(), 1) + ",";
+    json += "\"currentTemp\":" + String(getEngineTempForWeb(), 1) + ",";
     json += "\"pumpDuty\":" + String(getPumpDutyForWeb()) + ",";
     json += "\"currentMph\":0,";
     json += "\"shiftTimingActive\":" + String(shiftLogger.isTimingActive() ? "true" : "false") + ",";
@@ -485,15 +525,30 @@ void WebInterface::handleConfigData() {
     json += "\"hallMax\":" + String(hallMax) + ",";
     json += "\"clutchDisengageV\":" + String(clutchDisengageV, 3) + ",";
     json += "\"clutchJustEngagedV\":" + String(clutchJustEngagedV, 3) + ",";
-    json += "\"clutchServoMin\":" + String(CLUTCH_SERVO_MIN) + ",";
-    json += "\"clutchServoMax\":" + String(CLUTCH_SERVO_MAX) + ",";
+    // Live limits, not the factory defaults: the saved idle/max angles ARE the travel
+    // limits, so this is what the manual slider track should show.
+    json += "\"clutchServoMin\":" + String(min(clutchIdlePos, clutchFullyPull)) + ",";
+    json += "\"clutchServoMax\":" + String(max(clutchIdlePos, clutchFullyPull)) + ",";
     json += "\"hallBiteStart\":"  + String(hallSensor.getHallBiteStart())  + ",";
     json += "\"hallBiteEnd\":"    + String(hallSensor.getHallBiteEnd())    + ",";
     json += "\"servoBiteStart\":" + String(hallSensor.getServoBiteStart()) + ",";
     json += "\"servoBiteEnd\":"   + String(hallSensor.getServoBiteEnd())   + ",";
     json += "\"pwBlend\":"        + String(hallSensor.getPwBlend())        + ",";
     json += "\"pin2RawMin\":"     + String(hallSensor.getPin2RawMin())     + ",";
-    json += "\"pin2RawMax\":"     + String(hallSensor.getPin2RawMax());
+    json += "\"pin2RawMax\":"     + String(hallSensor.getPin2RawMax()) + ",";
+
+    // NVS partition health. "nvs write failed" is indistinguishable from any other
+    // cause at the UI, and exhaustion is the likeliest one: the partition is only
+    // 20 KB and every save rewrites its whole key set, so tombstones accumulate.
+    nvs_stats_t nst;
+    if (nvs_get_stats(NULL, &nst) == ESP_OK) {
+        json += "\"nvsUsed\":"  + String((unsigned)nst.used_entries)  + ",";
+        json += "\"nvsFree\":"  + String((unsigned)nst.free_entries)  + ",";
+        json += "\"nvsTotal\":" + String((unsigned)nst.total_entries) + ",";
+        json += "\"nvsNs\":"    + String((unsigned)nst.namespace_count);
+    } else {
+        json += "\"nvsUsed\":-1,\"nvsFree\":-1,\"nvsTotal\":-1,\"nvsNs\":-1";
+    }
     json += "}";
     
     server->send(200, "application/json", json);
@@ -630,6 +685,9 @@ void WebInterface::handleApiDefaults() {
 // GET /nvsconfig — serve nvsconfig.html from LittleFS.
 // Upload instruction: PlatformIO → "Upload Filesystem Image" (env:main_node)
 void WebInterface::handleNvsConfigPage() {
+  #ifdef WEBINTERFACE_USE_EMBEDDED
+    servePage("/nvsconfig.html", _binary_src_main_node_data_nvsconfig_html_start, _binary_src_main_node_data_nvsconfig_html_end);
+  #else
     if (LittleFS.exists("/nvsconfig.html")) {
         File file = LittleFS.open("/nvsconfig.html", "r");
         if (file) {
@@ -641,6 +699,7 @@ void WebInterface::handleNvsConfigPage() {
     server->send(404, "text/plain",
         "nvsconfig.html not found in LittleFS.\n"
         "Run PlatformIO 'Upload Filesystem Image' (env: main_node) to upload the data/ folder.");
+  #endif
 }
 
 #endif

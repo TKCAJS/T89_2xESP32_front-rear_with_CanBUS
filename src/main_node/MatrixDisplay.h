@@ -60,7 +60,13 @@ private:
     uint8_t notifR, notifG, notifB;
     unsigned long lastRainbowUpdate;
 
+    // Outcome tracking for shift letters — see expireNotification().
+    bool   notifTracksGear;   // true for shift letters, false for status letters (W/F, rejected N)
+    String notifGearAtStart;  // gear the box was in when the letter went up
+
     // Configuration
+    // Fallback only. A shift letter normally ends the moment the rear node confirms
+    // a gear, which is far sooner than this — see expireNotification().
     static const unsigned long SHIFT_NOTIFICATION_DURATION = 300;
     static const unsigned long CYCLE_TIME = 1000;
     static const unsigned long FLASH_DURATION = 70;
@@ -78,6 +84,7 @@ public:
                      shiftNotificationChar(' '), shiftNotificationStart(0),
                      notifR(255), notifG(255), notifB(255),
                      lastRainbowUpdate(0),
+                     notifTracksGear(false), notifGearAtStart(""),
                      wifiEnabled(nullptr), canGearValid(nullptr),
                      manualModeEnabled(nullptr) {}
 
@@ -99,60 +106,17 @@ public:
         }
     }
     
-    void update(const String& currentGearName) {
-        if (tileTest) return;
-        unsigned long currentMillis = millis();
-
-        // Check if we should stop displaying the shift notification
-        if (showShiftNotification && (currentMillis - shiftNotificationStart >= SHIFT_NOTIFICATION_DURATION)) {
-            showShiftNotification = false;
-        }
-        
-        // Update display every 50ms
-        if (currentMillis - lastRainbowUpdate >= 50) {
-            lastRainbowUpdate = currentMillis;
-            
-            matrix->fillScreen(0); // Clear screen (black)
-
-            if (showShiftNotification) {
-                drawCenteredChar(shiftNotificationChar, 0, MATRIX_WIDTH,
-                                  matrix->Color(notifR, notifG, notifB));
-
-            } else {
-                // ALWAYS show current gear when not showing notification
-                // Handle gear sensor disconnected state
-                if (!(*canGearValid)) {
-                    drawCenteredChar('?', 0, MATRIX_WIDTH, matrix->Color(255, 0, 0)); // Red text for error
-                } else {
-                    // Set color based on gear: Red for 1-6, Green for N
-                    uint16_t color = (currentGearName == "N") ? matrix->Color(0, 255, 0)   // Green for Neutral
-                                                               : matrix->Color(255, 0, 0);  // Red for gear numbers 1-6
-                    drawCenteredChar(currentGearName[0], 0, MATRIX_WIDTH, color);
-                }
-            }
-            
-            // ADD MANUAL MODE INDICATOR - flash the bottom two rows amber
-            addManualModeIndicator(currentMillis);
-            
-            // ADD HEARTBEAT - 2x2 block, top-right corner
-            addHeartbeat(currentMillis);
-
-            // ADD WIFI INDICATOR - flash the other three corners blue when WiFi on
-            addWifiCornerFlash(currentMillis);
-
-            matrix->show();
-        }
-    }
-    
     void updateWithTachometer(const String& currentGearName, float currentRpm) {
         if (tileTest) return;
         unsigned long currentMillis = millis();
 
-        // Check if we should stop displaying the shift notification
-        if (showShiftNotification && (currentMillis - shiftNotificationStart >= SHIFT_NOTIFICATION_DURATION)) {
-            showShiftNotification = false;
+        // Retire the shift notification. A gear-confirmed cancel repaints immediately
+        // rather than waiting out the frame gate below — the whole point is that the
+        // letter goes the instant the truth is known.
+        if (expireNotification(currentGearName, currentMillis)) {
+            lastRainbowUpdate = 0;
         }
-        
+
         // Update display every 50ms
         if (currentMillis - lastRainbowUpdate >= 50) {
             lastRainbowUpdate = currentMillis;
@@ -194,18 +158,56 @@ public:
         }
     }
     
+    // Status letters (WiFi W/F, rejected-neutral N). These report something that has
+    // already happened, so they always run the full duration.
     void displayShiftNotification(char notificationChar, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255) {
         shiftNotificationChar = notificationChar;
         notifR = r; notifG = g; notifB = b;
         showShiftNotification = true;
         shiftNotificationStart = millis();
+        notifTracksGear = false;
     }
 
-    void displayShiftLetter(char letter) {
+    // Shift letters (N/U/D/C). These report an *attempt*, so they are cancelled by the
+    // outcome — pass the gear the box is in right now. Take it live from CAN at the
+    // moment of the press, not from the last rendered frame, which can be 50ms stale.
+    void displayShiftLetter(char letter, const String& gearNow) {
         displayShiftNotification(letter);
+        notifTracksGear  = true;
+        notifGearAtStart = gearNow;
     }
-    
+
 private:
+    // A shift letter is a statement of intent, not of fact: 'N' means "going for
+    // neutral", not "in neutral". The moment the rear node confirms a real gear that
+    // isn't the one we set off from, that intent is settled — it either worked or it
+    // overshot (a short pulse out of 1st can land in 2nd, and vice versa) — and the
+    // letter is a lie either way. Drop it and show the confirmed gear instead.
+    //
+    // Only a VALID gear cancels. Mid-shift the rear node reports GEAR_BETWEEN/UNKNOWN,
+    // which reads as invalid here; cancelling on that would replace the letter with a
+    // red '?' for the length of the shift.
+    //
+    // SHIFT_NOTIFICATION_DURATION is the fallback for the case where no confirmation
+    // ever arrives — a shift that failed to move the box, or a dead CAN link.
+    //
+    // Returns true only for the confirmed-gear cancel, which the caller repaints on.
+    bool expireNotification(const String& currentGearName, unsigned long currentMillis) {
+        if (!showShiftNotification) return false;
+
+        if (currentMillis - shiftNotificationStart >= SHIFT_NOTIFICATION_DURATION) {
+            showShiftNotification = false;
+            return false;
+        }
+
+        if (notifTracksGear && *canGearValid && currentGearName != notifGearAtStart) {
+            showShiftNotification = false;
+            return true;
+        }
+
+        return false;
+    }
+
     void updateTachometer(float rpm) {
         int ledsToLight = 0;
         uint16_t color = matrix->Color(0, 0, 0);

@@ -16,7 +16,25 @@
       "WebFetch(domain:www.mouser.com)",
       "WebFetch(domain:www.st.com)",
       "Bash(git fetch *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(powershell -Command \"Get-ChildItem -Path 'c:\\\\Users\\\\Adrian\\\\stm32h723_T89GBX' -Recurse -Force | Select-Object FullName | head -150\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path 'c:\\\\Users\\\\Adrian\\\\stm32h723_T89GBX' -Directory | Select-Object Name\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path 'c:\\\\Users\\\\Adrian\\\\stm32h723_T89GBX\\\\src' -Recurse | Select-Object FullName\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path 'c:\\\\Users\\\\Adrian\\\\stm32h723_T89GBX\\\\include' -Recurse | Select-Object FullName\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path 'c:\\\\Users\\\\Adrian\\\\stm32h723_T89GBX\\\\lib' -Recurse | Select-Object FullName | head -50\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Adrian\\\\stm32h723_T89GBX\" -Recurse -Force)",
+      "Bash(Select-Object -Property FullName, Name)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\Adrian\\\\stm32h723_T89GBX\" -Recurse -Force | Select-Object -Property FullName | ForEach-Object { $_.FullName })",
+      "Bash(Select-Object -Property FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" pkg search \"Madgwick\" 2>&1 | Select-Object -First 30)",
+      "PowerShell(cd \"c:\\\\Users\\\\Adrian\\\\T89_2xESP32_front-rear_with_CanBUS\"; & \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run --environment main_node 2>&1 | Select-String -Pattern \"error:|SUCCESS|FAILED|RAM:|Flash:\")",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

@@ -7,16 +7,14 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
+            margin: 0;
+            padding: 20px;
             background: #1a1a1a;
             color: white;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
-            background: #333;
-            border-radius: 10px;
         }
         .wizard-header {
             text-align: center;
@@ -202,23 +200,61 @@
                 grid-template-columns: 1fr;
             }
         }
+    
+        /* ---- shared page chrome: identical on all four pages ---- */
+        .navbar { display: flex; gap: 4px; align-items: flex-end; }
+        .navbar a {
+            flex: 0 0 auto;
+            padding: 11px 20px;
+            border-radius: 7px 7px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+            line-height: 1;
+            opacity: 0.45;
+            transition: opacity 0.15s;
+        }
+        .navbar a:hover { opacity: 0.75; }
+        /* The active tab spreads across the row, and every tab has square bottom
+           corners, so the active one runs straight into the rail below it and the
+           two read as a single shape. */
+        .navbar a.active {
+            flex: 1 1 auto;
+            padding: 15px 20px;
+            text-align: center;
+            opacity: 1;
+            pointer-events: none;
+            cursor: default;
+        }
+        /* Carries the active page's colour across the full width, under the tabs. */
+        .nav-rail { height: 6px; border-radius: 0 0 4px 4px; margin-bottom: 20px; }
+        .tab-home, .rail-home { background: #2196F3; }
+        .tab-cal,  .rail-cal  { background: #FF9800; }
+        .tab-nvs,  .rail-nvs  { background: #9C27B0; }
+        .tab-pw,   .rail-pw   { background: #4CAF50; }
+        .page-title { margin: 0 0 5px; font-size: 1.5em; color: white; }
+        .page-sub { color: #888; font-size: 0.9em; margin: 0 0 22px; line-height: 1.45; }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="navbar">
+            <a href="/" class="tab-home">Home</a>
+            <a class="tab-cal active">Calibration</a>
+            <a href="/nvsconfig" class="tab-nvs">NVS Config</a>
+            <a href="/piecewise" class="tab-pw">Piecewise</a>
+        </div>
+        <div class="nav-rail rail-cal"></div>
+
+        <h1 class="page-title">T89 Gearbox Calibration Wizard</h1>
+        <p class="page-sub">Step-by-step calibration for optimal gearbox performance</p>
+
         <div class="wizard-header">
-            <h1>T89 Gearbox Calibration Wizard</h1>
-            <p>Step-by-step calibration for optimal gearbox performance</p>
             <div class="progress-bar">
                 <div class="progress-fill" id="overallProgress" style="width: 0%"></div>
             </div>
             <p id="progressText">Ready to start calibration</p>
-        </div>
-
-        <div style='display:flex;gap:8px;margin-bottom:16px;'>
-            <a href='/' class='btn' style='background:#2196F3;'>Home</a>
-            <a class='btn' style='background:#FF9800;opacity:0.5;pointer-events:none;'>Calibration</a>
-            <a href='/nvsconfig' class='btn' style='background:#9C27B0;'>NVS Config</a>
         </div>
         <div style='margin-bottom:16px;'>
             <button class="btn" onclick="startFullCalibration()">Start Full Calibration</button>
@@ -229,7 +265,7 @@
         <div class="calibration-section hall-section">
             <h2>Hall Sensor Calibration</h2>
             <div class="instruction-box">
-                <strong>Purpose:</strong> Calibrate clutch lever position sensing for optimal response curve
+                <strong>Purpose:</strong> Calibrate clutch paddle position sensing for optimal response curve
             </div>
             
             <div class="grid">
@@ -272,7 +308,7 @@
                             <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
                                 <span style="color:#4CAF50;font-weight:bold;">Clutch Voltage</span>
                                 <span id="hbarVoltVal" style="color:#fff;">--</span>
-                                <span style="color:#888;">V / 3.3 V</span>
+                                <span style="color:#888;">V &mdash; idle L, max R</span>
                             </div>
                             <div style="height:18px;background:#444;border-radius:4px;overflow:hidden;">
                                 <div id="hbarVolt" style="height:100%;background:#4CAF50;width:0%;transition:width 0.15s;"></div>
@@ -307,34 +343,23 @@
                         <span class="step-number">4</span>
                         <strong>Piecewise Biting Zone</strong>
                         <div style="font-size:12px;color:#aaa;margin:6px 0;">
-                            Hall ADC range assigned to biting zone servo travel
+                            Hall ADC range assigned to biting zone servo travel. Shown here
+                            read-only &mdash; edit it on the
+                            <a href="/piecewise" style="color:#4CAF50;">Piecewise</a> page, which is
+                            the only place these values can be changed.
                         </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">
-                            <label style="font-size:12px;">Hall bite start (ADC)<br>
-                                <input id="hBiteStart" type="number" min="0" max="4095" value="1000"
-                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                            </label>
-                            <label style="font-size:12px;">Hall bite end (ADC)<br>
-                                <input id="hBiteEnd" type="number" min="0" max="4095" value="3000"
-                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                            </label>
-                            <label style="font-size:12px;">Servo bite start (&deg;) &mdash; just-engaged<br>
-                                <input id="sBiteStart" type="number" min="0" max="180" value="98"
-                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                            </label>
-                            <label style="font-size:12px;">Servo bite end (&deg;) &mdash; just-disengaged<br>
-                                <input id="sBiteEnd" type="number" min="0" max="180" value="115"
-                                       style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                            </label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;font-size:12px;color:#aaa;">
+                            <div>Hall bite start (ADC)<br><strong id="hBiteStart" style="color:white;font-size:15px;">--</strong></div>
+                            <div>Hall bite end (ADC)<br><strong id="hBiteEnd" style="color:white;font-size:15px;">--</strong></div>
+                            <div>Servo bite start (&deg;) &mdash; just-engaged<br><strong id="sBiteStart" style="color:white;font-size:15px;">--</strong></div>
+                            <div>Servo bite end (&deg;) &mdash; just-disengaged<br><strong id="sBiteEnd" style="color:white;font-size:15px;">--</strong></div>
                         </div>
-                        <label style="font-size:12px;display:block;margin:8px 0;">Corner smoothing &mdash; blend half-width (ADC counts), 0 = sharp<br>
-                            <input id="pwBlend" type="number" min="0" max="2000" value="120"
-                                   style="width:100%;background:#1a1a1a;color:white;border:1px solid #555;padding:4px;border-radius:3px;">
-                        </label>
-                        <button class="btn" onclick="savePiecewiseZone()">Save Piecewise Zone</button>
+                        <div style="font-size:12px;color:#aaa;margin:8px 0;">
+                            Corner smoothing &mdash; blend half-width (ADC counts), 0 = sharp<br>
+                            <strong id="pwBlend" style="color:white;font-size:15px;">--</strong>
+                        </div>
                         <button class="btn btn-secondary" id="activatePiecewiseBtn"
-                                onclick="activatePiecewiseMapping()"
-                                style="margin-left:4px;">Use Piecewise Mapping</button>
+                                onclick="activatePiecewiseMapping()">Use Piecewise Mapping</button>
                         <div id="piecewiseSaveResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
@@ -394,7 +419,7 @@
                         <span id="clutchStateLabel" style="padding:2px 8px;border-radius:3px;font-weight:bold;">--</span>
                         <span id="biteLabel" style="padding:2px 8px;border-radius:3px;font-weight:bold;margin-left:6px;display:none;">BITING</span>
                     </span>
-                    <span style="font-size:12px;color:#aaa;">0 V &larr;&rarr; 3.3 V</span>
+                    <span style="font-size:12px;color:#aaa;">Idle 3.3 V &larr;&rarr; 0 V Max</span>
                 </div>
                 <div style="position:relative;height:28px;background:#444;border-radius:6px;overflow:visible;">
                     <!-- fill -->
@@ -413,19 +438,40 @@
             <!-- Threshold calibration -->
             <div class="grid" style="margin-top:16px;">
                 <div>
-                    <h3>Disengage Threshold <span style="color:#F44336;">&#9646;</span></h3>
+                    <h3>Just-Engaged Threshold <span style="color:#FF9800;">&#9646;</span></h3>
                     <div class="calibration-step">
-                        <p style="margin:4px 0 8px;">Pull lever to the point where the clutch is <strong>just disengaged</strong> (relay-safe). Watch voltage, then capture.</p>
-                        <button class="btn btn-danger" onclick="captureDisengageV()">Capture Disengage Threshold</button>
-                        <div id="disengResult" style="margin-top:6px;"></div>
+                        <p style="margin:4px 0 8px;">
+                            Bite point, and the return target between stacked downshifts so the
+                            clutch skips the dead travel back to idle. Sits <strong>above</strong>
+                            the trigger. Drive the servo back until the clutch just starts to
+                            bite, then Capture.
+                        </p>
+                        <div style="display:flex;gap:6px;align-items:center;margin:8px 0;">
+                            <input type="number" id="biteInput" min="0" max="3.3" step="0.001"
+                                   style="flex:1;background:#1a1a1a;color:white;border:1px solid #555;padding:5px;border-radius:3px;">
+                            <span style="font-size:12px;color:#aaa;">V</span>
+                        </div>
+                        <button class="btn btn-warning" onclick="captureJustEngagedV()">Capture Live</button>
+                        <button class="btn btn-secondary" onclick="saveJustEngagedV()">Save Typed</button>
+                        <div id="biteResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
                 <div>
-                    <h3>Just-Engaged Threshold <span style="color:#FF9800;">&#9646;</span></h3>
+                    <h3>Downshift Trigger <span style="color:#F44336;">&#9646;</span></h3>
                     <div class="calibration-step">
-                        <p style="margin:4px 0 8px;">Release lever slowly until clutch is at <strong>biting point</strong> (just starting to engage). Capture when voltage is stable.</p>
-                        <button class="btn btn-warning" onclick="captureJustEngagedV()">Capture Just-Engaged Threshold</button>
-                        <div id="biteResult" style="margin-top:6px;"></div>
+                        <p style="margin:4px 0 8px;">
+                            Gates every downshift: the servo pulls toward max until the feedback
+                            falls past this, and only then is the DS sent. Drive the servo to the
+                            point where the clutch is just disengaged, then Capture.
+                        </p>
+                        <div style="display:flex;gap:6px;align-items:center;margin:8px 0;">
+                            <input type="number" id="disengInput" min="0" max="3.3" step="0.001"
+                                   style="flex:1;background:#1a1a1a;color:white;border:1px solid #555;padding:5px;border-radius:3px;">
+                            <span style="font-size:12px;color:#aaa;">V</span>
+                        </div>
+                        <button class="btn btn-danger" onclick="captureDisengageV()">Capture Live</button>
+                        <button class="btn btn-secondary" onclick="saveDisengageV()">Save Typed</button>
+                        <div id="disengResult" style="margin-top:6px;"></div>
                     </div>
                 </div>
             </div>
@@ -436,7 +482,7 @@
                 <div>
                     <div class="calibration-step">
                         <span class="step-number">1</span>
-                        <strong>Idle Position</strong> (lever released, clutch fully engaged)<br>
+                        <strong>Idle Position</strong> (paddle idle, clutch engaged)<br>
                         <small style="color:#aaa;">Use slider above to find the angle, then enter it in <a href="/nvsconfig" style="color:#FF9800;">NVS Config</a>.</small><br>
                         <span style="font-size:13px;">Saved: <strong id="clutchIdle">--</strong>&deg;</span>
                     </div>
@@ -444,7 +490,7 @@
                 <div>
                     <div class="calibration-step">
                         <span class="step-number">2</span>
-                        <strong>Engage Position</strong> (lever pulled, clutch fully disengaged)<br>
+                        <strong>Max Position</strong> (paddle max, clutch disengaged)<br>
                         <small style="color:#aaa;">Use slider above to find the angle, then enter it in <a href="/nvsconfig" style="color:#FF9800;">NVS Config</a>.</small><br>
                         <span style="font-size:13px;">Saved: <strong id="clutchEngage">--</strong>&deg;</span>
                     </div>
@@ -627,6 +673,15 @@
             }
         }
 
+        // Clutch-voltage bars run idle (3.3 V) on the LEFT to fully disengaged (0 V) on
+        // the RIGHT, matching the Idle..Max direction of the Piecewise bars. Feedback is
+        // inverted, so a value's distance from the left edge is how far it has travelled
+        // from idle, not its raw magnitude.
+        function vPos(v) {
+            const f = Math.max(0, Math.min(1, 1 - (v / 3.3)));
+            return f * 100;
+        }
+
         function updateLiveData() {
             fetch('/sensorData')
                 .then(r => r.json())
@@ -659,11 +714,16 @@
 
                     const disengV = parseFloat(data.clutchDisengageV) || 1.8;
                     const biteV   = parseFloat(data.clutchJustEngagedV) || 1.8;
-                    document.getElementById('disengMarker').style.left = ((disengV / 3.3) * 100).toFixed(1) + '%';
-                    document.getElementById('biteMarker').style.left   = ((biteV   / 3.3) * 100).toFixed(1) + '%';
-                    document.getElementById('voltFill').style.width    = ((rawV    / 3.3) * 100).toFixed(1) + '%';
+                    document.getElementById('disengMarker').style.left = (vPos(disengV)).toFixed(1) + '%';
+                    document.getElementById('biteMarker').style.left   = (vPos(biteV)).toFixed(1) + '%';
+                    document.getElementById('voltFill').style.width    = (vPos(rawV)).toFixed(1) + '%';
                     document.getElementById('disengVDisplay').textContent = disengV.toFixed(3);
                     document.getElementById('biteVDisplay').textContent   = biteV.toFixed(3);
+                    // Don't stamp over a box the user is typing into.
+                    const dIn = document.getElementById('disengInput');
+                    const bIn = document.getElementById('biteInput');
+                    if (document.activeElement !== dIn) dIn.value = disengV.toFixed(3);
+                    if (document.activeElement !== bIn) bIn.value = biteV.toFixed(3);
 
                     // Sync override toggle state
                     if (data.servoOverride !== undefined && data.servoOverride !== servoOverrideActive) {
@@ -673,7 +733,7 @@
                     // Clutch state labels
                     const stateEl = document.getElementById('clutchStateLabel');
                     const biteEl  = document.getElementById('biteLabel');
-                    if (data.clutchPulled) {
+                    if (data.clutchDisengaged) {
                         stateEl.textContent = 'DISENGAGED'; stateEl.style.background = '#F44336';
                     } else {
                         stateEl.textContent = 'ENGAGED'; stateEl.style.background = '#4CAF50';
@@ -703,7 +763,7 @@
                     const hVolt = Math.max(0, Math.min(3.3, parseFloat(data.clutchVoltage) || 0));
                     document.getElementById('hbarRaw').style.width  = (hRaw / 4095 * 100).toFixed(1) + '%';
                     document.getElementById('hbarDeg').style.width  = (hDeg / 180  * 100).toFixed(1) + '%';
-                    document.getElementById('hbarVolt').style.width = (hVolt / 3.3 * 100).toFixed(1) + '%';
+                    document.getElementById('hbarVolt').style.width = vPos(hVolt).toFixed(1) + '%';
                     document.getElementById('hbarRawVal').textContent  = hRaw;
                     document.getElementById('hbarDegVal').textContent  = hDeg;
                     document.getElementById('hbarVoltVal').textContent = hVolt.toFixed(3);
@@ -734,15 +794,14 @@
                     if (config.clutchServoMin != null && config.clutchServoMax != null) {
                         updateSliderTrack(config.clutchServoMin, config.clutchServoMax);
                     }
-                    const piecewiseIds = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd','pwBlend'];
-                    const piecewiseFocused = piecewiseIds.some(id => document.activeElement === document.getElementById(id));
-                    if (!piecewiseFocused) {
-                        if (config.hallBiteStart != null) document.getElementById('hBiteStart').value = config.hallBiteStart;
-                        if (config.hallBiteEnd   != null) document.getElementById('hBiteEnd').value   = config.hallBiteEnd;
-                        if (config.servoBiteStart != null) document.getElementById('sBiteStart').value = config.servoBiteStart;
-                        if (config.servoBiteEnd   != null) document.getElementById('sBiteEnd').value   = config.servoBiteEnd;
-                        if (config.pwBlend       != null) document.getElementById('pwBlend').value    = config.pwBlend;
-                    }
+                    // Read-only mirror of the piecewise zone. No focus guard needed now
+                    // these are text, not inputs — nothing here can be mid-edit.
+                    const show = (id, v) => { if (v != null) document.getElementById(id).textContent = v; };
+                    show('hBiteStart', config.hallBiteStart);
+                    show('hBiteEnd',   config.hallBiteEnd);
+                    show('sBiteStart', config.servoBiteStart);
+                    show('sBiteEnd',   config.servoBiteEnd);
+                    show('pwBlend',    config.pwBlend);
                     calibrationData.relayTimings.neutralDown = config.neutralDownMs || 40;
                     calibrationData.relayTimings.neutralUp = config.neutralUpMs || 40;
                     calibrationData.relayTimings.shiftDown = config.shiftDownMs || 150;
@@ -850,7 +909,7 @@
 
         function startHallRangeTest() {
             document.getElementById('hallRangeResults').innerHTML = 
-                '<div class="test-active">Testing hall sensor range... Move clutch lever through full range</div>';
+                '<div class="test-active">Testing hall sensor range... Move clutch paddle idle to max</div>';
             
             let samples = [];
             let sampleCount = 0;
@@ -973,61 +1032,58 @@
         }
 
 
-        function savePiecewiseZone() {
-            const ids = ['hBiteStart','hBiteEnd','sBiteStart','sBiteEnd','pwBlend'];
-            const [hBiteStart, hBiteEnd, sBiteStart, sBiteEnd, pwBlend] =
-                ids.map(id => parseInt(document.getElementById(id).value));
-            const resultEl = document.getElementById('piecewiseSaveResult');
+        function captureDisengageV() {
+            fetch('/cmd?action=captureDisengageV').then(r => r.text()).then(v => {
+                document.getElementById('disengResult').innerHTML =
+                    '<span style="color:#4CAF50;">Captured: ' + parseFloat(v).toFixed(3) + ' V</span>';
+            }).catch(() => {
+                document.getElementById('disengResult').innerHTML =
+                    '<span style="color:#F44336;">Capture failed</span>';
+            });
+        }
 
-            // Clear previous invalid state
-            ids.forEach(id => document.getElementById(id).style.borderColor = '#555');
-
-            const hallOk  = v => !isNaN(v) && v >= 0 && v <= 4095;
-            const servoOk = v => !isNaN(v) && v >= 0 && v <= 180;
-            const blendOk = v => !isNaN(v) && v >= 0 && v <= 2000;
-            const errors = [];
-            if (!hallOk(hBiteStart))  { errors.push('hBiteStart'); document.getElementById('hBiteStart').style.borderColor = '#F44336'; }
-            if (!hallOk(hBiteEnd))    { errors.push('hBiteEnd');   document.getElementById('hBiteEnd').style.borderColor   = '#F44336'; }
-            if (!servoOk(sBiteStart)) { errors.push('sBiteStart'); document.getElementById('sBiteStart').style.borderColor = '#F44336'; }
-            if (!servoOk(sBiteEnd))   { errors.push('sBiteEnd');   document.getElementById('sBiteEnd').style.borderColor   = '#F44336'; }
-            if (!blendOk(pwBlend))    { errors.push('pwBlend');    document.getElementById('pwBlend').style.borderColor    = '#F44336'; }
-            if (errors.length) {
-                resultEl.innerHTML = '<span style="color:#F44336;">Out of bounds — Hall: 0–4095, Servo: 0–180, Blend: 0–2000.</span>';
+        function saveDisengageV() {
+            const v = parseFloat(document.getElementById('disengInput').value);
+            if (isNaN(v) || v < 0 || v > 3.3) {
+                document.getElementById('disengResult').innerHTML =
+                    '<span style="color:#F44336;">Invalid value (0.000-3.300 V)</span>';
                 return;
             }
-            if (hBiteStart >= hBiteEnd) {
-                resultEl.innerHTML = '<span style="color:#F44336;">Hall bite start must be less than bite end.</span>';
-                return;
-            }
-            if (sBiteStart >= sBiteEnd) {
-                resultEl.innerHTML = '<span style="color:#F44336;">Servo bite start must be less than bite end.</span>';
-                return;
-            }
+            fetch('/cmd?action=setDisengageV&v=' + v.toFixed(3)).then(r => {
+                document.getElementById('disengResult').innerHTML = r.ok
+                    ? '<span style="color:#4CAF50;">Saved: ' + v.toFixed(3) + ' V</span>'
+                    : '<span style="color:#F44336;">Save failed</span>';
+            }).catch(() => {
+                document.getElementById('disengResult').innerHTML =
+                    '<span style="color:#F44336;">Save failed</span>';
+            });
+        }
 
-            resultEl.innerHTML = '<span style="color:#aaa;">Saving...</span>';
-            fetch('/cmd?action=savePiecewiseZone'
-                + '&hBiteStart=' + hBiteStart
-                + '&hBiteEnd='   + hBiteEnd
-                + '&sBiteStart=' + sBiteStart
-                + '&sBiteEnd='   + sBiteEnd
-                + '&blend='      + pwBlend)
-                .then(r => { if (!r.ok) throw new Error('rejected'); return r.text(); })
-                .then(() => fetch('/configData'))
-                .then(r => r.json())
-                .then(cfg => {
-                    if (cfg.hallBiteStart === hBiteStart &&
-                        cfg.hallBiteEnd   === hBiteEnd   &&
-                        cfg.servoBiteStart === sBiteStart &&
-                        cfg.servoBiteEnd   === sBiteEnd   &&
-                        cfg.pwBlend       === pwBlend) {
-                        resultEl.innerHTML = '<span style="color:#4CAF50;">Saved — confirmed from read-back.</span>';
-                    } else {
-                        resultEl.innerHTML = '<span style="color:#FF9800;">Sent but read-back mismatch — check firmware.</span>';
-                    }
-                })
-                .catch(() => {
-                    resultEl.innerHTML = '<span style="color:#F44336;">Save failed or network error.</span>';
-                });
+        function captureJustEngagedV() {
+            fetch('/cmd?action=captureJustEngagedV').then(r => r.text()).then(v => {
+                document.getElementById('biteResult').innerHTML =
+                    '<span style="color:#4CAF50;">Captured: ' + parseFloat(v).toFixed(3) + ' V</span>';
+            }).catch(() => {
+                document.getElementById('biteResult').innerHTML =
+                    '<span style="color:#F44336;">Capture failed</span>';
+            });
+        }
+
+        function saveJustEngagedV() {
+            const v = parseFloat(document.getElementById('biteInput').value);
+            if (isNaN(v) || v < 0 || v > 3.3) {
+                document.getElementById('biteResult').innerHTML =
+                    '<span style="color:#F44336;">Invalid value (0.000-3.300 V)</span>';
+                return;
+            }
+            fetch('/cmd?action=setJustEngagedV&v=' + v.toFixed(3)).then(r => {
+                document.getElementById('biteResult').innerHTML = r.ok
+                    ? '<span style="color:#4CAF50;">Saved: ' + v.toFixed(3) + ' V</span>'
+                    : '<span style="color:#F44336;">Save failed</span>';
+            }).catch(() => {
+                document.getElementById('biteResult').innerHTML =
+                    '<span style="color:#F44336;">Save failed</span>';
+            });
         }
 
         function activatePiecewiseMapping() {
@@ -1043,30 +1099,6 @@
                 .catch(() => {
                     document.getElementById('piecewiseSaveResult').innerHTML =
                         '<span style="color:#F44336;">Activation failed</span>';
-                });
-        }
-
-        function captureDisengageV() {
-            fetch('/cmd?action=captureDisengageV')
-                .then(r => r.text())
-                .then(v => {
-                    document.getElementById('disengResult').innerHTML =
-                        '<span style="color:#4CAF50;">Saved: ' + parseFloat(v).toFixed(3) + ' V</span>';
-                })
-                .catch(() => {
-                    document.getElementById('disengResult').innerHTML = '<span style="color:#F44336;">Capture failed</span>';
-                });
-        }
-
-        function captureJustEngagedV() {
-            fetch('/cmd?action=captureJustEngagedV')
-                .then(r => r.text())
-                .then(v => {
-                    document.getElementById('biteResult').innerHTML =
-                        '<span style="color:#4CAF50;">Saved: ' + parseFloat(v).toFixed(3) + ' V</span>';
-                })
-                .catch(() => {
-                    document.getElementById('biteResult').innerHTML = '<span style="color:#F44336;">Capture failed</span>';
                 });
         }
 

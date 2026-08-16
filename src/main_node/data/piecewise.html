@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <title>T89 Piecewise Mapping</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section {
+            background: #2a2a2a;
+            padding: 24px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+        }
+        .section h2 {
+            margin: 0 0 16px;
+            font-size: 1.2em;
+            color: #4CAF50;
+        }
+        /* Servo section is mirrored like its bar: bar first, then description,
+           then title last, so the block reads outward from the bar. */
+        .section.mirrored h2 { margin: 0; }
+
+        .bar-group {
+            margin-bottom: 32px;
+        }
+        /* Every bar carries floating labels both above and below it, so reserve
+           clearance on both sides. */
+        .bar-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+
+        /* No overflow:hidden — the puck's badge has to escape the top of the bar. */
+        .bar-container {
+            position: relative;
+            height: 48px;
+            background: #1a1a1a;
+            border-radius: 6px;
+            border: 1px solid #444;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+
+        .bar-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .btn-small {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn-idle {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-idle:hover { background: #1976D2; }
+        .btn-max {
+            background: #F44336;
+            color: white;
+        }
+        .btn-max:hover { background: #D32F2F; }
+
+        /* Travel extents shown at the bar ends. Read-only here — the bar's axis runs
+           between them, and they are edited on the NVS Config page. */
+        .extent {
+            font-size: 11px;
+            color: #777;
+            text-align: center;
+            line-height: 1.35;
+            min-width: 58px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .extent strong {
+            display: block;
+            font-size: 15px;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .extent-idle strong { color: #64B5F6; }
+        .extent-max strong  { color: #E57373; }
+
+        .bar-info {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 4px;
+        }
+
+        /* Puck (live value indicator). The readout is nested inside so it tracks
+           the puck's left offset for free — no extra positioning in the JS. */
+        .puck {
+            position: absolute;
+            width: 3px;
+            height: 100%;
+            background: #FFD700;
+            z-index: 4;
+            pointer-events: none;
+            transition: left 0.05s linear;
+        }
+        .puck-value {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 3px 8px;
+            background: #FFD700;
+            color: #1a1a1a;
+            border-radius: 3px;
+            font-size: 14px;
+            font-weight: bold;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+        .puck-value.above { bottom: 100%; margin-bottom: 6px; }
+        .puck-value.below { top: 100%;    margin-top: 6px; }
+
+        /* Sliders A and B (piecewise zone boundaries) */
+        .slider-track {
+            position: absolute;
+            width: 100%;
+            height: 48px;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            pointer-events: none;
+        }
+        /* A and B are stacked full-width one on top of the other. With a full-width
+           hit area, whichever is painted last (B) swallows every press — including
+           presses aimed at A's thumb. So the tracks take no pointer events and only
+           the thumbs do. Scoped to .bar-container so the standalone servo-control
+           slider further down keeps its normal inline behaviour. */
+        .bar-container input[type="range"] {
+            position: absolute;
+            width: 100%;
+            height: 48px;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            z-index: 3;
+            appearance: none;
+            -webkit-appearance: none;
+            pointer-events: none;
+        }
+        /* Full-height rectangles so each one reads as a hard edge of the zone.
+           Width must stay in sync with THUMB_W in the script. */
+        .bar-container input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 8px;
+            height: 46px;
+            border-radius: 2px;
+            background: #4CAF50;
+            cursor: pointer;
+            pointer-events: auto;
+            border: none;
+            box-shadow: 0 0 5px rgba(0,0,0,0.7);
+        }
+        .bar-container input[type="range"]::-moz-range-thumb {
+            width: 8px;
+            height: 46px;
+            border-radius: 2px;
+            background: #4CAF50;
+            cursor: pointer;
+            pointer-events: auto;
+            border: none;
+            box-shadow: 0 0 5px rgba(0,0,0,0.7);
+        }
+        .bar-container input[type="range"]::-moz-range-track {
+            height: 46px;
+            background: transparent;
+            border: none;
+        }
+
+        /* Shaded band spanning A to B. Sits under the thumbs and the puck. */
+        .zone-fill {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(76, 175, 80, 0.28);
+            border-top: 1px solid rgba(76, 175, 80, 0.55);
+            border-bottom: 1px solid rgba(76, 175, 80, 0.55);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Overlay spanning both sections, so a line can be drawn from the hall bar
+           across the section boundary to the servo bar. */
+        #mapWrap { position: relative; }
+        #zoneLinks {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 6;
+        }
+        .zone-link {
+            stroke: #4CAF50;
+            stroke-width: 2;
+            stroke-dasharray: 6 4;
+            opacity: 0.9;
+        }
+
+        /* A/B zone markers ride the bar at their slider positions. Hall's sit above
+           its bar and servo's below, so the gap between the two bars stays clear for
+           the A-to-A / B-to-B connector lines. Text stays upright in both. */
+        .zone-marker {
+            position: absolute;
+            left: 0;
+            transform: translateX(-50%);
+            font-size: 14px;
+            color: #aaa;
+            line-height: 1.2;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .zone-marker strong { color: white; font-size: 16px; }
+        .zone-marker.above { bottom: 100%; margin-bottom: 6px; }
+        .zone-marker.below { top: 100%;    margin-top: 6px; }
+
+        .save-button {
+            background: #4CAF50;
+            color: white;
+            padding: 14px 32px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+            transition: all 0.2s;
+        }
+        .save-button:hover:not(:disabled) { background: #45a049; }
+        .save-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .save-status {
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            text-align: center;
+            min-height: 18px;
+        }
+        .save-status.ok {
+            background: #1b3a1b;
+            color: #81C784;
+            display: none;
+        }
+        .save-status.ok.show { display: block; }
+        .save-status.error {
+            background: #3a1b1b;
+            color: #EF9A9A;
+            display: none;
+        }
+        .save-status.error.show { display: block; }
+
+        .servo-control-section {
+            background: #2a3a2a;
+            border-left-color: #FF9800;
+        }
+        .servo-control-toggle {
+            background: #FF9800;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+        .servo-control-toggle.active {
+            background: #F44336;
+        }
+        .servo-control-toggle:hover { opacity: 0.9; }
+
+        .control-status {
+            font-size: 13px;
+            color: #aaa;
+            margin-bottom: 16px;
+        }
+    
+        /* ---- shared page chrome: identical on all four pages ---- */
+        .navbar { display: flex; gap: 4px; align-items: flex-end; }
+        .navbar a {
+            flex: 0 0 auto;
+            padding: 11px 20px;
+            border-radius: 7px 7px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+            line-height: 1;
+            opacity: 0.45;
+            transition: opacity 0.15s;
+        }
+        .navbar a:hover { opacity: 0.75; }
+        /* The active tab spreads across the row, and every tab has square bottom
+           corners, so the active one runs straight into the rail below it and the
+           two read as a single shape. */
+        .navbar a.active {
+            flex: 1 1 auto;
+            padding: 15px 20px;
+            text-align: center;
+            opacity: 1;
+            pointer-events: none;
+            cursor: default;
+        }
+        /* Carries the active page's colour across the full width, under the tabs. */
+        .nav-rail { height: 6px; border-radius: 0 0 4px 4px; margin-bottom: 20px; }
+        .tab-home, .rail-home { background: #2196F3; }
+        .tab-cal,  .rail-cal  { background: #FF9800; }
+        .tab-nvs,  .rail-nvs  { background: #9C27B0; }
+        .tab-pw,   .rail-pw   { background: #4CAF50; }
+        .page-title { margin: 0 0 5px; font-size: 1.5em; color: white; }
+        .page-sub { color: #888; font-size: 0.9em; margin: 0 0 22px; line-height: 1.45; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="navbar">
+            <a href="/" class="tab-home">Home</a>
+            <a href="/calibration" class="tab-cal">Calibration</a>
+            <a href="/nvsconfig" class="tab-nvs">NVS Config</a>
+            <a class="tab-pw active">Piecewise</a>
+        </div>
+        <div class="nav-rail rail-pw"></div>
+
+        <h1 class="page-title">Piecewise Mapping</h1>
+        <p class="page-sub">Define the biting zone and servo response curve</p>
+
+        <!-- Both bars share a positioned wrapper so the A-to-A / B-to-B connector
+             lines can be drawn across the gap between the two sections. -->
+        <div id="mapWrap">
+
+        <!-- Hall Sensor Biting Zone -->
+        <div class="section">
+            <h2>Hall Sensor Biting Zone (ADC 0–4095)</h2>
+            <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
+                The bar spans the calibrated travel, idle to max. A and B mark the biting
+                zone inside it and cannot pass those limits. Set the travel extents on the
+                <a href="/nvsconfig" style="color:#9C27B0;">NVS Config</a> page.
+            </p>
+
+            <div class="bar-group">
+                <div class="bar-row">
+                    <div class="extent extent-idle">Idle<strong id="hallIdleLabel">--</strong></div>
+                    <div class="bar-container" id="hallBarContainer" style="flex:1;">
+                        <div class="zone-fill" id="hallZoneFill"></div>
+                        <div class="zone-marker above" id="hallAMarker">A: <strong id="hallALabel">1000</strong></div>
+                        <div class="zone-marker above" id="hallBMarker">B: <strong id="hallBLabel">3000</strong></div>
+                        <div class="puck" id="hallPuck"><span class="puck-value below" id="hallLiveValue">--</span></div>
+                        <input type="range" id="hallSliderA" min="0" max="4095" value="1000"
+                               oninput="updateHallA(this.value)">
+                        <input type="range" id="hallSliderB" min="0" max="4095" value="3000"
+                               oninput="updateHallB(this.value)">
+                    </div>
+                    <div class="extent extent-max">Max<strong id="hallMaxLabel">--</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Servo Endpoint Biting Zone -->
+        <div class="section mirrored">
+            <div class="bar-group">
+                <div class="bar-row">
+                    <div class="extent extent-idle">Idle<strong id="servoIdleLabel">--</strong></div>
+                    <div class="bar-container" id="servoBarContainer" style="flex:1;">
+                        <div class="zone-fill" id="servoZoneFill"></div>
+                        <div class="zone-marker below" id="servoAMarker">A: <strong id="servoALabel">98°</strong></div>
+                        <div class="zone-marker below" id="servoBMarker">B: <strong id="servoBLabel">115°</strong></div>
+                        <div class="puck" id="servoPuck"><span class="puck-value above" id="servoLiveValue">-- V</span></div>
+                        <input type="range" id="servoSliderA" min="0" max="180" value="98"
+                               oninput="updateServoA(this.value)">
+                        <input type="range" id="servoSliderB" min="0" max="180" value="115"
+                               oninput="updateServoB(this.value)">
+                    </div>
+                    <div class="extent extent-max">Max<strong id="servoMaxLabel">--</strong></div>
+                </div>
+            </div>
+
+            <p style="color:#aaa;font-size:13px;margin:0 0 6px;">
+                Servo angles that correspond to the hall biting zone. The bar spans the
+                clutch servo's idle and engage angles; A and B cannot pass those limits.
+            </p>
+            <h2>Servo Endpoint Biting Zone (0–180°)</h2>
+        </div>
+
+        <svg id="zoneLinks" aria-hidden="true">
+            <line id="linkA" class="zone-link" />
+            <line id="linkB" class="zone-link" />
+        </svg>
+        </div><!-- /mapWrap -->
+
+        <!-- Corner Smoothing -->
+        <div class="section">
+            <h2>Corner Smoothing</h2>
+            <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
+                Blend width at the zone boundaries (ADC counts). Higher = smoother transitions. 0 = sharp corners.
+            </p>
+            <div style="display:flex;gap:16px;align-items:center;">
+                <input type="number" id="pwBlend" min="0" max="2000" value="120"
+                       style="width:120px;padding:8px;background:#1a1a1a;color:white;border:1px solid #555;border-radius:4px;font-size:14px;"
+                       oninput="updateBlend(this.value)">
+                <span style="color:#aaa;font-size:13px;">ADC counts (0–2000)</span>
+                <span id="blendLabel" style="color:#4CAF50;font-weight:bold;">120</span>
+            </div>
+        </div>
+
+        <!-- Servo Control (Manual Test) -->
+        <div class="section servo-control-section">
+            <h2>Servo Control (Test Only)</h2>
+            <p style="color:#aaa;font-size:13px;margin:0 0 16px;">
+                Enable to directly control the servo with a slider. Use for testing. Disabled when paddles control servo.
+            </p>
+            <button class="servo-control-toggle" id="servoToggle" onclick="toggleServoControl()">
+                Enable Servo Control
+            </button>
+            <div class="control-status" id="controlStatus">Paddle controls servo</div>
+
+            <div id="servoControlBar" style="display:none;">
+                <div style="display:flex;align-items:center;gap:16px;">
+                    <span style="color:#aaa;font-size:13px;">0°</span>
+                    <input type="range" id="servoControlSlider" min="0" max="180" value="90"
+                           style="flex:1;cursor:pointer;"
+                           oninput="updateServoControl(this.value)">
+                    <span style="color:#aaa;font-size:13px;">180°</span>
+                </div>
+                <div style="text-align:center;margin-top:12px;color:#FF9800;font-weight:bold;">
+                    Position: <span id="servoControlLabel">90</span>°
+                </div>
+            </div>
+        </div>
+
+        <!-- Save -->
+        <button class="save-button" id="saveBtn" onclick="saveValues()" disabled>
+            Save to Memory
+        </button>
+        <div class="save-status ok" id="saveOk">✓ Saved successfully</div>
+        <div class="save-status error" id="saveError">✗ Save failed</div>
+    </div>
+
+    <script>
+        let originalValues = {};
+        let currentValues = {};
+        let servoControlActive = false;
+
+        // Travel extents. These are NOT edited here — they are the calibrated limits
+        // read from NVS (hall range, and the clutch servo's idle/engage angles), and
+        // they define each bar's axis: the left edge IS idle, the right edge IS max.
+        // A and B are zone boundaries that live inside them.
+        // Change them on the NVS Config page, not this one.
+        let extents = { hIdle: 0, hMax: 4095, sIdle: 0, sMax: 180 };
+
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+        function loadConfig() {
+            fetch('/configData')
+                .then(r => r.json())
+                .then(cfg => {
+                    // Travel extents. Ordered low..high because a servo may be set up
+                    // to travel in either direction (idle angle above or below engage).
+                    const hLo = cfg.hallMin ?? 0;
+                    const hHi = cfg.hallMax ?? 4095;
+                    const sLo = cfg.clutchIdlePos ?? 0;
+                    const sHi = cfg.clutchFullyPull ?? 180;
+                    extents = {
+                        hIdle: Math.min(hLo, hHi), hMax: Math.max(hLo, hHi),
+                        sIdle: Math.min(sLo, sHi), sMax: Math.max(sLo, sHi)
+                    };
+                    applyExtents();
+
+                    // Piecewise values, clamped into the travel range in case the
+                    // stored zone predates a narrower calibration.
+                    const hA = clamp(cfg.hallBiteStart  ?? extents.hIdle, extents.hIdle, extents.hMax);
+                    const hB = clamp(cfg.hallBiteEnd    ?? extents.hMax,  extents.hIdle, extents.hMax);
+                    const sA = clamp(cfg.servoBiteStart ?? extents.sIdle, extents.sIdle, extents.sMax);
+                    const sB = clamp(cfg.servoBiteEnd   ?? extents.sMax,  extents.sIdle, extents.sMax);
+                    const blend = cfg.pwBlend ?? 120;
+
+                    originalValues = { hA, hB, sA, sB, blend };
+                    currentValues = { hA, hB, sA, sB, blend };
+
+                    document.getElementById('hallSliderA').value = hA;
+                    document.getElementById('hallSliderB').value = hB;
+                    document.getElementById('servoSliderA').value = sA;
+                    document.getElementById('servoSliderB').value = sB;
+                    document.getElementById('pwBlend').value = blend;
+
+                    updateHallLabels();
+                    updateServoLabels();
+                    updateBlendLabel();
+                    disableSaveIfUnchanged();
+                })
+                .catch(e => console.error('Config load error:', e));
+        }
+
+        // Push the extents onto the sliders so the browser itself stops A going below
+        // idle or B going above max, and show them at the ends of each bar.
+        function applyExtents() {
+            ['hallSliderA', 'hallSliderB'].forEach(id => {
+                const el = document.getElementById(id);
+                el.min = extents.hIdle;
+                el.max = extents.hMax;
+            });
+            ['servoSliderA', 'servoSliderB'].forEach(id => {
+                const el = document.getElementById(id);
+                el.min = extents.sIdle;
+                el.max = extents.sMax;
+            });
+            document.getElementById('hallIdleLabel').textContent  = extents.hIdle;
+            document.getElementById('hallMaxLabel').textContent   = extents.hMax;
+            document.getElementById('servoIdleLabel').textContent = extents.sIdle + '°';
+            document.getElementById('servoMaxLabel').textContent  = extents.sMax + '°';
+        }
+
+        function updateHallA(val) {
+            const b = parseInt(document.getElementById('hallSliderB').value);
+            const a = parseInt(val);
+            if (a >= b) {
+                document.getElementById('hallSliderA').value = b - 1;
+                return;
+            }
+            currentValues.hA = a;
+            updateHallLabels();
+            updateLiveHall();
+            disableSaveIfUnchanged();
+        }
+
+        function updateHallB(val) {
+            const a = parseInt(document.getElementById('hallSliderA').value);
+            const b = parseInt(val);
+            if (b <= a) {
+                document.getElementById('hallSliderB').value = a + 1;
+                return;
+            }
+            currentValues.hB = b;
+            updateHallLabels();
+            updateLiveHall();
+            disableSaveIfUnchanged();
+        }
+
+        function updateServoA(val) {
+            const b = parseInt(document.getElementById('servoSliderB').value);
+            const a = parseInt(val);
+            if (a >= b) {
+                document.getElementById('servoSliderA').value = b - 1;
+                return;
+            }
+            currentValues.sA = a;
+            updateServoLabels();
+            updateLiveServo();
+            disableSaveIfUnchanged();
+        }
+
+        function updateServoB(val) {
+            const a = parseInt(document.getElementById('servoSliderA').value);
+            const b = parseInt(val);
+            if (b <= a) {
+                document.getElementById('servoSliderB').value = a + 1;
+                return;
+            }
+            currentValues.sB = b;
+            updateServoLabels();
+            updateLiveServo();
+            disableSaveIfUnchanged();
+        }
+
+        function updateBlend(val) {
+            currentValues.blend = parseInt(val);
+            updateBlendLabel();
+            disableSaveIfUnchanged();
+        }
+
+        const THUMB_W = 8;   // must match the ::-*-thumb width in the CSS
+
+        // Fraction along a bar whose axis runs idle..max, not 0..max.
+        // A range thumb never reaches the track's outer edges — the browser insets it
+        // by half its width at each end. The markers, the zone fill and the connector
+        // lines all anchor to a thumb, so they need the same inset maths or they drift
+        // off it by up to THUMB_W/2 towards the extremes.
+        function thumbFrac(value, lo, hi, trackW) {
+            const f = clamp((value - lo) / ((hi - lo) || 1), 0, 1);
+            if (!trackW) return f;
+            return (THUMB_W / 2 + f * (trackW - THUMB_W)) / trackW;
+        }
+
+        // Plain fraction with no thumb inset — for the live puck, which is an
+        // indicator rather than a draggable thumb and so spans the full bar.
+        function valueFrac(value, lo, hi) {
+            return clamp((value - lo) / ((hi - lo) || 1), 0, 1);
+        }
+
+        // Positions both markers and the shaded A-to-B band for one bar.
+        function paintBar(barId, aMarkerId, bMarkerId, fillId, a, b, lo, hi) {
+            const trackW = document.getElementById(barId).getBoundingClientRect().width;
+            const aPct = thumbFrac(a, lo, hi, trackW) * 100;
+            const bPct = thumbFrac(b, lo, hi, trackW) * 100;
+            document.getElementById(aMarkerId).style.left = aPct + '%';
+            document.getElementById(bMarkerId).style.left = bPct + '%';
+            const fill = document.getElementById(fillId);
+            fill.style.left = aPct + '%';
+            fill.style.width = (bPct - aPct) + '%';
+        }
+
+        // Connector lines run from the hall bar's lower edge to the servo bar's upper
+        // edge, A to A and B to B. Measured live because both bars are fluid width.
+        function drawZoneLinks() {
+            const wrap = document.getElementById('mapWrap');
+            const hallBar = document.getElementById('hallBarContainer');
+            const servoBar = document.getElementById('servoBarContainer');
+            if (!wrap || !hallBar || !servoBar) return;
+
+            const w = wrap.getBoundingClientRect();
+            const h = hallBar.getBoundingClientRect();
+            const s = servoBar.getBoundingClientRect();
+
+            function setLink(id, hallVal, servoVal) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.setAttribute('x1', (h.left - w.left) + thumbFrac(hallVal, extents.hIdle, extents.hMax, h.width) * h.width);
+                el.setAttribute('y1', h.bottom - w.top);
+                el.setAttribute('x2', (s.left - w.left) + thumbFrac(servoVal, extents.sIdle, extents.sMax, s.width) * s.width);
+                el.setAttribute('y2', s.top - w.top);
+            }
+
+            setLink('linkA', currentValues.hA, currentValues.sA);
+            setLink('linkB', currentValues.hB, currentValues.sB);
+        }
+
+        function updateHallLabels() {
+            document.getElementById('hallALabel').textContent = currentValues.hA;
+            document.getElementById('hallBLabel').textContent = currentValues.hB;
+            paintBar('hallBarContainer', 'hallAMarker', 'hallBMarker', 'hallZoneFill',
+                     currentValues.hA, currentValues.hB, extents.hIdle, extents.hMax);
+            drawZoneLinks();
+        }
+
+        function updateServoLabels() {
+            document.getElementById('servoALabel').textContent = currentValues.sA + '°';
+            document.getElementById('servoBLabel').textContent = currentValues.sB + '°';
+            paintBar('servoBarContainer', 'servoAMarker', 'servoBMarker', 'servoZoneFill',
+                     currentValues.sA, currentValues.sB, extents.sIdle, extents.sMax);
+            drawZoneLinks();
+        }
+
+        // Geometry depends on measured widths, so redo it once fonts/layout settle
+        // and again whenever the viewport changes.
+        window.addEventListener('load', function () {
+            updateHallLabels();
+            updateServoLabels();
+        });
+        window.addEventListener('resize', function () {
+            updateHallLabels();
+            updateServoLabels();
+        });
+
+        function updateBlendLabel() {
+            document.getElementById('blendLabel').textContent = currentValues.blend;
+        }
+
+        function disableSaveIfUnchanged() {
+            const changed = originalValues.hA !== currentValues.hA ||
+                           originalValues.hB !== currentValues.hB ||
+                           originalValues.sA !== currentValues.sA ||
+                           originalValues.sB !== currentValues.sB ||
+                           originalValues.blend !== currentValues.blend;
+            document.getElementById('saveBtn').disabled = !changed;
+        }
+
+        function updateLiveHall() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(d => {
+                    const val = d.hallValue || 0;
+                    document.getElementById('hallLiveValue').textContent = val;
+                    // Pinned to the bar ends if the reading falls outside the
+                    // calibrated travel, rather than flying off the bar.
+                    const pct = valueFrac(val, extents.hIdle, extents.hMax) * 100;
+                    document.getElementById('hallPuck').style.left = pct + '%';
+                })
+                .catch(e => console.error('Sensor data error:', e));
+        }
+
+        function updateLiveServo() {
+            fetch('/sensorData')
+                .then(r => r.json())
+                .then(d => {
+                    const volts = d.clutchVoltage || 0;
+                    const deg = d.servoPosition || 0;
+                    document.getElementById('servoLiveValue').textContent = volts.toFixed(2) + ' V (' + deg.toFixed(0) + '°)';
+                    const pct = valueFrac(deg, extents.sIdle, extents.sMax) * 100;
+                    document.getElementById('servoPuck').style.left = pct + '%';
+                })
+                .catch(e => console.error('Sensor data error:', e));
+        }
+
+        function toggleServoControl() {
+            servoControlActive = !servoControlActive;
+            const toggle = document.getElementById('servoToggle');
+            const bar = document.getElementById('servoControlBar');
+            const status = document.getElementById('controlStatus');
+
+            if (servoControlActive) {
+                fetch('/cmd?action=enableServoOverride')
+                    .then(r => r.text())
+                    .then(() => {
+                        toggle.classList.add('active');
+                        toggle.textContent = 'Disable Servo Control';
+                        bar.style.display = 'block';
+                        status.textContent = 'Slider controls servo (paddle ignored)';
+                    })
+                    .catch(() => {
+                        alert('Failed to enable servo control');
+                        servoControlActive = false;
+                    });
+            } else {
+                fetch('/cmd?action=disableServoOverride')
+                    .then(r => r.text())
+                    .then(() => {
+                        toggle.classList.remove('active');
+                        toggle.textContent = 'Enable Servo Control';
+                        bar.style.display = 'none';
+                        status.textContent = 'Paddle controls servo';
+                    })
+                    .catch(() => alert('Failed to disable servo control'));
+            }
+        }
+
+        function updateServoControl(val) {
+            document.getElementById('servoControlLabel').textContent = val;
+            fetch('/cmd?action=setServoPos&pos=' + val).catch(() => {});
+        }
+
+        function saveValues() {
+            const params = new URLSearchParams({
+                hBiteStart: currentValues.hA,
+                hBiteEnd: currentValues.hB,
+                sBiteStart: currentValues.sA,
+                sBiteEnd: currentValues.sB,
+                blend: currentValues.blend
+            });
+
+            document.getElementById('saveBtn').disabled = true;
+            document.getElementById('saveOk').classList.remove('show');
+            document.getElementById('saveError').classList.remove('show');
+
+            fetch('/cmd?action=savePiecewiseZone&' + params.toString())
+                .then(r => r.text())
+                .then(() => {
+                    originalValues = { ...currentValues };
+                    document.getElementById('saveOk').classList.add('show');
+                    setTimeout(() => {
+                        document.getElementById('saveOk').classList.remove('show');
+                        disableSaveIfUnchanged();
+                    }, 3000);
+                })
+                .catch(() => {
+                    document.getElementById('saveError').classList.add('show');
+                    document.getElementById('saveBtn').disabled = false;
+                    setTimeout(() => {
+                        document.getElementById('saveError').classList.remove('show');
+                    }, 3000);
+                });
+        }
+
+        // Poll live values
+        loadConfig();
+        setInterval(updateLiveHall, 200);
+        setInterval(updateLiveServo, 200);
+    </script>
+</body>
+</html>

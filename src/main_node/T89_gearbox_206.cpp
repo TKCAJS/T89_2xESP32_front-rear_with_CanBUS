@@ -61,13 +61,15 @@
 // do NOT scale it back to the source. Bite-point thresholds are captured live in these same
 // (post-divider) volts, so the absolute scale is irrelevant — only relative position matters.
 
-// Clutch servo travel limits — physically measured, never exceed these
-#define CLUTCH_SERVO_MIN  42
-#define CLUTCH_SERVO_MAX  137
+// Clutch servo travel limits are clutchIdlePos / clutchFullyPull, applied to the servo
+// by applyServoLimits(). CalConfig.h holds only the factory defaults for a blank NVS.
 
 // Clutch voltage thresholds — calibrated via web interface
-float clutchDisengageV   = 1.8f;  // raw ADC voltage: above this = disengaged, relay safe
-float clutchJustEngagedV = 1.8f;  // raw ADC voltage: rising through this = biting point
+// Downshift trigger. Feedback is inverted: paddle max (clutch DISENGAGED) is the LOW
+// end, so the gate fires on the voltage FALLING past this threshold, not rising.
+// Set from the Downshift Trigger widget on the home page (/cmd?action=setDisengageV).
+float clutchDisengageV   = 1.8f;  // below this = clutch DISENGAGED, safe to send the DS
+float clutchJustEngagedV = 1.8f;  // above this = clutch ENGAGED; the bite point
 
 // Standard includes
 #include <LittleFS.h>
@@ -129,16 +131,19 @@ int neutralDownMs = 40;
 int neutralUpMs = 40;
 int shiftDownMs = 150;
 int shiftUpMs = 150;
-int clutchIdlePos = 0;
-int clutchFullyPull = 185;
+// Placeholders until loadConfig() runs. Kept inside the servo's real travel — the old
+// 185 was past even the nominal 180, so any use before configuration commanded an angle
+// that SimpleServo would silently clamp.
+int clutchIdlePos = CLUTCH_SERVO_DEFAULT_MIN;
+int clutchFullyPull = CLUTCH_SERVO_DEFAULT_MAX;
 
 // WiFi state
 bool wifiEnabled = false;
 #define WIFI_LONGPRESS_MS 1000   // hold the WiFi switch this long (ms) to toggle on/off
 
 // Clutch monitoring
-bool clutchPulled = false;
-bool clutchJustEngaged = false;  // biting point zone: voltage between justEngagedV and disengageV
+bool clutchDisengaged = false;
+bool clutchJustEngaged = false;  // in the bite band: disengageV <= V <= justEngagedV
 float clutchVoltage = 0.0;
 
 // ADS1115 — clutch position feedback (16-bit, differential A0–A1 for EMI rejection).
@@ -204,6 +209,7 @@ void checkWiFiToggleSwitch();
 void toggleWiFi();
 void loadConfig();
 void saveConfig();
+void applyServoLimits();
 void processInputs();
 void checkServoPosition();
 void setupWeb();
@@ -216,19 +222,19 @@ void canSendShiftStack(uint8_t targetGear)                                   { m
 
 // Legacy functions for WebInterface compatibility
 bool isShiftAllowed() { return gearbox.canAcceptShiftCommand(); }
-bool canDownshift() { return gearbox.canAcceptShiftCommand() && clutchPulled; }
+bool canDownshift() { return gearbox.canAcceptShiftCommand() && clutchDisengaged; }
 void setShiftInProgress(bool inProgress) { /* Now handled by state machine */ }
 void startDownshiftWithClutchCheck(int durationMs) { 
     gearbox.processEvent(EVENT_NEUTRAL_DOWN_PRESSED); 
 }
 
-void engageClutch() { clutchServo.write(clutchFullyPull); }
-void releaseClutch() { clutchServo.write(clutchIdlePos); }
+void clutchToMax() { clutchServo.write(clutchFullyPull); }
+void clutchToIdle() { clutchServo.write(clutchIdlePos); }
 // Stamp the letter with the gear we are setting off from, so the matrix can drop it the
 // moment the rear node confirms where the box actually ended up.
 void displayShiftLetter(char letter) { matrixDisplay.displayShiftLetter(letter, mainCan.getGearName()); }
 String getGearStatusForWeb() { return mainCan.getGearName(); }
-float getRadiatorTempForWeb() { return mainCan.getRadiatorTemp(); }
+float getEngineTempForWeb() { return mainCan.getEngineTemp(); }
 uint8_t getPumpDutyForWeb() { return mainCan.getPumpDuty(); }
 String getHallCurveTypeName() { return hallSensor.getCurveTypeName(); }
 void saveHallCurveConfig() { /* Handled by HallSensorControl */ }
@@ -402,7 +408,7 @@ void setup() {
     // shaves that acquisition window. clutchIdlePos is still default here; loadConfig()
     // + clutchControlTask refine it once NVS is read.
     clutchServo.attach(PIN_CLUTCH_SERVO);
-    clutchServo.setLimits(CLUTCH_SERVO_MIN, CLUTCH_SERVO_MAX);
+    applyServoLimits();
     clutchServo.write(clutchIdlePos);
 
     Serial.begin(115200);
@@ -498,7 +504,7 @@ void loop() {
 
         if (gearbox.getCurrentState() == DOWNSHIFT_CLUTCH_ENGAGING) {
             Serial.println("Servo engaging - Voltage: " + String(clutchVoltage, 3) + 
-                        "V, Threshold: 1.8V, Pulled: " + String(clutchPulled ? "YES" : "NO"));
+                        "V, Threshold: 1.8V, Pulled: " + String(clutchDisengaged ? "YES" : "NO"));
         }
         
         // Clutch paddle->servo is handled by clutchControlTask (core 0)
@@ -748,13 +754,19 @@ void checkServoPosition() {
     // are captured live in these same post-divider volts, so absolute scale doesn't matter.
     clutchVoltage = ads.computeVolts(counts);
 
+    // Feedback is inverted: pulling drives the voltage DOWN. So the axis reads
+    //   v <  clutchDisengageV    -> DISENGAGED (safe to send a shift)
+    //   v <= clutchJustEngagedV  -> biting zone
+    //   v >  clutchJustEngagedV  -> ENGAGED (driving)
+    // which means clutchDisengageV < clutchJustEngagedV. The old test compared them
+    // the other way round, so the band was unsatisfiable in the correct orientation.
     bool newClutchPulled  = (clutchVoltage < clutchDisengageV);
-    clutchJustEngaged = (clutchVoltage >= clutchJustEngagedV && clutchVoltage < clutchDisengageV);
+    clutchJustEngaged = (clutchVoltage >= clutchDisengageV && clutchVoltage <= clutchJustEngagedV);
     
     // Update clutch state - the state machine polls this in its clutch-wait states
-    if (newClutchPulled != clutchPulled) {
-        clutchPulled = newClutchPulled;
-        gearbox.setClutchPulled(clutchPulled);
+    if (newClutchPulled != clutchDisengaged) {
+        clutchDisengaged = newClutchPulled;
+        gearbox.setClutchDisengaged(clutchDisengaged);
     }
 }
 
@@ -801,8 +813,8 @@ void loadConfig() {
     neutralUpMs      = prefs.getInt("neutralUpMs", 40);
     shiftDownMs      = prefs.getInt("shiftDownMs", 150);
     shiftUpMs        = prefs.getInt("shiftUpMs", 150);
-    clutchIdlePos    = prefs.getInt("clutchIdlePos", 0);
-    clutchFullyPull  = prefs.getInt("clutchFullyPull", 180);
+    clutchIdlePos    = prefs.getInt("clutchIdlePos",   CLUTCH_SERVO_DEFAULT_MIN);
+    clutchFullyPull  = prefs.getInt("clutchFullyPull", CLUTCH_SERVO_DEFAULT_MAX);
     clutchDisengageV   = prefs.getFloat("clutchDisengV", 1.8f);
     clutchJustEngagedV = prefs.getFloat("clutchBiteV",   1.8f);
     prefs.end();
@@ -813,10 +825,24 @@ void loadConfig() {
     Serial.println("  Shift Down: " + String(shiftDownMs) + "ms");
     Serial.println("  Shift Up: " + String(shiftUpMs) + "ms");
     Serial.println("  Clutch Idle: " + String(clutchIdlePos) + "°");
-    Serial.println("  Clutch Engage: " + String(clutchFullyPull) + "°");
+    Serial.println("  Clutch Max:  " + String(clutchFullyPull) + "°");
+
+    // setup() applied the defaults before this ran, so re-apply now the stored angles
+    // are in — otherwise the servo stays clamped to the factory range.
+    applyServoLimits();
+}
+
+// The saved idle/max angles ARE the travel limits, so SimpleServo's clamp is driven
+// from them rather than from a fixed constant. Ordered low..high because a servo may be
+// set up to travel either way round, and setLimits() expects min then max.
+void applyServoLimits() {
+    int lo = min(clutchIdlePos, clutchFullyPull);
+    int hi = max(clutchIdlePos, clutchFullyPull);
+    clutchServo.setLimits(lo, hi);
 }
 
 void saveConfig() {
+    applyServoLimits();   // every path that changes the angles comes through here
     prefs.begin("gearbox", false);
     
     prefs.putInt("neutralDownMs", neutralDownMs);
